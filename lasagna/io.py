@@ -53,11 +53,6 @@ def compose_stacks(DF, load_function=lambda x: get_row_stack(x)):
     :param load_function:
     :return: ndarray of shape [N,m,...,n]
     """
-    def resize(x, shape):
-        y = np.zeros(shape, x.dtype)
-        slicer = [slice(None, s) for s in x.shape]
-        y[slicer] = x
-        return y
 
     arr_ = []
     for ix, row in DF.iterrows():
@@ -67,7 +62,10 @@ def compose_stacks(DF, load_function=lambda x: get_row_stack(x)):
     shape = map(max, zip(*[x.shape for x in arr_]))
     # strange numpy limitations
     for i, x in enumerate(arr_):
-        arr_[i] = resize(x, shape)[None, ...]
+        y = np.zeros(shape, x.dtype)
+        slicer = [slice(None, s) for s in x.shape]
+        y[slicer] = x
+        arr_[i] = y[None, ...]
 
     return np.concatenate(arr_, axis=0)
 
@@ -240,4 +238,4 @@ def initialize_paths(dataset, subset='',
     DIR['nuclei'] = sorted(glob(DIR['nuclei_path']), key=get_well_site)
 
 
-print 'call initialize_paths(dataset, ...) to set up lasagna.io.DIR'
+print 'call lasagna.io.initialize_paths(dataset, ...) to set up lasagna.io.DIR'
