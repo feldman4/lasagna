@@ -12,7 +12,7 @@ ROWS = 'ABCDEFGH'
 COLS = '123456789'
 
 
-def load_sheet(worksheet, file='Lasagna FISH', grid_size=(6, 6)):
+def load_sheet(worksheet, gfile='Lasagna FISH', grid_size=(6, 6)):
     """Find conditions demarcated in grid format from local .xls or google sheet.
     :param str worksheet: name of google sheet, can provide int index as well
     :param str file: google sheet to search in
@@ -21,20 +21,20 @@ def load_sheet(worksheet, file='Lasagna FISH', grid_size=(6, 6)):
      conditions: OrderedDict, {variable_name: conditions},
      cube: N-d array representing space of conditions, integer entries indicate number of replicates)
     """
-    cube = []
-
     # see http://gspread.readthedocs.org/en/latest/oauth2.html
-    json_key = json.load(open('/Users/feldman/Downloads/gspread-da2f80418147.json'))
+    json_key = json.load(open(CREDENTIALS_JSON))
     scope = ['https://spreadsheets.google.com/feeds']
     credentials = SignedJwtAssertionCredentials(json_key['client_email'], json_key['private_key'], scope)
     gc = gspread.authorize(credentials)
-    xsheet = gc.open(file)
+    xsheet = gc.open(gfile)
 
     if type(worksheet) is int:
         wks = xsheet.get_worksheet(worksheet)
     else:
         wks = xsheet.worksheet(worksheet)
     xs_values = np.array(wks.get_all_values())
+    # pad edges with empty string
+    xs_values = np.pad(xs_values, ((0, 1), (0, 1)), mode='constant')
 
     # find grids containing variable conditions
     grids = find_grids(xs_values, grid_size)
@@ -183,3 +183,6 @@ def find_comparisons_second_order(cube):
 
     return {k: 0 for k in keep}.keys()
 
+
+def set_credentials(path):
+    CREDENTIALS_JSON = path
