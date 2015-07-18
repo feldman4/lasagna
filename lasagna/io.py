@@ -1,5 +1,9 @@
+from itertools import product
+from lasagna.utils import Memoized
+from glob import glob
 import struct
 import numpy as np
+import regex as re
 from skimage.external.tifffile import TiffFile, imsave, imread
 
 imagej_description = ''.join(['ImageJ=1.49v\nimages=%d\nchannels=%d\nslices=%d',
@@ -20,7 +24,90 @@ MAGENTA = tuple(range(256) + [0] * 256 + range(256))
 
 DEFAULT_LUTS = (BLUE, GREEN, RED, MAGENTA)
 
-# http://rsb.info.nih.gov/ij/developer/source/ij/io/TiffEncoder.java.html
+DIR = {}
+
+
+def get_row_stack(row, full=False, nuclei=False, apply_offset=False):
+    """For a given DataFrame row, get image data for full frame or cell extents only.
+    :param row:
+    :param full:
+    :param nuclei:
+    :param apply_offset:
+    :return:
+    """
+    I = _get_stack(row['name'], nuclei=nuclei)
+    if full is False:
+        I = I[b_idx(row)]
+    if apply_offset:
+        offsets = np.array(I.shape)*0
+        offsets[-2:] = 1*row['offset x'], 1*row['offset y']
+        I = offset_stack(I, offsets)
+
+    return I
+
+
+def compose_stacks(DF, load_function=lambda x: get_row_stack(x)):
+    """Load and concatenate stacks corresponding to rows in a DataFrame.
+    Stacks are expanded to maximum in each dimension by padding with zeros.
+    :param DF: N rows in DataFrame, stacks have shape [m,...,n]
+    :param load_function:
+    :return: ndarray of shape [N,m,...,n]
+    """
+    def resize(x, shape):
+        y = np.zeros(shape, x.dtype)
+        slicer = [slice(None, s) for s in x.shape]
+        y[slicer] = x
+        return y
+
+    arr_ = []
+    for ix, row in DF.iterrows():
+        z = load_function(row).copy()
+        arr_.append(z)
+
+    shape = map(max, zip(*[x.shape for x in arr_]))
+    # strange numpy limitations
+    for i, x in enumerate(arr_):
+        arr_[i] = resize(x, shape)[None, ...]
+
+    return np.concatenate(arr_, axis=0)
+
+
+def montage(arr, shape=None):
+    """tile ND arrays ([..., height, width]) in last two dimensions
+    first N-2 dimensions must match, tiles are expanded to max height and width
+    pads with zero, no spacing
+    if shape=(rows, columns) not provided, defaults to square, clipping last row if empty
+    """
+    sz = zip(*[img.shape for img in arr])
+    h, w, n = max(sz[-2]), max(sz[-1]), len(arr)
+    if not shape:
+        nr = nc = int(np.ceil(np.sqrt(n)))
+        if (nr-1)*nc >= n:
+            nr -= 1
+    else:
+        nr, nc = shape
+    M = np.zeros(arr[0].shape[:-2] + (nr * h, nc * w) , dtype=arr[0].dtype)
+
+    for (r, c), img in zip(product(range(nr), range(nc)), arr):
+        s = [[None] for _ in img.shape]
+        s[-2] = (r*h, r*h + img.shape[-2])
+        s[-1] = (c*w, c*w + img.shape[-1])
+        M[[slice(*x) for x in s]] = img
+
+    return M
+
+
+@Memoized
+def _get_stack(name, nuclei=False):
+    if '/broad/' not in name:
+        name = DIR['dataset_path'] + name
+    if nuclei:
+        name = '/'.join(name.split('/')[:-1] + ['nuclei', name.split('/')[-1]])
+        return imread(name, multifile=False)
+    I = imread(name,multifile=False)
+    I = I.reshape(4, I.size/(4*1024*1024), 1024, 1024)
+    return I
+
 
 def save_hyperstack(name, data, autocast=True, resolution=None,
                     luts=None, display_ranges=None, compress=0):
@@ -42,6 +129,7 @@ def save_hyperstack(name, data, autocast=True, resolution=None,
         tmp = tmp.astype(np.uint16)
 
     # metadata encoding LUTs and display ranges
+    # see http://rsb.info.nih.gov/ij/developer/source/ij/io/TiffEncoder.java.html
     description = ij_description(data.shape)
     tag_50838 = ij_tag_50838(nchannels)
     tag_50839 = ij_tag_50839(luts, display_ranges)
@@ -99,3 +187,57 @@ def ij_tag_50839(luts, display_ranges):
                    d])
     tag = struct.unpack('<' + 'B' * len(tag), tag)
     return tag + tuple(sum([list(x) for x in luts], []))
+
+
+# helper functions for loading
+def sort_by_site(s):
+    return ''.join(get_well_site(s)[::-1])
+
+def get_well_site(s):
+    well, site = re.search('_(..)-Site_([0-9]*)', s).groups(1)
+    return well, int(site)
+
+def b_idx(row):
+    """For a given DataFrame row, get slice index to cell in original data. Assumes 4D data.
+    :param row:
+    :return:
+    """
+
+    bounds = row['bounds']
+    return (slice(None), slice(None), slice(bounds[0],bounds[2]), slice(bounds[1], bounds[3]))
+
+def offset_stack(stack, offsets):
+    """Applies offset to stack, periodic boundaries.
+    :param stack: N-dim array
+    :param offsets: list of offsets
+    :return:
+    """
+    for d, offset in enumerate(offsets):
+        stack = np.roll(stack, offset, axis=d)
+    return stack
+
+
+def initialize_paths(dataset, subset='',
+                     lasagna_dir='/broad/blainey_lab/David/lasagna/'):
+    """Define paths where data and job files are stored.
+    :param dataset:
+    :param subset:
+    :param lasagna_dir:
+    :return:
+    """
+    global DIR
+    DIR = {'lasagna': lasagna_dir,
+           'dataset': dataset}
+
+    DIR['job_path'] = DIR['lasagna'] + '/jobs/'
+    DIR['dataset_path'] = DIR['lasagna'] + DIR['dataset'] + '/'
+    DIR['analysis_path'] = DIR['lasagna'] + DIR['dataset'] + '/analysis/'
+
+    DIR['data_path'] = DIR['dataset_path'] + subset + '/*/*.tif'
+    DIR['nuclei_path'] = DIR['dataset_path'] + subset + '/*/nuclei/*.tif'
+
+    DIR['stacks'] = sorted(glob(DIR['data_path']), key=get_well_site)
+    DIR['nuclei'] = sorted(glob(DIR['nuclei_path']), key=get_well_site)
+
+
+print 'call initialize_paths(dataset, ...) to set up lasagna.io.DIR'
