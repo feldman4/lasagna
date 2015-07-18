@@ -80,6 +80,7 @@ def find_grids(xs_values, grid_size, title_offset=(-1, 0), A_offset=(1, 0)):
 
     return grids
 
+
 def get_named_wells(wells, conditions):
     """Convert dict of wells with indexed conditions to dict with named conditions
     """
@@ -116,6 +117,7 @@ def get_named_comparisons(comparisons, conditions):
         named_comparisons += [arr]
 
     return named_comparisons
+
 
 def find_comparisons(cube):
     all_idx = zip(*np.unravel_index(range(cube.size),
@@ -160,7 +162,6 @@ def find_comparisons_second_order(cube):
         for j in range(i+1, n):
             # make combined index, check if it's OK
             c = []
-            inc = 0
             for a, b in zip(comparisons[i], comparisons[j]):
                 # exclude comparisons that fail these tests
                 if len(a) > 1 and len(b) > 1:
