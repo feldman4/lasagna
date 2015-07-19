@@ -10,6 +10,8 @@ from skimage.measure import label
 from skimage.feature import peak_local_max
 from scipy import ndimage
 
+DOWNSAMPLE = 2
+
 def register_images(images, index=None, window=(500, 500)):
     """Register a series of image stacks to pixel accuracy.
     :param images: list of N-dim image arrays, height and width may differ
@@ -18,7 +20,7 @@ def register_images(images, index=None, window=(500, 500)):
     :return list[(int)]: list of offsets
     """
     if index is None:
-        index = ((0,)*(images[0].ndim - 2) + (slice(None),)*2)
+        index = ((0,) * (images[0].ndim - 2) + (slice(None),) * 2)
 
     sz = [image[index].shape for image in images]
     sz = np.array([max(x) for x in zip(*sz)])
@@ -26,11 +28,11 @@ def register_images(images, index=None, window=(500, 500)):
     origin = np.array(images[0].shape) * 0
     offsets = [origin]
 
-    center = tuple([slice(s/2 - min(s/2, rw), s/2 + min(s/2, rw))
+    center = tuple([slice(s / 2 - min(s / 2, rw), s / 2 + min(s / 2, rw))
                     for s, rw in zip(sz, window)])
 
     def pad(img):
-        pad_width = [(s/2, s-s/2) for s in (sz - img.shape)]
+        pad_width = [(s / 2, s - s / 2) for s in (sz - img.shape)]
         img = np.pad(img, pad_width, 'constant')
         return img[center]
 
@@ -43,12 +45,14 @@ def register_images(images, index=None, window=(500, 500)):
 
     return offsets
 
-# wrapper that automatically downsamples input and upsamples output? but some outputs need to be adjusted
-# could be bad to re-sample for sequential operations
-# alternative is to create a sample class that tracks downsampling events and automatically adjusts upsampling rounding
 
 class Sample(object):
     def __init__(self, rate):
+        """Provides methods for downsampling and upsampling trailing XY dimensions of ndarray.
+        Automatically uses original shape for upsampling.
+        :param rate:
+        :return:
+        """
         self.rate = float(rate)
         self.sampled = {}
 
@@ -59,7 +63,7 @@ class Sample(object):
         :return:
         """
         if shape is None:
-            shape = tuple([int(s/self.rate) for s in img.shape[-2:]])
+            shape = tuple([int(s / self.rate) for s in img.shape[-2:]])
 
         new_img = np.zeros(img.shape[:-2] + shape, dtype=img.dtype)
 
@@ -91,36 +95,25 @@ class Sample(object):
         return new_img
 
 
-DOWNSAMPLE = 2
-
-# adaptive threshold and watershed, 500ms
-downsample = (512, 512)
-input_size = (1024, 1024)
-scale_factor = downsample[0]/float(input_size[0])
-block_size = 80
-threshold_offset = -150
-threshold_offset = 0
-diameter_range = [scale_factor * r for r in (10, 100)]
-
-def fill_holes(I):
-    labels = label(I)
-    bkgd_label = np.bincount(labels.flatten()).argmax()
-    return labels != bkgd_label
-    
-def apply_watershed(I):
-    distance = ndimage.distance_transform_edt(I)
-    distance = gaussian_filter(distance, 4)
-    local_maxi = peak_local_max(distance, indices=False, footprint=np.ones((3, 3)))
-    markers = ndimage.label(local_maxi)[0]
-    return watershed(-distance, markers, mask=I).astype(np.uint16)
-
-def get_nuclei(img):
+def get_nuclei(img, opening_radius=20, block_size=80, threshold_offset=0):
     s = Sample(DOWNSAMPLE)
-
-    binary = threshold_adaptive(s.downsample(img), int(block_size*scale_factor), offset=threshold_offset)
+    binary = threshold_adaptive(s.downsample(img), int(block_size / s.rate), offset=threshold_offset)
     filled = fill_holes(binary)
-    opened = opening(filled, selem=disk(diameter_range[0]))
+    opened = opening(filled, selem=disk(opening_radius / s.rate))
     nuclei = apply_watershed(opened)
     nuclei = s.upsample(nuclei)
     return img_as_uint(nuclei)
 
+
+def fill_holes(img):
+    labels = label(img)
+    background_label = np.bincount(labels.flatten()).argmax()
+    return labels != background_label
+
+
+def apply_watershed(img):
+    distance = ndimage.distance_transform_edt(img)
+    distance = gaussian_filter(distance, 4)
+    local_maxi = peak_local_max(distance, indices=False, footprint=np.ones((3, 3)))
+    markers = ndimage.label(local_maxi)[0]
+    return watershed(-distance, markers, mask=img).astype(np.uint16)
