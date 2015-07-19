@@ -26,6 +26,21 @@ DEFAULT_LUTS = (BLUE, GREEN, RED, MAGENTA)
 
 DIR = {}
 
+def read_stack(filename, master=None, memmap=False):
+    if master:
+        TF = load_tifffile(master)
+        names = [s.pages[0].parent.filename for s in TF.series]
+        index = names.index(filename.split('/')[-1])
+        page = TF.series[index].pages[0]
+        data = TF.asarray(series=index, memmap=memmap)
+    else:
+        data = imread(filename, multifile=False, memmap=memmap)
+    return data
+
+# save load time, will bring trouble if the TiffFile reference is closed
+@Memoized
+def load_tifffile(master):
+    return TiffFile(master)
 
 def get_row_stack(row, full=False, nuclei=False, apply_offset=False):
     """For a given DataFrame row, get image data for full frame or cell extents only.
