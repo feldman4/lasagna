@@ -39,8 +39,8 @@ def get_row_stack(row, full=False, nuclei=False, apply_offset=False):
     if full is False:
         I = I[b_idx(row)]
     if apply_offset:
-        offsets = np.array(I.shape)*0
-        offsets[-2:] = 1*row['offset x'], 1*row['offset y']
+        offsets = np.array(I.shape) * 0
+        offsets[-2:] = 1 * row['offset x'], 1 * row['offset y']
         I = offset_stack(I, offsets)
 
     return I
@@ -80,16 +80,16 @@ def montage(arr, shape=None):
     h, w, n = max(sz[-2]), max(sz[-1]), len(arr)
     if not shape:
         nr = nc = int(np.ceil(np.sqrt(n)))
-        if (nr-1)*nc >= n:
+        if (nr - 1) * nc >= n:
             nr -= 1
     else:
         nr, nc = shape
-    M = np.zeros(arr[0].shape[:-2] + (nr * h, nc * w) , dtype=arr[0].dtype)
+    M = np.zeros(arr[0].shape[:-2] + (nr * h, nc * w), dtype=arr[0].dtype)
 
     for (r, c), img in zip(product(range(nr), range(nc)), arr):
         s = [[None] for _ in img.shape]
-        s[-2] = (r*h, r*h + img.shape[-2])
-        s[-1] = (c*w, c*w + img.shape[-1])
+        s[-2] = (r * h, r * h + img.shape[-2])
+        s[-1] = (c * w, c * w + img.shape[-1])
         M[[slice(*x) for x in s]] = img
 
     return M
@@ -102,8 +102,8 @@ def _get_stack(name, nuclei=False):
     if nuclei:
         name = '/'.join(name.split('/')[:-1] + ['nuclei', name.split('/')[-1]])
         return imread(name, multifile=False)
-    I = imread(name,multifile=False)
-    I = I.reshape(4, I.size/(4*1024*1024), 1024, 1024)
+    I = imread(name, multifile=False)
+    I = I.reshape(4, I.size / (4 * 1024 * 1024), 1024, 1024)
     return I
 
 
@@ -191,9 +191,18 @@ def ij_tag_50839(luts, display_ranges):
 def sort_by_site(s):
     return ''.join(get_well_site(s)[::-1])
 
+
 def get_well_site(s):
-    well, site = re.search('_(..)-Site_([0-9]*)', s).groups(1)
-    return well, int(site)
+    match = re.search('_(..)-Site_([0-9]*)', s)
+    if match:
+        well, site = match.groups(1)
+        return well, int(site)
+    match = re.search('([A-H][0-9]*)_', s)
+    if match:
+        well = match.groups(1)
+        return well, 0
+    raise 'FuckYouError'
+
 
 def b_idx(row):
     """For a given DataFrame row, get slice index to cell in original data. Assumes 4D data.
@@ -202,7 +211,8 @@ def b_idx(row):
     """
 
     bounds = row['bounds']
-    return (slice(None), slice(None), slice(bounds[0],bounds[2]), slice(bounds[1], bounds[3]))
+    return (slice(None), slice(None), slice(bounds[0], bounds[2]), slice(bounds[1], bounds[3]))
+
 
 def offset_stack(stack, offsets):
     """Applies offset to stack, periodic boundaries.
@@ -231,8 +241,8 @@ def initialize_paths(dataset, subset='',
     DIR['dataset_path'] = DIR['lasagna'] + DIR['dataset'] + '/'
     DIR['analysis_path'] = DIR['lasagna'] + DIR['dataset'] + '/analysis/'
 
-    DIR['data_path'] = DIR['dataset_path'] + subset + '/*/*.tif'
-    DIR['nuclei_path'] = DIR['dataset_path'] + subset + '/*/nuclei/*.tif'
+    DIR['data_path'] = DIR['dataset_path'] + subset + '*/*.tif'
+    DIR['nuclei_path'] = DIR['dataset_path'] + subset + '*/nuclei/*.tif'
 
     DIR['stacks'] = sorted(glob(DIR['data_path']), key=get_well_site)
     DIR['nuclei'] = sorted(glob(DIR['nuclei_path']), key=get_well_site)
