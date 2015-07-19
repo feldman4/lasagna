@@ -220,7 +220,7 @@ def get_well_site(s):
     match = re.search('([A-H][0-9]*)_', s)
     if match:
         well = match.groups(1)
-        return well, 0
+        return well[0], 0
     raise 'FuckYouError'
 
 
