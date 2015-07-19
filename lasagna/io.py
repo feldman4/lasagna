@@ -262,6 +262,10 @@ def initialize_paths(dataset, subset='',
     :param lasagna_dir:
     :return:
     """
+    if subset:
+        if subset[-1] != '/':
+            subset += '/'
+
     global DIR
     DIR = {'lasagna': lasagna_dir,
            'dataset': dataset}
