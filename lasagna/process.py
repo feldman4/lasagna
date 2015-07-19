@@ -59,37 +59,39 @@ class Sample(object):
         :return:
         """
         if shape is None:
-            shape = tuple([int(s/self.rate) for s in img.shape[-2:] ])
+            shape = tuple([int(s/self.rate) for s in img.shape[-2:]])
 
         new_img = np.zeros(img.shape[:-2] + shape, dtype=img.dtype)
 
         for idx in np.ndindex(img.shape[:-2]):
-            new_img[idx] = transform.resize(img[idx], order=0, mode='nearest', preserve_range=True)
+            # parameters necessary to properly transform label arrays by non-integer factors
+            new_img[idx] = transform.resize(img[idx], shape, order=0,
+                                            mode='nearest', preserve_range=True)
 
-        pass
+        # store correct shape for inverting
+        self.sampled[(shape, self.rate)] = img.shape[-2:]
+
+        return new_img
 
     def upsample(self, img, shape=None):
-        pass
+        if shape is None:
+            s = (img.shape[-2:], self.rate)
+            if s in self.sampled:
+                shape = self.sampled[s]
+            else:
+                shape = tuple([int(s * self.rate) for s in img.shape[-2:]])
+
+        new_img = np.zeros(img.shape[:-2] + shape, dtype=img.dtype)
+
+        for idx in np.ndindex(img.shape[:-2]):
+            # parameters necessary to properly transform label arrays by non-integer factors
+            new_img[idx] = transform.resize(img[idx], shape, order=0,
+                                            mode='nearest', preserve_range=True)
+
+        return new_img
 
 
-
-
-DOWNSAMPLE = 1
-SHAPES = {}
-
-# def downsample(image, factor=DOWNSAMPLE):
-#     # works on stacks, roughly reversible
-#     global SHAPES
-#     new_size = (int(factor * s) for s in image.shape)
-#     SHAPES[(image.shape, DOWNSAMPLE)] =
-#     return resize(image, new_size)
-#
-# def upsample(image, factor=1./DOWNSAMPLE):
-#     global SHAPES
-#
-#     key =
-#     new_size =
-    
+DOWNSAMPLE = 2
 
 # adaptive threshold and watershed, 500ms
 downsample = (512, 512)
@@ -108,17 +110,17 @@ def fill_holes(I):
 def apply_watershed(I):
     distance = ndimage.distance_transform_edt(I)
     distance = gaussian_filter(distance, 4)
-    local_maxi = peak_local_max(distance, indices=False, 
-                               footprint = np.ones((3, 3)))
+    local_maxi = peak_local_max(distance, indices=False, footprint=np.ones((3, 3)))
     markers = ndimage.label(local_maxi)[0]
     return watershed(-distance, markers, mask=I).astype(np.uint16)
 
 def get_nuclei(img):
-    
-    binary = threshold_adaptive(resize(img, downsample), int(block_size*scale_factor), offset=threshold_offset)
+    s = Sample(DOWNSAMPLE)
+
+    binary = threshold_adaptive(s.downsample(img), int(block_size*scale_factor), offset=threshold_offset)
     filled = fill_holes(binary)
     opened = opening(filled, selem=disk(diameter_range[0]))
     nuclei = apply_watershed(opened)
-    nuclei = resize(nuclei, input_size, mode='nearest', order=0)
+    nuclei = s.upsample(nuclei)
     return img_as_uint(nuclei)
 
