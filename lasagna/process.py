@@ -95,7 +95,7 @@ class Sample(object):
         return new_img
 
 
-def get_nuclei(img, opening_radius=20, block_size=80, threshold_offset=0):
+def get_nuclei(img, opening_radius=6, block_size=80, threshold_offset=0):
     s = Sample(DOWNSAMPLE)
     binary = threshold_adaptive(s.downsample(img), int(block_size / s.rate), offset=threshold_offset)
     filled = fill_holes(binary)
