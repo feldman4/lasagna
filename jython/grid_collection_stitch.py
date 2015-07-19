@@ -13,12 +13,12 @@ channels = len(channel_luts)
 slices = 2  # Z
 frames = 1;  # T
 tiles = (5, 5)
-overlap = 20  # %
+overlap = 40  # %
 
 nuclei_singleton = False
 
 home_dir = 'D:\User Folders\David\lasagna\\20150716\\'
-data_dirs = ['20X_readout_pre37wash_A2-C2_5x5_1', '20X_readout_pre37wash_B4-C4_5x5_1']
+data_dirs = ['20X_hyb_and_washes\\20X_readout_pre37wash_B4-C4_5x5_1']
 
 
 def savename(well, data_dir):
@@ -31,8 +31,8 @@ def stitch_cmd(grid_size, overlap, directory, file_pattern):
     grid_size_x=%d grid_size_y=%d tile_overlap=%d first_file_index_i=0 directory=[%s]
     file_names=%s output_textfile_name=TileConfiguration.txt fusion_method=[Linear Blending]
     regression_threshold=0.30 max/avg_displacement_threshold=2.50
-    absolute_displacement_threshold=3.50 compute_overlap
-    computation_parameters=[Save memory (but be slower)]
+    absolute_displacement_threshold=3.50 compute_overlap 
+    computation_parameters=[Save computation time (but use more RAM)]
     image_output=[Fuse and display]"""
     return s % (grid_size[0], grid_size[1], overlap, directory, file_pattern)
 
@@ -43,7 +43,7 @@ wells = [r + c for r in rows for c in columns]
 
 for data_dir in data_dirs:
     files = glob(home_dir + data_dir + '\*.tif')
-
+    print files
     this_wells = [w for w in wells if any(w in x for x in files)]
     print 'wells to stitch:', this_wells
     for well in this_wells:
