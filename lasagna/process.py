@@ -5,10 +5,12 @@ import numpy as np
 from skimage.filter import gaussian_filter, threshold_adaptive
 from skimage.morphology import disk, watershed, opening
 from skimage.util import img_as_uint
-from skimage.transform import resize
 from skimage.measure import label
 from skimage.feature import peak_local_max
 from scipy import ndimage
+
+
+
 
 DOWNSAMPLE = 2
 
@@ -26,7 +28,6 @@ def register_images(images, index=None, window=(500, 500)):
     sz = np.array([max(x) for x in zip(*sz)])
 
     origin = np.array(images[0].shape) * 0
-    offsets = [origin]
 
     center = tuple([slice(s / 2 - min(s / 2, rw), s / 2 + min(s / 2, rw))
                     for s, rw in zip(sz, window)])
@@ -34,14 +35,17 @@ def register_images(images, index=None, window=(500, 500)):
     def pad(img):
         pad_width = [(s / 2, s - s / 2) for s in (sz - img.shape)]
         img = np.pad(img, pad_width, 'constant')
-        return img[center]
+        return img[center], [x[0] for x in pad_width]
 
-    image0 = pad(images[0][index])
+    image0, pad_width = pad(images[0][index])
+    offsets = [origin.copy()]
+    offsets[0][-2:] += pad_width
     for image in [x[index] for x in images[1:]]:
+        padded, pad_width = pad(image)
         shift, error, _ = register_translation(image0,
-                                               pad(image))
+                                               padded)
         offsets += [origin.copy()]
-        offsets[-1][-2:] = shift  # automatically cast to uint64
+        offsets[-1][-2:] = shift + pad_width  # automatically cast to uint64
 
     return offsets
 

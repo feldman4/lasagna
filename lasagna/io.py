@@ -26,6 +26,7 @@ DEFAULT_LUTS = (BLUE, GREEN, RED, MAGENTA)
 
 DIR = {}
 
+
 def read_stack(filename, master=None, memmap=False):
     if master:
         TF = load_tifffile(master)
@@ -37,10 +38,12 @@ def read_stack(filename, master=None, memmap=False):
         data = imread(filename, multifile=False, memmap=memmap)
     return data
 
+
 # save load time, will bring trouble if the TiffFile reference is closed
 @Memoized
 def load_tifffile(master):
     return TiffFile(master)
+
 
 def get_row_stack(row, full=False, nuclei=False, apply_offset=False):
     """For a given DataFrame row, get image data for full frame or cell extents only.
@@ -61,20 +64,24 @@ def get_row_stack(row, full=False, nuclei=False, apply_offset=False):
     return I
 
 
-def compose_stacks(DF, load_function=lambda x: get_row_stack(x)):
+def compose_rows(df, load_function=lambda x: get_row_stack(x)):
     """Load and concatenate stacks corresponding to rows in a DataFrame.
     Stacks are expanded to maximum in each dimension by padding with zeros.
-    :param DF: N rows in DataFrame, stacks have shape [m,...,n]
+    :param df: N rows in DataFrame, stacks have shape [m,...,n]
     :param load_function:
     :return: ndarray of shape [N,m,...,n]
     """
 
     arr_ = []
-    for ix, row in DF.iterrows():
+    for ix, row in df.iterrows():
         z = load_function(row).copy()
         arr_.append(z)
 
-    shape = map(max, zip(*[x.shape for x in arr_]))
+    return compose_stacks(arr_)
+
+
+def compose_stacks(arr_):
+    shape = [max(s) for s in zip(*[x.shape for x in arr_])]
     # strange numpy limitations
     for i, x in enumerate(arr_):
         y = np.zeros(shape, x.dtype)
@@ -152,8 +159,6 @@ def save_hyperstack(name, data, autocast=True, resolution=None,
            extratags=[(50838, 'I', len(tag_50838), tag_50838, True),
                       (50839, 'B', len(tag_50839), tag_50839, True),
                       ])
-
-    return description, tag_50838, tag_50839
 
 
 def ij_description(shape):
@@ -235,8 +240,17 @@ def offset_stack(stack, offsets):
     :param offsets: list of offsets
     :return:
     """
+    n = stack.ndim
+    ns = (slice(None),)
     for d, offset in enumerate(offsets):
         stack = np.roll(stack, offset, axis=d)
+        if offset < 0:
+            index = ns * d + (slice(offset, None),) + ns * (n - d - 1)
+            stack[index] = 0
+        if offset > 0:
+            index = ns * d + (slice(None, offset),) + ns * (n - d - 1)
+            stack[index] = 0
+
     return stack
 
 
