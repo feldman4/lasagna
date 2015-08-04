@@ -1,7 +1,7 @@
 from itertools import product
 from lasagna.utils import Memoized
 from glob import glob
-import struct
+import struct, os
 import numpy as np
 import regex as re
 from skimage.external.tifffile import TiffFile, imsave, imread
@@ -26,10 +26,22 @@ DEFAULT_LUTS = (BLUE, GREEN, RED, MAGENTA)
 
 DIR = {}
 
+def get_file_list(str_or_list):
+    """Get a list of files from a single filename or iterable of filenames. Glob expressions accepted.
+    :param str_or_list: filename, glob, list of filenames, or list of globs
+    :return:
+    """
+    if type(str_or_list) is str:
+        return glob(str_or_list)
+    return [y for x in str_or_list for y in glob(x)]
+
+def add_dir(path, dir_to_add):
+    x = path.split('/')
+    return '/'.join(x[:-1] + [dir_to_add] + [x[-1]])
 
 def read_stack(filename, master=None, memmap=False):
     if master:
-        TF = load_tifffile(master)
+        TF = _load_tifffile(master)
         names = [s.pages[0].parent.filename for s in TF.series]
         index = names.index(filename.split('/')[-1])
         page = TF.series[index].pages[0]
@@ -41,7 +53,7 @@ def read_stack(filename, master=None, memmap=False):
 
 # save load time, will bring trouble if the TiffFile reference is closed
 @Memoized
-def load_tifffile(master):
+def _load_tifffile(master):
     return TiffFile(master)
 
 
@@ -221,6 +233,7 @@ def get_well_site(s):
     if match:
         well = match.groups(1)
         return well[0], 0
+    print s
     raise 'FuckYouError'
 
 
@@ -263,19 +276,20 @@ def initialize_paths(dataset, subset='',
     :return:
     """
     if subset:
-        if subset[-1] != '/':
-            subset += '/'
+        subset = os.path.normpath(subset)
+    lasagna_dir = os.path.normpath(lasagna_dir)
+    dataset = os.path.normpath(dataset)
 
     global DIR
     DIR = {'lasagna': lasagna_dir,
            'dataset': dataset}
 
-    DIR['job_path'] = DIR['lasagna'] + '/jobs/'
-    DIR['dataset_path'] = DIR['lasagna'] + DIR['dataset'] + '/'
-    DIR['analysis_path'] = DIR['lasagna'] + DIR['dataset'] + '/analysis/'
+    DIR['job_path'] =  '%s/jobs' % DIR['lasagna']
+    DIR['dataset_path'] = '%s/%s' % (DIR['lasagna'], DIR['dataset'])
+    DIR['analysis'] = '%s/%s/analysis' % (DIR['lasagna'], DIR['dataset'])
 
-    DIR['data_path'] = DIR['dataset_path'] + subset + '*/*.tif'
-    DIR['nuclei_path'] = DIR['dataset_path'] + subset + '*/nuclei/*.tif'
+    DIR['data_path'] = '%s/%s/*/*.tif' % (DIR['dataset_path'], subset)
+    DIR['nuclei_path'] = '%s/%s/*/nuclei/*.tif' % (DIR['dataset_path'], subset)
 
     DIR['stacks'] = sorted(glob(DIR['data_path']), key=get_well_site)
     DIR['nuclei'] = sorted(glob(DIR['nuclei_path']), key=get_well_site)

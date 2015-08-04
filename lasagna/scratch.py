@@ -43,9 +43,18 @@ def test_nuclei_stitch(well=(('A2',),0)):
                            for d, offset in zip(data.values(), offsets)])
     return data, offsets, C
 
+
+def test_nuclei_to_table():
+    io.initialize_paths(dataset='20150629/40X_scan',
+                        lasagna_dir='/Volumes/blainey_lab/David/lasagna')
+    df = process.table_from_nuclei(io.DIR['stacks'][0])
+    return df
+
 if __name__ == '__main__':
-    x = test_nuclei_stitch()
-    io.save_hyperstack('/Users/feldman/Desktop/test.tif', x[2])
+    # x = test_nuclei_stitch()
+    # io.save_hyperstack('/Users/feldman/Desktop/test.tif', x[2])
+    df = test_nuclei_to_table()
+    df.to_pickle(io.DIR['analysis'] + '/test.pkl')
 
 # test_conditions()
 

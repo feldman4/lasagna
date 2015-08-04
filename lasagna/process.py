@@ -1,18 +1,63 @@
 from skimage import transform
 from skimage.feature import register_translation
 import numpy as np
+import pandas as pd
+import uuid
 
 from skimage.filter import gaussian_filter, threshold_adaptive
 from skimage.morphology import disk, watershed, opening
 from skimage.util import img_as_uint
-from skimage.measure import label
+from skimage.measure import label, regionprops
 from skimage.feature import peak_local_max
 from scipy import ndimage
 
-
-
+from lasagna import io
 
 DOWNSAMPLE = 2
+
+def region_fields(region):
+    return {'area': region.area,
+            'centroid': region.centroid,
+            'bounds': region.bbox,
+            'label': region.label}
+
+
+def table_from_nuclei(stack_files, well_site=None):
+    """
+    :param stack_files: single filename or list of filenames. glob accepted.
+    :param well:
+    :return:
+    """
+    files = io.get_file_list(stack_files)
+    dataframes = []
+    for f in files:
+        if well_site is None:
+            well, site = io.get_well_site(f)
+        else:
+            well, site = well_site
+        # load nuclei file
+        data = io.read_stack(io.add_dir(f, 'nuclei'))
+        region_info = [region_fields(r) for r in regionprops(data)]
+        [ri.update({'file': f.replace(io.DIR['lasagna'] + '/', '',),
+                    'hash': uuid.uuid4().hex}) for ri in region_info]
+
+        index = [[well]*len(region_info), [site]*len(region_info)]
+        df = pd.DataFrame(region_info, index=index)
+        df = df.set_index('label', append=True)
+        dataframes.append(df)
+    df = pd.concat(dataframes)
+    df.index.names = ['well', 'site', 'label']
+
+    return df
+    # index well, site
+    # identify round with column multi-index?
+    # doesn't really matter, can un-stack round from earlier dataframe
+    # columns area, bounds, circularity/perimeter, relative coordinates in well?
+    #
+
+
+
+
 
 def register_images(images, index=None, window=(500, 500)):
     """Register a series of image stacks to pixel accuracy.
