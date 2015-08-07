@@ -27,6 +27,7 @@ DEFAULT_LUTS = (BLUE, GREEN, RED, MAGENTA)
 
 DIR = {}
 
+
 def get_file_list(str_or_list):
     """Get a list of files from a single filename or iterable of filenames. Glob expressions accepted.
     :param str_or_list: filename, glob, list of filenames, or list of globs
@@ -36,9 +37,11 @@ def get_file_list(str_or_list):
         return glob(str_or_list)
     return [y for x in str_or_list for y in glob(x)]
 
+
 def add_dir(path, dir_to_add):
     x = path.split('/')
     return '/'.join(x[:-1] + [dir_to_add] + [x[-1]])
+
 
 def read_stack(filename, master=None, memmap=False):
     if master:
@@ -238,6 +241,12 @@ def get_well_site(s):
     raise 'FuckYouError'
 
 
+def get_magnification(s):
+    match = re.search('([0-9]+X)', s)
+    if match:
+        return match.groups(1)[0]
+
+
 def b_idx(row):
     """For a given DataFrame row, get slice index to cell in original data. Assumes 4D data.
     :param row:
@@ -287,72 +296,85 @@ class Paths(object):
         :return:
         """
         self.dirs = default_dirs if sub_dirs is None else sub_dirs
-
+        self._table = None
         self.dataset = dataset
         # resolve path, strip trailing slashes
         self.lasagna_path = os.path.abspath(lasagna_path)
 
         self.update()
 
-    def path_to(self, *args):
+    def full(self, *args):
         return os.path.join(self.lasagna_path, self.dataset, *args)
+
+    def relative(self, s):
+        return s.replace(self.full() + '/', '')
+
+    def parent(self, s):
+        return os.path.basename(os.path.dirname(s))
 
     def update(self):
         """Look for .tif files in stitched directory. Look for matching raw data in other subdirectories.
         :return:
         """
-
         raw_files = []
-        raw_prefix = self.path_to() + '/'
 
         # look for raw images
-        raw_dir = self.path_to(self.dirs['raw'])
+        raw_dir = self.full(self.dirs['raw'])
         for root, dirs, files in os.walk(raw_dir):
             parent = os.path.basename(root)
-            files = [f.replace(raw_prefix, '') for f in files]
+            files = [self.relative(os.path.join(root, f)) for f in files]
             raw_files += [f for f in files if parent in f and '.tif' in f]
 
+        # look for corresponding stitched images
+        stitch_files = []
+        stitch_dir = self.full(self.dirs['stitch'])
+        for root, dirs, files in os.walk(stitch_dir):
+            parent = os.path.basename(root)
+            files = [self.relative(os.path.join(root, f)) for f in files]
+            stitch_files += [f for f in files if parent in f and '.tif' in f]
 
+        stitch_dict = {}
+        for f in stitch_files:
+            tmp = get_magnification(f), self.parent(f), get_well_site(f)[0]
+            stitch_dict.update({tmp: f})
 
-        stitch_path = os.path.join(self.lasagna_path, self.dataset, self.stitch_dir, '*.tif')
-        self.stitch = [x.replace(self.lasagna_path +'/', '') for x in glob(stitch_path)]
-        self.counts['stitch'] = len(self.stitch)
+        raw_well_sites = zip(*[get_well_site(f) for f in raw_files])
+        raw_sets = [self.parent(f) for f in raw_files]
 
+        self._table = pandas.DataFrame({'file': [os.path.basename(f) for f in raw_files],
+                                        'raw': raw_files,
+                                        'mag': [get_magnification(s) for s in raw_files],
+                                        'well': raw_well_sites[0],
+                                        'site': raw_well_sites[1],
+                                        'set': raw_sets,
+                                        })
+        self._table = self._table.set_index(['mag', 'set', 'well', 'site']).sortlevel()
 
-        self._table = pandas.DataFrame()
+        # match stitch names based on all index values except site
+        for ix, row in self._table.iterrows():
+            if ix[:-1] in stitch_dict:
+                self._table.loc[ix, 'stitch'] = stitch_dict[ix[:-1]]
 
+        self.add_analysis('stitch', 'nuclei')
 
+    def add_analysis(self, column_in, analysis_name):
+        # generate nuclei file names, stitch only for now
+        for ix, row in self._table.iterrows():
+            name_in = row[column_in]
+            if pandas.notnull(name_in):
+                self._table.loc[ix, analysis_name] = os.path.join(self.dirs['analysis'],
+                                                                  analysis_name, name_in)
 
-    def fullpath(self, s):
-        return os.path.join(self.lasagna_path, s)
-
-    def make_nuclei_dirs(self):
-        """Create sub-directories for nuclei files, if they don't exist.
+    def make_dirs(self, files):
+        """Create sub-directories for files in column, if they don't exist.
         :return:
         """
-        pass
-
-    def update_nuclei_paths(self):
-        nuclei = []
-        for f in self.stitch:
-            f = self.fullpath(f)
-            file_name = os.path.basename(f)
-            nuclei.append(os.path.join(os.path.dirname(f), 'nuclei', file_name))
-            # if nuclei dir doesn't exist, make it
-            nuclei_dir = os.path.dirname(nuclei[-1])
-            if not os.path.isdir(nuclei_dir):
-                os.mkdir(nuclei_dir)
-
-
-        self.nuclei = nuclei
-
-
-
-    def make_dicts(self):
-        pass
-
-
-
+        for f in files:
+            if pandas.notnull(f):
+                d = self.full(os.path.dirname(f))
+                if not os.path.exists(d):
+                    os.makedirs(d)
+                    print 'created directory', d
 
 
 def initialize_paths(dataset, subset='',
@@ -372,7 +394,7 @@ def initialize_paths(dataset, subset='',
     DIR = {'lasagna': lasagna_dir,
            'dataset': dataset}
 
-    DIR['job_path'] =  '%s/jobs' % DIR['lasagna']
+    DIR['job_path'] = '%s/jobs' % DIR['lasagna']
     DIR['dataset_path'] = '%s/%s' % (DIR['lasagna'], DIR['dataset'])
     DIR['analysis'] = '%s/%s/analysis' % (DIR['lasagna'], DIR['dataset'])
 
