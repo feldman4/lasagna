@@ -267,6 +267,51 @@ def offset_stack(stack, offsets):
     return stack
 
 
+class Paths(object):
+    def __init__(self, dataset, lasagna_path='/broad/blainey_lab/David/lasagna',
+                 stitch_dir='stitch'):
+
+        self.dataset = dataset
+        self.lasagna_path = os.path.abspath(lasagna_path)
+        self.stitch_dir = stitch_dir
+
+        self.nuclei_dir = 'nuclei'
+
+        self.update_files()
+
+    def update_files(self):
+        """Look for .tif files in stitched directory. Look for matching raw data in other subdirectories.
+        :return:
+        """
+        stitch_path = os.path.join(self.lasagna_path, self.dataset, self.stitch_dir, '*.tif')
+        self.stitch = [x.replace(self.lasagna_path +'/', '') for x in glob(stitch_path)]
+
+    def fullpath(self, s):
+        return os.path.join(self.lasagna_path, s)
+
+    def update_nuclei_paths(self):
+        nuclei = []
+        for f in self.stitch:
+            f = self.fullpath(f)
+            file_name = os.path.basename(f)
+            nuclei.append(os.path.join(os.path.dirname(f), 'nuclei', file_name))
+            # if nuclei dir doesn't exist, make it
+            nuclei_dir = os.path.dirname(nuclei[-1])
+            if not os.path.isdir(nuclei_dir):
+                os.mkdir(nuclei_dir)
+
+
+        self.nuclei = nuclei
+
+
+
+    def make_dicts(self):
+        pass
+
+
+
+
+
 def initialize_paths(dataset, subset='',
                      lasagna_dir='/broad/blainey_lab/David/lasagna/'):
     """Define paths where data and job files are stored.
