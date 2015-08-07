@@ -12,6 +12,7 @@ imagej_description = ''.join(['ImageJ=1.49v\nimages=%d\nchannels=%d\nslices=%d',
                               '\nunit=\\u00B5m\nspacing=8.0\nloop=false\n',
                               'min=764.0\nmax=38220.0\n'])
 
+
 UM_PER_PX = {'40X': 0.44,
              '20X': 0.22}
 
@@ -296,7 +297,7 @@ class Paths(object):
         :return:
         """
         self.dirs = default_dirs if sub_dirs is None else sub_dirs
-        self._table = None
+        self.table = None
         self.dataset = dataset
         # resolve path, strip trailing slashes
         self.lasagna_path = os.path.abspath(lasagna_path)
@@ -341,28 +342,28 @@ class Paths(object):
         raw_well_sites = zip(*[get_well_site(f) for f in raw_files])
         raw_sets = [self.parent(f) for f in raw_files]
 
-        self._table = pandas.DataFrame({'file': [os.path.basename(f) for f in raw_files],
+        self.table = pandas.DataFrame({'file': [os.path.basename(f) for f in raw_files],
                                         'raw': raw_files,
                                         'mag': [get_magnification(s) for s in raw_files],
                                         'well': raw_well_sites[0],
                                         'site': raw_well_sites[1],
                                         'set': raw_sets,
                                         })
-        self._table = self._table.set_index(['mag', 'set', 'well', 'site']).sortlevel()
+        self.table = self.table.set_index(['mag', 'set', 'well', 'site']).sortlevel()
 
         # match stitch names based on all index values except site
-        for ix, row in self._table.iterrows():
+        for ix, row in self.table.iterrows():
             if ix[:-1] in stitch_dict:
-                self._table.loc[ix, 'stitch'] = stitch_dict[ix[:-1]]
+                self.table.loc[ix, 'stitch'] = stitch_dict[ix[:-1]]
 
         self.add_analysis('stitch', 'nuclei')
 
     def add_analysis(self, column_in, analysis_name):
         # generate nuclei file names, stitch only for now
-        for ix, row in self._table.iterrows():
+        for ix, row in self.table.iterrows():
             name_in = row[column_in]
             if pandas.notnull(name_in):
-                self._table.loc[ix, analysis_name] = os.path.join(self.dirs['analysis'],
+                self.table.loc[ix, analysis_name] = os.path.join(self.dirs['analysis'],
                                                                   analysis_name, name_in)
 
     def make_dirs(self, files):
@@ -375,6 +376,20 @@ class Paths(object):
                 if not os.path.exists(d):
                     os.makedirs(d)
                     print 'created directory', d
+
+    def table_(self, **kwargs):
+        """Convenience function to subset conditions, e.g. table_(well='A1', mag='40X', site=0).
+        :param kwargs:
+        :return:
+        """
+        index = tuple()
+        for n in self.table.index.names:
+            if n in kwargs:
+                index += (kwargs[n],)
+            else:
+                index += (slice(None),)
+        return self.table.loc[index, :]
+
 
 
 def initialize_paths(dataset, subset='',
