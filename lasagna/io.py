@@ -1,6 +1,7 @@
 from itertools import product
 from lasagna.utils import Memoized
 from glob import glob
+import pandas
 import struct, os
 import numpy as np
 import regex as re
@@ -267,27 +268,69 @@ def offset_stack(stack, offsets):
     return stack
 
 
+default_dirs = {'raw': 'raw',
+                'analysis': 'analysis',
+                'nuclei': 'analysis/nuclei',
+                'stitch': 'stitch'}
+
+
 class Paths(object):
     def __init__(self, dataset, lasagna_path='/broad/blainey_lab/David/lasagna',
-                 stitch_dir='stitch'):
+                 sub_dirs=None):
+        """Store file paths relative to lasagna_path, allowing dataset to be loaded in different
+        absolute locations. Retrieve raw files, stitched files, and nuclei. Pass stitch name and
+        get nuclei name.
+        :param dataset:
+        :param lasagna_path:
+        :param stitch_dir:
+        :param nuclei_dir:
+        :return:
+        """
+        self.dirs = default_dirs if sub_dirs is None else sub_dirs
 
         self.dataset = dataset
+        # resolve path, strip trailing slashes
         self.lasagna_path = os.path.abspath(lasagna_path)
-        self.stitch_dir = stitch_dir
 
-        self.nuclei_dir = 'nuclei'
+        self.update()
 
-        self.update_files()
+    def path_to(self, *args):
+        return os.path.join(self.lasagna_path, self.dataset, *args)
 
-    def update_files(self):
+    def update(self):
         """Look for .tif files in stitched directory. Look for matching raw data in other subdirectories.
         :return:
         """
+
+        raw_files = []
+        raw_prefix = self.path_to() + '/'
+
+        # look for raw images
+        raw_dir = self.path_to(self.dirs['raw'])
+        for root, dirs, files in os.walk(raw_dir):
+            parent = os.path.basename(root)
+            files = [f.replace(raw_prefix, '') for f in files]
+            raw_files += [f for f in files if parent in f and '.tif' in f]
+
+
+
         stitch_path = os.path.join(self.lasagna_path, self.dataset, self.stitch_dir, '*.tif')
         self.stitch = [x.replace(self.lasagna_path +'/', '') for x in glob(stitch_path)]
+        self.counts['stitch'] = len(self.stitch)
+
+
+        self._table = pandas.DataFrame()
+
+
 
     def fullpath(self, s):
         return os.path.join(self.lasagna_path, s)
+
+    def make_nuclei_dirs(self):
+        """Create sub-directories for nuclei files, if they don't exist.
+        :return:
+        """
+        pass
 
     def update_nuclei_paths(self):
         nuclei = []
