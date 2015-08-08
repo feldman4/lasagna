@@ -98,15 +98,21 @@ def compose_rows(df, load_function=lambda x: get_row_stack(x)):
 
 
 def compose_stacks(arr_):
+    """Concatenate stacks of same dimensionality along leading dimension. Values are
+    filled from top left of matrix. Fills background with zero.
+    :param arr_:
+    :return:
+    """
     shape = [max(s) for s in zip(*[x.shape for x in arr_])]
     # strange numpy limitations
-    for i, x in enumerate(arr_):
+    arr_out = []
+    for x in arr_:
         y = np.zeros(shape, x.dtype)
         slicer = [slice(None, s) for s in x.shape]
         y[slicer] = x
-        arr_[i] = y[None, ...]
+        arr_out += [y[None, ...]]
 
-    return np.concatenate(arr_, axis=0)
+    return np.concatenate(arr_out, axis=0)
 
 
 def montage(arr, shape=None):
@@ -151,6 +157,9 @@ def save_hyperstack(name, data, autocast=True, resolution=None,
     """input ND array dimensions as ([time], [z slice], channel, y, x)
     leading dimensions beyond 5 could be wrapped into time, not implemented
     """
+    if data.ndim == 2:
+        data = data[np.newaxis, :, :]
+
     nchannels = data.shape[-3]
     if resolution is None:
         resolution = (1. / (UM_PER_PX[OBJECTIVE] * BINNING),) * 2
@@ -239,7 +248,7 @@ def get_well_site(s):
         well = match.groups(1)
         return well[0], 0
     print s
-    raise 'FuckYouError'
+    raise NameError('FuckYouError')
 
 
 def get_magnification(s):
@@ -259,11 +268,16 @@ def b_idx(row):
 
 
 def offset_stack(stack, offsets):
-    """Applies offset to stack, periodic boundaries.
+    """Applies offset to stack, fills with zero.
     :param stack: N-dim array
-    :param offsets: list of offsets
+    :param offsets: list of N offsets
     :return:
     """
+    if len(offsets) != stack.ndim:
+        if len(offsets) == 2 and stack.ndim > 2:
+            offsets = [0]*(stack.ndim-2) + list(offsets)
+        else:
+            raise IndexError("number of offsets must equal stack dimensions, or 2 (trailing dimensions)")
     n = stack.ndim
     ns = (slice(None),)
     for d, offset in enumerate(offsets):
@@ -390,34 +404,3 @@ class Paths(object):
                 index += (slice(None),)
         return self.table.loc[index, :]
 
-
-
-def initialize_paths(dataset, subset='',
-                     lasagna_dir='/broad/blainey_lab/David/lasagna/'):
-    """Define paths where data and job files are stored.
-    :param dataset:
-    :param subset:
-    :param lasagna_dir:
-    :return:
-    """
-    if subset:
-        subset = os.path.normpath(subset)
-    lasagna_dir = os.path.normpath(lasagna_dir)
-    dataset = os.path.normpath(dataset)
-
-    global DIR
-    DIR = {'lasagna': lasagna_dir,
-           'dataset': dataset}
-
-    DIR['job_path'] = '%s/jobs' % DIR['lasagna']
-    DIR['dataset_path'] = '%s/%s' % (DIR['lasagna'], DIR['dataset'])
-    DIR['analysis'] = '%s/%s/analysis' % (DIR['lasagna'], DIR['dataset'])
-
-    DIR['data_path'] = '%s/%s/*/*.tif' % (DIR['dataset_path'], subset)
-    DIR['nuclei_path'] = '%s/%s/*/nuclei/*.tif' % (DIR['dataset_path'], subset)
-
-    DIR['stacks'] = sorted(glob(DIR['data_path']), key=get_well_site)
-    DIR['nuclei'] = sorted(glob(DIR['nuclei_path']), key=get_well_site)
-
-
-print 'call lasagna.io.initialize_paths(dataset, ...) to set up lasagna.io.DIR'

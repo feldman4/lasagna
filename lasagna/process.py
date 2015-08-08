@@ -12,8 +12,10 @@ from skimage.feature import peak_local_max
 from scipy import ndimage
 
 from lasagna import io
+from lasagna import config
 
 DOWNSAMPLE = 2
+
 
 def region_fields(region):
     return {'area': region.area,
@@ -22,41 +24,33 @@ def region_fields(region):
             'label': region.label}
 
 
-def table_from_nuclei(stack_files, well_site=None):
+def table_from_nuclei(file_table, source='stitch', nuclei='nuclei'):
     """
-    :param stack_files: single filename or list of filenames. glob accepted.
-    :param well:
+    :param file_table:
+    :param source:
+    :param nuclei:
     :return:
     """
-    files = io.get_file_list(stack_files)
+
     dataframes = []
-    for f in files:
-        if well_site is None:
-            well, site = io.get_well_site(f)
-        else:
-            well, site = well_site
+    for ix, row in file_table.iterrows():
+
         # load nuclei file
-        data = io.read_stack(io.add_dir(f, 'nuclei'))
-        region_info = [region_fields(r) for r in regionprops(data)]
-        [ri.update({'file': f.replace(io.DIR['lasagna'] + '/', '',),
+        segmented = io.read_stack(config.paths.full(row[nuclei]))
+        region_info = [region_fields(r) for r in regionprops(segmented)]
+        [ri.update({'file': row[source],
                     'hash': uuid.uuid4().hex}) for ri in region_info]
 
-        index = [[well]*len(region_info), [site]*len(region_info)]
-        df = pd.DataFrame(region_info, index=index)
+        ix = [list(x) for x in zip(*[list(ix)]*len(region_info))]
+
+        df = pd.DataFrame(region_info, index=ix)
+        df.index.names = file_table.index.names
         df = df.set_index('label', append=True)
+
         dataframes.append(df)
     df = pd.concat(dataframes)
-    df.index.names = ['well', 'site', 'label']
 
     return df
-    # index well, site
-    # identify round with column multi-index?
-    # doesn't really matter, can un-stack round from earlier dataframe
-    # columns area, bounds, circularity/perimeter, relative coordinates in well?
-    #
-
-
-
 
 
 def register_images(images, index=None, window=(500, 500)):
