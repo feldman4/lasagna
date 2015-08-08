@@ -23,31 +23,51 @@ def region_fields(region):
             'bounds': region.bbox,
             'label': region.label}
 
+default_features = {'mean': lambda region: region.intensity_image.mean(),
+                    'median': lambda region: np.median(region.intensity_image),
+                    'max': lambda region: region.intensity_image.max(),
+                    }
 
-def table_from_nuclei(file_table, source='stitch', nuclei='nuclei'):
+def table_from_nuclei(file_table, source='stitch', nuclei='nuclei', channels=None,
+                      features=None):
     """
     :param file_table:
     :param source:
     :param nuclei:
     :return:
     """
+    # prefix to channel-specific features
+    channels = ['channel' + str(i) for i in range(100)] if channels is None else channels
+    features = default_features if features is None else features
 
     dataframes = []
     for ix, row in file_table.iterrows():
 
+        print 'processing:', row[source]
         # load nuclei file
         segmented = io.read_stack(config.paths.full(row[nuclei]))
-        region_info = [region_fields(r) for r in regionprops(segmented)]
-        [ri.update({'file': row[source],
-                    'hash': uuid.uuid4().hex}) for ri in region_info]
+        data = io.read_stack(config.paths.full(row[source]))
 
-        ix = [list(x) for x in zip(*[list(ix)]*len(region_info))]
+        info = [region_fields(r) for r in regionprops(segmented)]
+        df = pd.DataFrame(info, index=[list(x) for x in zip(*[list(ix)]*len(info))])
+        df['file'] = row[source]
+        df['hash'] = [uuid.uuid4().hex for _ in range(df.shape[0])]
 
-        df = pd.DataFrame(region_info, index=ix)
+        # add channel-specific features
+        if data.ndim == 2:
+            data = data[np.newaxis, :, :]
+
+        for channel, image in zip(channels, data):
+            channel_regions = regionprops(segmented, intensity_image=image)
+            for name, fcn in features.items():
+                df[channel + '_' + name] = [fcn(r) for r in channel_regions]
+
         df.index.names = file_table.index.names
         df = df.set_index('label', append=True)
 
         dataframes.append(df)
+
+
     df = pd.concat(dataframes)
 
     return df

@@ -1,4 +1,5 @@
 from itertools import product
+from lasagna import config
 from lasagna.utils import Memoized
 from glob import glob
 import pandas
@@ -70,7 +71,7 @@ def get_row_stack(row, full=False, nuclei=False, apply_offset=False):
     :param apply_offset:
     :return:
     """
-    I = _get_stack(row['name'], nuclei=nuclei)
+    I = _get_stack(row['file'], nuclei=nuclei)
     if full is False:
         I = I[b_idx(row)]
     if apply_offset:
@@ -141,15 +142,8 @@ def montage(arr, shape=None):
 
 
 @Memoized
-def _get_stack(name, nuclei=False):
-    if '/broad/' not in name:
-        name = DIR['dataset_path'] + name
-    if nuclei:
-        name = '/'.join(name.split('/')[:-1] + ['nuclei', name.split('/')[-1]])
-        return imread(name, multifile=False)
-    I = imread(name, multifile=False)
-    I = I.reshape(4, I.size / (4 * 1024 * 1024), 1024, 1024)
-    return I
+def _get_stack(name):
+    return imread(config.paths.full(name), multifile=False)
 
 
 def save_hyperstack(name, data, autocast=True, resolution=None,
@@ -264,7 +258,7 @@ def b_idx(row):
     """
 
     bounds = row['bounds']
-    return (slice(None), slice(None), slice(bounds[0], bounds[2]), slice(bounds[1], bounds[3]))
+    return Ellipsis, slice(bounds[0], bounds[2]), slice(bounds[1], bounds[3])
 
 
 def offset_stack(stack, offsets):
