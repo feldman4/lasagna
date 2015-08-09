@@ -3,7 +3,11 @@ from lasagna import config
 from lasagna.utils import Memoized
 from glob import glob
 import pandas
-import struct, os
+import struct
+import os
+import PIL.ImageFont
+import PIL.Image
+import PIL.ImageDraw
 import numpy as np
 import regex as re
 from skimage.external.tifffile import TiffFile, imsave, imread
@@ -12,7 +16,6 @@ imagej_description = ''.join(['ImageJ=1.49v\nimages=%d\nchannels=%d\nslices=%d',
                               '\nframes=%d\nhyperstack=true\nmode=composite',
                               '\nunit=\\u00B5m\nspacing=8.0\nloop=false\n',
                               'min=764.0\nmax=38220.0\n'])
-
 
 UM_PER_PX = {'40X': 0.44,
              '20X': 0.22}
@@ -28,6 +31,8 @@ MAGENTA = tuple(range(256) + [0] * 256 + range(256))
 DEFAULT_LUTS = (BLUE, GREEN, RED, MAGENTA)
 
 DIR = {}
+
+VISITOR_FONT = PIL.ImageFont.truetype(config.visitor_font)
 
 
 def get_file_list(str_or_list):
@@ -269,7 +274,7 @@ def offset_stack(stack, offsets):
     """
     if len(offsets) != stack.ndim:
         if len(offsets) == 2 and stack.ndim > 2:
-            offsets = [0]*(stack.ndim-2) + list(offsets)
+            offsets = [0] * (stack.ndim - 2) + list(offsets)
         else:
             raise IndexError("number of offsets must equal stack dimensions, or 2 (trailing dimensions)")
     n = stack.ndim
@@ -351,12 +356,12 @@ class Paths(object):
         raw_sets = [self.parent(f) for f in raw_files]
 
         self.table = pandas.DataFrame({'file': [os.path.basename(f) for f in raw_files],
-                                        'raw': raw_files,
-                                        'mag': [get_magnification(s) for s in raw_files],
-                                        'well': raw_well_sites[0],
-                                        'site': raw_well_sites[1],
-                                        'set': raw_sets,
-                                        })
+                                       'raw': raw_files,
+                                       'mag': [get_magnification(s) for s in raw_files],
+                                       'well': raw_well_sites[0],
+                                       'site': raw_well_sites[1],
+                                       'set': raw_sets,
+                                       })
         self.table = self.table.set_index(['mag', 'set', 'well', 'site']).sortlevel()
 
         # match stitch names based on all index values except site
@@ -372,7 +377,7 @@ class Paths(object):
             name_in = row[column_in]
             if pandas.notnull(name_in):
                 self.table.loc[ix, analysis_name] = os.path.join(self.dirs['analysis'],
-                                                                  analysis_name, name_in)
+                                                                 analysis_name, name_in)
 
     def make_dirs(self, files):
         """Create sub-directories for files in column, if they don't exist.
@@ -398,3 +403,42 @@ class Paths(object):
                 index += (slice(None),)
         return self.table.loc[index, :]
 
+
+def watermark(a, text, spacing=1):
+    """ Add rasterized text to 2D numpy array.
+    :param a: 2D numpy array
+    :param text: string or list of strings
+    :param spacing: spacing between lines, in pixels
+    :return:
+    """
+    bm = bitmap_text(text, spacing=spacing)
+    if any(x > y for x, y in zip(bm.shape, a.shape)):
+        raise ValueError('not enough space, text %s occupies %s pixels' %
+                         (text.__repr__, bm.shape.__repr__))
+    b = a.copy()
+    b[:bm.shape[0], :bm.shape[1]] += bm
+    return b
+
+
+def bitmap_text(text, spacing=1):
+    if type(text) is str:
+        text = [text]
+
+    def get_text(s):
+        img = PIL.Image.new("RGBA", (len(s) * 8, 10), (0, 0, 0))
+        draw = PIL.ImageDraw.Draw(img)
+        draw.text((0, 0), s, (255, 255, 255), font=VISITOR_FONT)
+        draw = PIL.ImageDraw.Draw(img)
+
+        n = np.array(img)[2:7, :, 0]
+        return n[:, :np.where(n.any(axis=0))[0][-1] + 1]
+
+    m = [get_text(s).copy() for s in text]
+
+    full_shape = np.max([t.shape for t in m], axis=0)
+    full_text = np.zeros(((full_shape[0] + spacing) * len(text) - spacing, full_shape[1]))
+
+    for i, t in enumerate(m):
+        full_text[i * (full_shape[0] + spacing):(i + 1) * full_shape[0] + i * spacing, :t.shape[1]] = t
+
+    return full_text
