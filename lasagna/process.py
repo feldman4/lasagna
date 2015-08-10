@@ -1,4 +1,5 @@
 from skimage import transform
+import skimage
 from skimage.feature import register_translation
 import numpy as np
 import pandas as pd
@@ -23,10 +24,12 @@ def region_fields(region):
             'bounds': region.bbox,
             'label': region.label}
 
+
 default_features = {'mean': lambda region: region.intensity_image.mean(),
                     'median': lambda region: np.median(region.intensity_image),
                     'max': lambda region: region.intensity_image.max(),
                     }
+
 
 def table_from_nuclei(file_table, source='stitch', nuclei='nuclei', channels=None,
                       features=None):
@@ -49,9 +52,15 @@ def table_from_nuclei(file_table, source='stitch', nuclei='nuclei', channels=Non
         data = io.read_stack(config.paths.full(row[source]))
 
         info = [region_fields(r) for r in regionprops(segmented)]
-        df = pd.DataFrame(info, index=[list(x) for x in zip(*[list(ix)]*len(info))])
+        df = pd.DataFrame(info, index=[list(x) for x in zip(*[list(ix)] * len(info))])
         df['file'] = row[source]
         df['hash'] = [uuid.uuid4().hex for _ in range(df.shape[0])]
+
+        df.columns = pd.MultiIndex(labels=zip(*[[0, i] for i in range(len(df.columns))]),
+                                   levels=[['all'], df.columns],
+                                   names=['channel', 'feature'])
+
+
 
         # add channel-specific features
         if data.ndim == 2:
@@ -60,13 +69,13 @@ def table_from_nuclei(file_table, source='stitch', nuclei='nuclei', channels=Non
         for channel, image in zip(channels, data):
             channel_regions = regionprops(segmented, intensity_image=image)
             for name, fcn in features.items():
-                df[channel + '_' + name] = [fcn(r) for r in channel_regions]
+                df[channel, name] = [fcn(r) for r in channel_regions]
 
         df.index.names = file_table.index.names
-        df = df.set_index('label', append=True)
+        df = df.set_index(('all', 'label'), append=True)
+        df.index.set_names('label', level=[('all', 'label')], inplace=True)
 
         dataframes.append(df)
-
 
     df = pd.concat(dataframes)
 
@@ -180,3 +189,19 @@ def apply_watershed(img):
     local_maxi = peak_local_max(distance, indices=False, footprint=np.ones((3, 3)))
     markers = ndimage.label(local_maxi)[0]
     return watershed(-distance, markers, mask=img).astype(np.uint16)
+
+
+def get_blobs(row, pad=(3, 3), method='dog'):
+    channels = [x for x in row.index.levels[0] if x != 'all']
+    I = io.get_row_stack(row, pad=pad)
+    blobs_all = []
+    for channel, img in zip(channels, I):
+        if channel == 'DAPI':
+            blobs_all += [[]]
+            continue
+        img = skimage.img_as_float(img)
+        img /= img.max()
+        blobs_all += [skimage.feature.blob_dog(img, min_sigma=1.,
+                                               max_sigma=3.,
+                                               threshold=0.06)]
+    return blobs_all, I

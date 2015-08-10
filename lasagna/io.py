@@ -68,7 +68,7 @@ def _load_tifffile(master):
     return TiffFile(master)
 
 
-def get_row_stack(row, full=False, nuclei=False, apply_offset=False):
+def get_row_stack(row, full=False, nuclei=False, apply_offset=False, pad=(0, 0)):
     """For a given DataFrame row, get image data for full frame or cell extents only.
     :param row:
     :param full:
@@ -76,9 +76,9 @@ def get_row_stack(row, full=False, nuclei=False, apply_offset=False):
     :param apply_offset:
     :return:
     """
-    I = _get_stack(row['file'], nuclei=nuclei)
+    I = _get_stack(row[('all', 'file')])
     if full is False:
-        I = I[b_idx(row)]
+        I = I[b_idx(row, padding=(pad, I.shape))]
     if apply_offset:
         offsets = np.array(I.shape) * 0
         offsets[-2:] = 1 * row['offset x'], 1 * row['offset y']
@@ -256,13 +256,17 @@ def get_magnification(s):
         return match.groups(1)[0]
 
 
-def b_idx(row):
+def b_idx(row, padding=None):
     """For a given DataFrame row, get slice index to cell in original data. Assumes 4D data.
     :param row:
     :return:
     """
 
-    bounds = row['bounds']
+    bounds = row[('all', 'bounds')]
+    if padding:
+        pad, shape = padding
+        bounds = bounds[0] - pad[0], bounds[1] - pad[1], bounds[2] + pad[0], bounds[3] + pad[1]
+        bounds = max(bounds[0], 0), max(bounds[1], 0), min(bounds[2], shape[-2]), min(bounds[3], shape[-1])
     return Ellipsis, slice(bounds[0], bounds[2]), slice(bounds[1], bounds[3])
 
 
@@ -404,19 +408,22 @@ class Paths(object):
         return self.table.loc[index, :]
 
 
-def watermark(a, text, spacing=1):
-    """ Add rasterized text to 2D numpy array.
-    :param a: 2D numpy array
+def watermark(shape, text, spacing=1, corner='top left'):
+    """ Add rasterized text to empty 2D numpy array.
+    :param shape:
     :param text: string or list of strings
     :param spacing: spacing between lines, in pixels
     :return:
     """
     bm = bitmap_text(text, spacing=spacing)
-    if any(x > y for x, y in zip(bm.shape, a.shape)):
+    if any(x > y for x, y in zip(bm.shape, shape)):
         raise ValueError('not enough space, text %s occupies %s pixels' %
                          (text.__repr__, bm.shape.__repr__))
-    b = a.copy()
-    b[:bm.shape[0], :bm.shape[1]] += bm
+    b = np.zeros([shape[0], shape[1]])
+    if corner == 'top left':
+        b[:bm.shape[0], :bm.shape[1]] += bm
+    if corner == 'bottom left':
+        b[-bm.shape[0]:, :bm.shape[1]] += bm
     return b
 
 
