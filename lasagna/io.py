@@ -1,4 +1,5 @@
 from itertools import product
+import skimage.morphology
 from lasagna import config
 from lasagna.utils import Memoized
 from glob import glob
@@ -418,7 +419,7 @@ def watermark(shape, text, spacing=1, corner='top left'):
     bm = bitmap_text(text, spacing=spacing)
     if any(x > y for x, y in zip(bm.shape, shape)):
         raise ValueError('not enough space, text %s occupies %s pixels' %
-                         (text.__repr__, bm.shape.__repr__))
+                         (text.__repr__(), bm.shape.__repr__()))
     b = np.zeros([shape[0], shape[1]])
     if corner == 'top left':
         b[:bm.shape[0], :bm.shape[1]] += bm
@@ -449,3 +450,28 @@ def bitmap_text(text, spacing=1):
         full_text[i * (full_shape[0] + spacing):(i + 1) * full_shape[0] + i * spacing, :t.shape[1]] = t
 
     return full_text
+
+
+def mark_features(shape, features, type='box'):
+    disk_size = 31
+    disks = [np.pad(skimage.morphology.square(i, dtype=np.uint16), disk_size / 2 - i / 2, mode='constant')
+             for i in range(1, disk_size / 2, 2)]
+
+    disks = [skimage.morphology.dilation(d) - d for d in disks]
+
+    im = np.zeros(shape)
+    im2 = np.pad(im, disk_size / 2, mode='constant')
+    for i, j, size in features:
+        im2[i:i+disk_size, j:j+disk_size] += disks[size]
+
+    return im2[disk_size/2:-disk_size/2 + 1, disk_size/2:-disk_size/2 + 1]
+
+
+def mark_blobs(row, n):
+    channels = ('DAPI', 'Cy3', 'A594', 'Cy5')
+    im = np.zeros(n.shape[1::], dtype='uint16')
+    for channel, blobs in row.loc[:, 'blob'].iteritems():
+        if channel != 'DAPI':
+            i = channels.index(channel)
+            im += mark_features(im.shape, blobs) * 2**i
+    return im

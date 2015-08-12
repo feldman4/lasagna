@@ -191,7 +191,7 @@ def apply_watershed(img):
     return watershed(-distance, markers, mask=img).astype(np.uint16)
 
 
-def get_blobs(row, pad=(3, 3), method='dog'):
+def get_blobs(row, pad=(3, 3), threshold=0.01, method='dog'):
     channels = [x for x in row.index.levels[0] if x != 'all']
     I = io.get_row_stack(row, pad=pad)
     blobs_all = []
@@ -200,8 +200,45 @@ def get_blobs(row, pad=(3, 3), method='dog'):
             blobs_all += [[]]
             continue
         img = skimage.img_as_float(img)
-        img /= img.max()
+        # img /= img.max()
         blobs_all += [skimage.feature.blob_dog(img, min_sigma=1.,
                                                max_sigma=3.,
-                                               threshold=0.06)]
-    return blobs_all, I
+                                               threshold=threshold)]
+    return blobs_all
+
+
+class filter2D(object):
+    def __init__(self, func):
+        y = np.array([[func(r) for r in range(100)]])
+        self.H = y * y.T
+        
+    def __call__(self, M):
+        H = self.H
+        M_fft = np.fft.fft2(M)
+        s, t = [s/2 for s in M_fft.shape]
+        h = np.zeros(M.shape)
+        h[:s, :t] = H[:s, :t]
+        h[:-s-1:-1, :t] = H[:s, :t]
+        h[:-s-1:-1, :-t-1:-1] = H[:s, :t]
+        h[:s, :-t-1:-1] = H[:s, :t]
+        M_f = np.absolute( np.fft.ifft2(h * M_fft))
+        self.h = h
+        return M_f * (M.sum()/M_f.sum())
+    
+
+def make_2D_filter(func):
+    """Turn a 1D function in Fourier space into a callable 2D filter.
+    """
+    y = np.array([[func(r) for r in range(100)]])
+    H = y * y.T
+    def filter2D(M):
+        M_fft = np.fft.fft2(M)
+        s, t = [s/2 for s in M_fft.shape]
+        h = np.zeros(M.shape)
+        h[:s, :t] = H[:s, :t]
+        h[:-s-1:-1, :t] = H[:s, :t]
+        h[:-s-1:-1, :-t-1:-1] = H[:s, :t]
+        h[:s, :-t-1:-1] = H[:s, :t]
+        M_f = np.abs( np.fft.ifft2(h * M_fft))
+        return M_f * (M.sum()/M_f.sum())
+    return filter2D
