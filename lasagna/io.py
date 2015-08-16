@@ -311,8 +311,6 @@ class Paths(object):
         get nuclei name.
         :param dataset:
         :param lasagna_path:
-        :param stitch_dir:
-        :param nuclei_dir:
         :return:
         """
         self.dirs = default_dirs if sub_dirs is None else sub_dirs
@@ -413,6 +411,14 @@ class Paths(object):
                 index += (slice(None),)
         return self.table.loc[index, :]
 
+    def lookup(self, column, **kwargs):
+            """Convenient search.
+            :param kwargs:
+            :return:
+            """
+            source, value = kwargs.items()[0]
+            return self.table[self.table[source] == value][column][0]
+
 
 def watermark(shape, text, spacing=1, corner='top left'):
     """ Add rasterized text to empty 2D numpy array.
@@ -444,6 +450,8 @@ def bitmap_text(text, spacing=1):
         draw = PIL.ImageDraw.Draw(img)
 
         n = np.array(img)[2:7, :, 0]
+        if n.sum() == 0:
+            return n
         return n[:, :np.where(n.any(axis=0))[0][-1] + 1]
 
     m = [get_text(s).copy() for s in text]

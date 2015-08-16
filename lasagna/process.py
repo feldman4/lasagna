@@ -24,13 +24,7 @@ def region_fields(region):
             'centroid': region.centroid,
             'bounds': region.bbox,
             'label': region.label,
-            'image': io.compress_obj(region.image)}
-
-
-default_features = {'mean': lambda region: region.intensity_image.mean(),
-                    'median': lambda region: np.median(region.intensity_image),
-                    'max': lambda region: region.intensity_image.max(),
-                    }
+            'mask': io.compress_obj(region.image)}
 
 
 def binary_contours(img):
@@ -41,6 +35,14 @@ def binary_contours(img):
     contours = skimage.measure.find_contours(np.pad(img, 1, mode='constant'),
                                              level=0.5)
     return [contour - 1 for contour in contours]
+
+
+def pad(array, pad_width, mode=None, **kwargs):
+    if type(pad_width) == int:
+        if pad_width < 0:
+            s = [slice(-1*pad_width, pad_width)]*array.ndim
+            return array[s]
+    return np.pad(array, pad_width, mode=mode, **kwargs)
 
 
 def regionprops(*args, **kwargs):
@@ -204,7 +206,7 @@ def get_nuclei(img, opening_radius=6, block_size=80, threshold_offset=0):
 
 
 def fill_holes(img):
-    labels = label(img)
+    labels = skimage.measure.label(img)
     background_label = np.bincount(labels.flatten()).argmax()
     return labels != background_label
 
@@ -241,18 +243,29 @@ class Filter2D(object):
         :param window_size: can be anything, really
         :return:
         """
-        self.func = np.vectorize(func)
+        self.func = func
         y = np.array([range(window_size)])
         self.filter1D = self.func(y[0])
         self.H = self.func(np.sqrt(y**2 + y.T**2))
         self.H = self.H / self.H.max()
         self.__call__(self.H)
 
-    def __call__(self, M):
+    def __call__(self, M, pad_width=None):
+        """
+        :param M:
+        :param pad_width: minimum pad width, pads up to next power of 2
+        :return:
+        """
+        if pad_width:
+            sz = 2**(int(np.log2(max(M.shape)+pad_width))+1)
+            pad_width = [((sz-s)/2, (sz - s) - (sz - s)/2) for s in M.shape]
+            M_ = np.pad(M, pad_width, mode='linear_ramp', end_values=(M.mean(),))
+        else:
+            M_ = M
         H = self.H
-        M_fft = np.fft.fft2(M)
+        M_fft = np.fft.fft2(M_)
         s, t = [s/2 for s in M_fft.shape]
-        h = np.zeros(M.shape)
+        h = np.zeros(M_.shape)
         h[:s, :t] = H[:s, :t]
         h[:-s-1:-1, :t] = H[:s, :t]
         h[:-s-1:-1, :-t-1:-1] = H[:s, :t]
@@ -260,13 +273,37 @@ class Filter2D(object):
         self.M_pre_abs = np.fft.ifft2(h * M_fft)
         M_f = np.abs(self.M_pre_abs)
         self.filter2D = np.fft.fftshift(h)
-        # out = M_f * (M.sum()/M_f.sum())
+        # out = M_f * (M_.sum()/M_f.sum())
+        if pad_width:
+            M_f = M_f[pad_width[0][0]:-pad_width[0][1], pad_width[1][0]:-pad_width[1][1]]
         return M_f
 
 
 def gaussian(x, sigma):
-    return np.exp(-float(x)**2 / (2*float(sigma)**2))
+    return np.exp(-x**2 / (2*sigma**2))
 
 
 def double_gaussian(sigma1, sigma2):
     return lambda x: gaussian(x, sigma1) * (1 - gaussian(x, sigma2))
+
+
+f2d = Filter2D(double_gaussian(50, 3), window_size=2048)
+
+
+def fourier_then_blob(region, pad_width=5, threshold=50):
+    I = region.intensity_image_full
+    I[I == 0] = I[I != 0].mean()
+    I_filt = f2d(I, pad_width=pad_width)
+    I_filt = I_filt[region.image]
+    # blobs = skimage.feature.blob_dog(I_filt, min_sigma=1,
+    #                                  max_sigma=3,
+    #                                  threshold=threshold)
+
+    return I_filt.max()
+
+
+default_features = {'mean': lambda region: region.intensity_image.mean(),
+                    'median': lambda region: np.median(region.intensity_image),
+                    'max': lambda region: region.intensity_image.max(),
+                    'blob': lambda region: fourier_then_blob(region),
+                    }
