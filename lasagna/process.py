@@ -207,11 +207,18 @@ def get_blobs(row, pad=(3, 3), threshold=0.01, method='dog'):
     return blobs_all
 
 
-class filter2D(object):
-    def __init__(self, func):
-        y = np.array([[func(r) for r in range(100)]])
-        self.H = y * y.T
-        
+class Filter2D(object):
+    def __init__(self, func, window_size=200):
+        """Create 2D fourier filter from 1D radial function. Filter is available as Filter2D.H, Filter2D.h.
+        :param func: 1D radial function in fourier space.
+        :param window_size: can be anything, really
+        :return:
+        """
+        self.func = np.vectorize(func)
+        y = np.array([range(window_size)])
+        self.H = self.func(np.sqrt(y**2 + y.T**2))
+        self.__call__(self.H)
+
     def __call__(self, M):
         H = self.H
         M_fft = np.fft.fft2(M)
@@ -221,24 +228,7 @@ class filter2D(object):
         h[:-s-1:-1, :t] = H[:s, :t]
         h[:-s-1:-1, :-t-1:-1] = H[:s, :t]
         h[:s, :-t-1:-1] = H[:s, :t]
-        M_f = np.absolute( np.fft.ifft2(h * M_fft))
+        self.M_pre_abs = np.fft.ifft2(h * M_fft)
+        M_f = np.abs(self.M_pre_abs)
         self.h = h
         return M_f * (M.sum()/M_f.sum())
-    
-
-def make_2D_filter(func):
-    """Turn a 1D function in Fourier space into a callable 2D filter.
-    """
-    y = np.array([[func(r) for r in range(100)]])
-    H = y * y.T
-    def filter2D(M):
-        M_fft = np.fft.fft2(M)
-        s, t = [s/2 for s in M_fft.shape]
-        h = np.zeros(M.shape)
-        h[:s, :t] = H[:s, :t]
-        h[:-s-1:-1, :t] = H[:s, :t]
-        h[:-s-1:-1, :-t-1:-1] = H[:s, :t]
-        h[:s, :-t-1:-1] = H[:s, :t]
-        M_f = np.abs( np.fft.ifft2(h * M_fft))
-        return M_f * (M.sum()/M_f.sum())
-    return filter2D
