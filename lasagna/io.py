@@ -11,6 +11,7 @@ import PIL.Image
 import PIL.ImageDraw
 import numpy as np
 import regex as re
+import StringIO, pickle, zlib
 from skimage.external.tifffile import TiffFile, imsave, imread
 
 imagej_description = ''.join(['ImageJ=1.49v\nimages=%d\nchannels=%d\nslices=%d',
@@ -377,7 +378,11 @@ class Paths(object):
         self.add_analysis('stitch', 'nuclei')
 
     def add_analysis(self, column_in, analysis_name):
-        # generate nuclei file names, stitch only for now
+        """Generate a new column of analysis filenames based on paths in given column.
+        :param column_in: column containing base filename
+        :param analysis_name: name of new analysis folder, e.g., analysis/nuclei/path/to/data
+        :return:
+        """
         for ix, row in self.table.iterrows():
             name_in = row[column_in]
             if pandas.notnull(name_in):
@@ -475,3 +480,15 @@ def mark_blobs(row, n):
             i = channels.index(channel)
             im += mark_features(im.shape, blobs) * 2**i
     return im
+
+
+def compress_obj(obj):
+    s = StringIO.StringIO()
+    pickle.dump(obj, s)
+    out = zlib.compress(s.getvalue())
+    s.close()
+    return out
+
+
+def decompress_obj(string):
+    return pickle.load(StringIO.StringIO(zlib.decompress(string)))

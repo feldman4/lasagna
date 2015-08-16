@@ -5,10 +5,11 @@ import numpy as np
 import pandas as pd
 import uuid
 
+
 from skimage.filter import gaussian_filter, threshold_adaptive
 from skimage.morphology import disk, watershed, opening
 from skimage.util import img_as_uint
-from skimage.measure import label, regionprops
+import skimage.measure
 from skimage.feature import peak_local_max
 from scipy import ndimage
 
@@ -22,13 +23,40 @@ def region_fields(region):
     return {'area': region.area,
             'centroid': region.centroid,
             'bounds': region.bbox,
-            'label': region.label}
+            'label': region.label,
+            'image': io.compress_obj(region.image)}
 
 
 default_features = {'mean': lambda region: region.intensity_image.mean(),
                     'median': lambda region: np.median(region.intensity_image),
                     'max': lambda region: region.intensity_image.max(),
                     }
+
+
+def binary_contours(img):
+    """Find contours of binary image
+    :param img:
+    :return: list of nx2 arrays of [x, y] points along contour of each image.
+    """
+    contours = skimage.measure.find_contours(np.pad(img, 1, mode='constant'),
+                                             level=0.5)
+    return [contour - 1 for contour in contours]
+
+
+def regionprops(*args, **kwargs):
+    """Supplement skimage.measure.regionprops with additional field containing full intensity image in
+    bounding box (useful for filtering).
+    :param args:
+    :param kwargs:
+    :return:
+    """
+    regions = skimage.measure.regionprops(*args, **kwargs)
+    if 'intensity_image' in kwargs:
+        intensity_image = kwargs['intensity_image']
+        for region in regions:
+            b = region.bbox
+            region.intensity_image_full = intensity_image[b[0]:b[2], b[1]:b[3]]
+    return regions
 
 
 def table_from_nuclei(file_table, source='stitch', nuclei='nuclei', channels=None,
@@ -59,8 +87,6 @@ def table_from_nuclei(file_table, source='stitch', nuclei='nuclei', channels=Non
         df.columns = pd.MultiIndex(labels=zip(*[[0, i] for i in range(len(df.columns))]),
                                    levels=[['all'], df.columns],
                                    names=['channel', 'feature'])
-
-
 
         # add channel-specific features
         if data.ndim == 2:
@@ -209,14 +235,17 @@ def get_blobs(row, pad=(3, 3), threshold=0.01, method='dog'):
 
 class Filter2D(object):
     def __init__(self, func, window_size=200):
-        """Create 2D fourier filter from 1D radial function. Filter is available as Filter2D.H, Filter2D.h.
+        """Create 2D fourier filter from 1D radial function.
+        The filter itself is available as Filter2D.filter1D, .filter2D.
         :param func: 1D radial function in fourier space.
         :param window_size: can be anything, really
         :return:
         """
         self.func = np.vectorize(func)
         y = np.array([range(window_size)])
+        self.filter1D = self.func(y[0])
         self.H = self.func(np.sqrt(y**2 + y.T**2))
+        self.H = self.H / self.H.max()
         self.__call__(self.H)
 
     def __call__(self, M):
@@ -230,5 +259,14 @@ class Filter2D(object):
         h[:s, :-t-1:-1] = H[:s, :t]
         self.M_pre_abs = np.fft.ifft2(h * M_fft)
         M_f = np.abs(self.M_pre_abs)
-        self.h = h
-        return M_f * (M.sum()/M_f.sum())
+        self.filter2D = np.fft.fftshift(h)
+        # out = M_f * (M.sum()/M_f.sum())
+        return M_f
+
+
+def gaussian(x, sigma):
+    return np.exp(-float(x)**2 / (2*float(sigma)**2))
+
+
+def double_gaussian(sigma1, sigma2):
+    return lambda x: gaussian(x, sigma1) * (1 - gaussian(x, sigma2))
