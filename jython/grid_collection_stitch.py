@@ -5,25 +5,25 @@ from ij import IJ, ImagePlus, WindowManager
 from glob import glob
 
 # C
-channel_luts = (('Grays', (400, 5000)),)
-channel_luts = (('Blue', (800, 20000)),
-				('Green', (800,3500)),
-				('Red', (800,3500)),
-                ('Magenta', (800, 3500)))
-channel_luts = (('Grays', (400, 5000)),
-				('Cyan', (800, 3500)))
+channel_luts = (('Grays', (400, 4000)),)
+#channel_luts = (('Blue', (800, 20000)),
+#				('Green', (800,3500)),
+#				('Red', (800,3500)),
+#                ('Magenta', (800, 3500)))
+#channel_luts = (('Blue', (400, 60000)),
+#				('Green', (400, 1200)))
                 
 channels = len(channel_luts)
 slices = 1  # Z
 frames = 1;  # T
-tiles = (4, 4)
-overlap = int(100*300/350)  # %
-#overlap = 47
+tiles = (3, 3)
+overlap = int(100*(1. - 300./350))  # %
+overlap = int(100*(1. - 1800/3379))
 
 nuclei_singleton = False
 
-home_dir = 'D:\User Folders\David\lasagna\\20150805 probe test\\'
-data_dirs = ['40X_slice_GFP_1']
+home_dir = 'D:\User Folders\David\lasagna\\20150817\\'
+data_dirs = ['4X_scan_1']
 
 
 def savename(well, data_dir):

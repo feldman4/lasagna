@@ -1,10 +1,12 @@
+import json
 from skimage import transform
 import skimage
 from skimage.feature import register_translation
 import numpy as np
 import pandas as pd
 import uuid
-
+import os
+from collections import defaultdict
 
 from skimage.filter import gaussian_filter, threshold_adaptive
 from skimage.morphology import disk, watershed, opening
@@ -40,7 +42,7 @@ def binary_contours(img):
 def pad(array, pad_width, mode=None, **kwargs):
     if type(pad_width) == int:
         if pad_width < 0:
-            s = [slice(-1*pad_width, pad_width)]*array.ndim
+            s = [slice(-1 * pad_width, pad_width)] * array.ndim
             return array[s]
     return np.pad(array, pad_width, mode=mode, **kwargs)
 
@@ -246,7 +248,7 @@ class Filter2D(object):
         self.func = func
         y = np.array([range(window_size)])
         self.filter1D = self.func(y[0])
-        self.H = self.func(np.sqrt(y**2 + y.T**2))
+        self.H = self.func(np.sqrt(y ** 2 + y.T ** 2))
         self.H = self.H / self.H.max()
         self.__call__(self.H)
 
@@ -257,19 +259,19 @@ class Filter2D(object):
         :return:
         """
         if pad_width:
-            sz = 2**(int(np.log2(max(M.shape)+pad_width))+1)
-            pad_width = [((sz-s)/2, (sz - s) - (sz - s)/2) for s in M.shape]
+            sz = 2 ** (int(np.log2(max(M.shape) + pad_width)) + 1)
+            pad_width = [((sz - s) / 2, (sz - s) - (sz - s) / 2) for s in M.shape]
             M_ = np.pad(M, pad_width, mode='linear_ramp', end_values=(M.mean(),))
         else:
             M_ = M
         H = self.H
         M_fft = np.fft.fft2(M_)
-        s, t = [s/2 for s in M_fft.shape]
+        s, t = [s / 2 for s in M_fft.shape]
         h = np.zeros(M_.shape)
         h[:s, :t] = H[:s, :t]
-        h[:-s-1:-1, :t] = H[:s, :t]
-        h[:-s-1:-1, :-t-1:-1] = H[:s, :t]
-        h[:s, :-t-1:-1] = H[:s, :t]
+        h[:-s - 1:-1, :t] = H[:s, :t]
+        h[:-s - 1:-1, :-t - 1:-1] = H[:s, :t]
+        h[:s, :-t - 1:-1] = H[:s, :t]
         self.M_pre_abs = np.fft.ifft2(h * M_fft)
         M_f = np.abs(self.M_pre_abs)
         self.filter2D = np.fft.fftshift(h)
@@ -280,7 +282,7 @@ class Filter2D(object):
 
 
 def gaussian(x, sigma):
-    return np.exp(-x**2 / (2*sigma**2))
+    return np.exp(-x ** 2 / (2 * sigma ** 2))
 
 
 def double_gaussian(sigma1, sigma2):
@@ -307,3 +309,134 @@ default_features = {'mean': lambda region: region.intensity_image.mean(),
                     'max': lambda region: region.intensity_image.max(),
                     'blob': lambda region: fourier_then_blob(region),
                     }
+
+spectral_order = ['empty', 'Atto488', 'Cy3', 'A594', 'Cy5', 'Atto647']
+
+
+class Calibration(object):
+    def __init__(self, full_path, dead_pixels=None, dead_pixels_std=10):
+        """Load calibration info from .json file. Looks for "dead_pixels.tif" in same (calibration)
+        folder by default.
+        :param full_path:
+        :return:
+        """
+        self.files = {}
+        self.full_path = full_path
+        self.background = None
+
+        with open(full_path + '.json', 'r') as fh:
+            self.info = json.load(fh)
+        self.magnification = io.get_magnification(os.path.basename(full_path))
+
+        if dead_pixels is None:
+            self.dead_pixels_file = os.path.join(os.path.dirname(full_path), 'dead_pixels.tif')
+        else:
+            self.dead_pixels_file = dead_pixels
+
+        self.dead_pixels = io.read_stack(self.dead_pixels_file)
+        self.dead_pixels_std = dead_pixels_std
+        threshold = self.dead_pixels.std() * 10 + np.median(self.dead_pixels)
+        self.dead_pixels_pts = np.where(self.dead_pixels > threshold)
+
+        self.update_files()
+        self.update_illumination()
+
+    def update_files(self):
+        self.files = defaultdict(list)
+        for f in os.walk(self.full_path).next()[2]:
+            well, site = io.get_well_site(f)
+            channel = self.info['wells'][well]
+            self.files[channel] += [os.path.join(self.full_path, f)]
+
+    def update_background(self):
+        self.background = np.median([io.read_stack(f) for f in self.files['empty']], axis=0)
+
+    def fix_dead_pixels(self, frame):
+        """Replace dead pixels with average of 4 nearest neighbors.
+        :param frame:
+        :return:
+        """
+        sz = self.dead_pixels.shape
+        for ii, jj in zip(*self.dead_pixels_pts):
+            ii_ = [ii - 1, ii - 1, (ii + 1) % sz[0], (ii + 1) % sz[0]]
+            jj_ = [jj - 1, (jj + 1) % sz[1], jj - 1, (jj + 1) % sz[1]]
+            frame[ii, jj] = np.mean(frame[ii_, jj_])
+        return frame
+
+    def update_illumination(self):
+        self.colors = {}
+        self.colors_med = {}
+        for channel, files in self.files.items():
+            data = np.array([io.read_stack(f) for f in files])
+            self.colors[channel] = np.median(data, axis=0)
+            self.colors_med[channel] = np.median(self.colors[channel], axis=[1, 2])
+        self.color_table = pd.DataFrame(self.colors_med, index=self.info['channels'])
+        self.color_table = self.color_table[sorted(self.colors, key=lambda x: spectral_order.index(x))]
+
+        # subtract constant background
+        self.color_table_sub = self.color_table.subtract(self.color_table['empty'], axis=0)
+
+        # normalize to matching dye + channel
+        self.color_table_norm = self.color_table_sub.copy()
+        for column in self.color_table_norm:
+            if column != 'empty':
+                self.color_table_norm[column] /= self.color_table_norm.loc[column, column]
+
+        # just do average illumination correction
+        arr = []
+        for color in self.colors:
+            if color != 'empty':
+                index = self.info['channels'].index(color)
+                data = self.colors[color][index]
+                data = data - self.color_table.loc[color, 'empty']
+                arr += [data / np.percentile(data.flatten(), 99)]
+        self.arr = arr
+        self.illumination = np.array(arr).mean(axis=0)
+        self.illumination /= self.illumination.mean()
+
+        # TODO make individual channel correction functions
+        # self.correction = np.median(self.colors.values(), axis=[0, ]
+        # for i, channel in enumerate(self.info['channels']):
+        #     self.illumination[channel] = self.colors[channel][]
+        #     def correction(frame):
+        #         # closure...
+        #         frame - self.color_table.loc[channel, 'empty']
+        #
+        #     self.correction[channel] = correction
+
+    def fix_illumination(self, frame):
+        return frame * self.illumination
+
+    def plot_crosstalk(self):
+        """Requires matplotlib.
+        :return:
+        """
+        from matplotlib import pyplot as plt
+
+        df_ = self.color_table_norm
+        logged = np.log10(df_)
+        logged = logged.replace({-np.infty: 100})
+        logged = logged.replace({100: logged.min().min()})
+
+        to_plot = (('crosstalk normalized to channel matching dye', df_),
+                   ('crosstalk log10', logged))
+
+        fig, axs = plt.subplots(1, len(to_plot), figsize=(12, 6))
+        for (title, data), ax in zip(to_plot, axs):
+            plt.colorbar(ax.imshow(data), ax=ax,fraction=0.046, pad=0.04)
+            ax.set_xticklabels(data.columns)
+            ax.set_xlabel('dye')
+            ax.set_ylabel('channel')
+            ax.set_yticklabels(data.index)
+            ax.set_title(title)
+        fig.tight_layout()
+
+    def plot_illumination(self):
+        from matplotlib import pyplot as plt
+        fig, axs = plt.subplots(2, 2, figsize=(12, 12))
+        colors = [c for c in self.colors if c!='empty']
+        for ax, m, color in zip(axs.flatten(), self.arr, colors):
+            ax.imshow(m)
+            ax.set_title(color)
+            ax.axis('off')
+

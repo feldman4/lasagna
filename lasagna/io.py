@@ -300,7 +300,8 @@ def offset_stack(stack, offsets):
 default_dirs = {'raw': 'raw',
                 'analysis': 'analysis',
                 'nuclei': 'analysis/nuclei',
-                'stitch': 'stitch'}
+                'stitch': 'stitch',
+                'calibration': 'calibration'}
 
 
 class Paths(object):
@@ -308,11 +309,12 @@ class Paths(object):
                  sub_dirs=None):
         """Store file paths relative to lasagna_path, allowing dataset to be loaded in different
         absolute locations. Retrieve raw files, stitched files, and nuclei. Pass stitch name and
-        get nuclei name.
+        get nuclei name. Store path to calibration information.
         :param dataset:
         :param lasagna_path:
         :return:
         """
+        self.calibrations = []
         self.dirs = default_dirs if sub_dirs is None else sub_dirs
         self.table = None
         self.dataset = dataset
@@ -374,6 +376,12 @@ class Paths(object):
                 self.table.loc[ix, 'stitch'] = stitch_dict[ix[:-1]]
 
         self.add_analysis('stitch', 'nuclei')
+        self.update_calibration()
+
+    def update_calibration(self):
+        calibration_dir = self.full(self.dirs['calibration'])
+        _, calibrations, _ = os.walk(calibration_dir).next()
+        self.calibrations = [os.path.join(self.dirs['calibration'], c) for c in calibrations]
 
     def add_analysis(self, column_in, analysis_name):
         """Generate a new column of analysis filenames based on paths in given column.
@@ -412,12 +420,12 @@ class Paths(object):
         return self.table.loc[index, :]
 
     def lookup(self, column, **kwargs):
-            """Convenient search.
+        """Convenient search.
             :param kwargs:
             :return:
             """
-            source, value = kwargs.items()[0]
-            return self.table[self.table[source] == value][column][0]
+        source, value = kwargs.items()[0]
+        return self.table[self.table[source] == value][column][0]
 
 
 def watermark(shape, text, spacing=1, corner='top left'):
@@ -475,9 +483,9 @@ def mark_features(shape, features, type='box'):
     im = np.zeros(shape)
     im2 = np.pad(im, disk_size / 2, mode='constant')
     for i, j, size in features:
-        im2[i:i+disk_size, j:j+disk_size] += disks[size]
+        im2[i:i + disk_size, j:j + disk_size] += disks[size]
 
-    return im2[disk_size/2:-disk_size/2 + 1, disk_size/2:-disk_size/2 + 1]
+    return im2[disk_size / 2:-disk_size / 2 + 1, disk_size / 2:-disk_size / 2 + 1]
 
 
 def mark_blobs(row, n):
@@ -486,7 +494,7 @@ def mark_blobs(row, n):
     for channel, blobs in row.loc[:, 'blob'].iteritems():
         if channel != 'DAPI':
             i = channels.index(channel)
-            im += mark_features(im.shape, blobs) * 2**i
+            im += mark_features(im.shape, blobs) * 2 ** i
     return im
 
 
