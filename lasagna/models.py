@@ -21,7 +21,28 @@ class Population(object):
         new_cells.update(other.cells)
         return Population(new_cells)
     
-    def expand(self, num, expand_by=1, fast=False):
+    def expand(self, num):
+        while num > 0:
+            divisions = np.ones(((32-2)*self.population_size, 2))
+            i = 0
+            cells = self.cells.keys()
+            for i_cell, count in enumerate(self.cells.values()):
+                for gen in range(1,5):
+                    division_time = (float(gen) / cells[i_cell].fitness) + 0.01*np.random.randn()
+                    icount = count * 2**gen
+                    divisions[i:i+icount,:] = np.array([[division_time, i_cell]] * icount)
+                    i += icount
+            divisions = np.array(sorted(divisions, key=lambda row: row[0]))
+            new_cells = [cells[int(j)] for j in divisions[:,1]]
+            if len(new_cells) > num:
+                self.cells += Counter(new_cells[:num])
+                return
+            else:
+                self.cells += Counter(new_cells)
+                num -= len(new_cells)
+            
+    
+    def expand_(self, num, expand_by=1, fast=False):
         """Split cells from the population and add them back in to expand.
         Approximate by expanding more than one cell at a time.
         Accepts "fast" kwarg for calls to split().
@@ -102,7 +123,7 @@ class Population(object):
                                     self.cells.__repr__())
     
     def get_weights(self):
-        weights = np.array([k.fitness*v for k,v in self.cells.items()])
+        weights = np.array([v for k,v in self.cells.items()])
         return weights / float(sum(weights))
     
     @property
