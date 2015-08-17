@@ -21,56 +21,48 @@ class Population(object):
         new_cells.update(other.cells)
         return Population(new_cells)
     
-    def expand(self, num):
+    def expand(self, num, generations=5):
+        """Simulate expansion by accumulating division times of all cells through
+        fixed number of generations, then sorting by division time. 
+        Stochastic division times can be implemented through Cell.fitness.
+        kwarg "generations" indicates # of generations to simulate forward.
+        """
+        if num < 1:
+            num *= self.population_size
+        if num < 0:
+            raise ValueError('requires positive value')
         while num > 0:
-            divisions = np.ones(((32-2)*self.population_size, 2))
+            divisions = np.zeros((2**generations-2)*self.population_size, dtype=complex)
             i = 0
-            cells = self.cells.keys()
+            cells = np.array(self.cells.keys())
             for i_cell, count in enumerate(self.cells.values()):
-                for gen in range(1,5):
+                for gen in range(1,generations):
                     division_time = (float(gen) / cells[i_cell].fitness) + 0.01*np.random.randn()
                     icount = count * 2**gen
-                    divisions[i:i+icount,:] = np.array([[division_time, i_cell]] * icount)
+                    divisions[i:i+icount] = division_time + i_cell*1j
                     i += icount
-            divisions = np.array(sorted(divisions, key=lambda row: row[0]))
-            new_cells = [cells[int(j)] for j in divisions[:,1]]
+            # sort potential new cells by division time
+            divisions.sort()
+            new_cells = cells[divisions.imag.astype(int)]
             if len(new_cells) > num:
                 self.cells += Counter(new_cells[:num])
                 return
             else:
                 self.cells += Counter(new_cells)
                 num -= len(new_cells)
-            
-    
-    def expand_(self, num, expand_by=1, fast=False):
-        """Split cells from the population and add them back in to expand.
-        Approximate by expanding more than one cell at a time.
-        Accepts "fast" kwarg for calls to split().
-        """
-        if num < 0:
-            raise ValueError('can only expand by factor in [0, 1], or number > 1')
-        if num < 1:
-            num = self.population_size * num
-        if self.population_size == 0:
-            raise ValueError('cannot expand population of size 0')
-        while num:
-            expand_by_ = expand_by if expand_by <= self.population_size else self.population_size
-            if num < expand_by_:
-                expand_by_ = num
-            new_cells = Population(Counter(self.cells)).split(expand_by_,
-                                                             fast=fast)
-            num -= expand_by_
-            self.cells += new_cells.cells
-            
+      
     def split(self, num, fast=False):
         """If num is in [0, 1]  treat as split fraction. If num is >= 1, 
         treat as # of cells to split.
         If fast=True, sample with replacement.
         """
         population_size = sum(self.cells.values())
-        split_size = 1e10
+        population_size = 3000
+        # split_size = 1e10
         if num < 0:
             raise ValueError('argument must be positive')
+        if num > self.population_size:
+            raise ValueError('not enough cells')
         if num < 1:
             split_size = np.random.binomial(self.population_size, num)
         if num >= 1:
