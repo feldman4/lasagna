@@ -311,11 +311,17 @@ default_features = {'mean': lambda region: region.intensity_image.mean(),
                     }
 
 spectral_order = ['empty', 'Atto488', 'Cy3', 'A594', 'Cy5', 'Atto647']
+spectral_luts = {'empty': io.GRAY,
+                 'Atto488': io.CYAN,
+                 'Cy3': io.GREEN,
+                 'A594': io.RED,
+                 'Cy5': io.MAGENTA,
+                 'Atto647': io.MAGENTA}
 
 
 class Calibration(object):
-    def __init__(self, full_path, dead_pixels=None, dead_pixels_std=10):
-        """Load calibration info from .json file. Looks for "dead_pixels.tif" in same (calibration)
+    def __init__(self, full_path, dead_pixels='dead_pixels.tif'):
+        """Load calibration info from .json file. Looks for dead pixels file in same (calibration)
         folder by default.
         :param full_path:
         :return:
@@ -323,23 +329,26 @@ class Calibration(object):
         self.files = {}
         self.full_path = full_path
         self.background = None
+        self.calibration, self.calibration_norm, self.calibration_med = [pd.DataFrame() for _ in range(3)]
+        self.illumination, self.illumination_mean = pd.Series(), pd.Series()
+        self.dead_pixels, self.dead_pixels_pts = None, None
 
         with open(full_path + '.json', 'r') as fh:
             self.info = json.load(fh)
+        print 'loading calibration\nchannels:', self.info['channels'], \
+            '\ndyes:', list(set(self.info['wells'].values()))
         self.magnification = io.get_magnification(os.path.basename(full_path))
 
-        if dead_pixels is None:
-            self.dead_pixels_file = os.path.join(os.path.dirname(full_path), 'dead_pixels.tif')
-        else:
-            self.dead_pixels_file = dead_pixels
+        self.dead_pixels_file = os.path.join(os.path.dirname(full_path), dead_pixels)
 
-        self.dead_pixels = io.read_stack(self.dead_pixels_file)
-        self.dead_pixels_std = dead_pixels_std
-        threshold = self.dead_pixels.std() * 10 + np.median(self.dead_pixels)
-        self.dead_pixels_pts = np.where(self.dead_pixels > threshold)
-
+        self.update_dead_pixels()
         self.update_files()
         self.update_illumination()
+
+    def update_dead_pixels(self, std_threshold=10):
+        self.dead_pixels = io.read_stack(self.dead_pixels_file)
+        threshold = self.dead_pixels.std() * std_threshold + np.median(self.dead_pixels)
+        self.dead_pixels_pts = np.where(self.dead_pixels > threshold)
 
     def update_files(self):
         self.files = defaultdict(list)
@@ -356,56 +365,61 @@ class Calibration(object):
         :param frame:
         :return:
         """
-        sz = self.dead_pixels.shape
-        for ii, jj in zip(*self.dead_pixels_pts):
-            ii_ = [ii - 1, ii - 1, (ii + 1) % sz[0], (ii + 1) % sz[0]]
-            jj_ = [jj - 1, (jj + 1) % sz[1], jj - 1, (jj + 1) % sz[1]]
-            frame[ii, jj] = np.mean(frame[ii_, jj_])
-        return frame
+        tmp = np.pad(frame, ((0, 1), (0, 1)), mode='constant', constant_values=(np.nan,)).copy()
+        ii, jj = self.dead_pixels_pts
+        tmp[ii, jj] = np.nanmean([tmp[ii-1, jj], tmp[ii+1, jj], tmp[ii, jj-1], tmp[ii, jj+1]])
+
+        return tmp[:-1, :-1]
 
     def update_illumination(self):
-        self.colors = {}
-        self.colors_med = {}
-        for channel, files in self.files.items():
+        self.calibration = pd.DataFrame()
+        channels = self.info['channels']
+        for dye, files in self.files.items():
             data = np.array([io.read_stack(f) for f in files])
-            self.colors[channel] = np.median(data, axis=0)
-            self.colors_med[channel] = np.median(self.colors[channel], axis=[1, 2])
-        self.color_table = pd.DataFrame(self.colors_med, index=self.info['channels'])
-        self.color_table = self.color_table[sorted(self.colors, key=lambda x: spectral_order.index(x))]
+            for frame, channel in zip(np.median(data, axis=0), channels):
+                # pandas doesn't like initializing with array-like
+                self.calibration.loc[channel, dye] = 'x'
+                self.calibration.loc[channel, dye] = frame
+
+        self.calibration = self.calibration[sorted(self.calibration, key=lambda x: spectral_order.index(x))]
+        self.calibration_med = self.calibration.applymap(lambda x: np.median(x))
 
         # subtract constant background
-        self.color_table_sub = self.color_table.subtract(self.color_table['empty'], axis=0)
-
         # normalize to matching dye + channel
-        self.color_table_norm = self.color_table_sub.copy()
-        for column in self.color_table_norm:
+        self.calibration_norm = self.calibration_med.subtract(self.calibration_med['empty'], axis=0)
+        for column in self.calibration_norm:
             if column != 'empty':
-                self.color_table_norm[column] /= self.color_table_norm.loc[column, column]
+                self.calibration_norm[column] /= self.calibration_norm.loc[column, column]
 
-        # just do average illumination correction
-        arr = []
-        for color in self.colors:
-            if color != 'empty':
-                index = self.info['channels'].index(color)
-                data = self.colors[color][index]
-                data = data - self.color_table.loc[color, 'empty']
-                arr += [data / np.percentile(data.flatten(), 99)]
-        self.arr = arr
-        self.illumination = np.array(arr).mean(axis=0)
-        self.illumination /= self.illumination.mean()
+        # compute individual and average illumination correction, save to file
+        self.illumination = pd.Series()
+        for dye in self.calibration.columns:
+            if dye != 'empty':
+                data = self.calibration.loc[dye, dye]
+                data = data - self.calibration.loc[dye, 'empty']
+                self.illumination[dye] = data / np.percentile(data.flatten(), 99)
+                self.illumination[dye] = data / data.mean()
+        self.illumination_mean = self.illumination.mean()
 
-        # TODO make individual channel correction functions
-        # self.correction = np.median(self.colors.values(), axis=[0, ]
-        # for i, channel in enumerate(self.info['channels']):
-        #     self.illumination[channel] = self.colors[channel][]
-        #     def correction(frame):
-        #         # closure...
-        #         frame - self.color_table.loc[channel, 'empty']
-        #
-        #     self.correction[channel] = correction
+        # dump illumination stack
+        stack = np.array([self.illumination_mean] + list(self.illumination))
+        luts = [io.GRAY] + [spectral_luts[dye] for dye in self.calibration.columns if dye != 'empty']
+        save_name = os.path.join(os.path.dirname(self.full_path), 'illumination_correction.tif')
+        io.save_hyperstack(save_name, 10000*stack, luts=luts)
 
-    def fix_illumination(self, frame):
-        return frame * self.illumination
+    def fix_illumination(self, frame, channel=None):
+        if channel is None:
+            try:
+                if frame.shape[-3] == self.illumination.shape:
+                    background = np.array(self.calibration_med)[:, None, None]
+                    return np.abs(frame - background) / self.illumination
+                else:
+                    raise IndexError
+            except IndexError:
+                background = np.min(self.calibration_med['empty'])
+                return np.abs(frame - background) / self.illumination_mean
+        return np.abs(frame - self.calibration_med.loc[channel, 'empty']) / self.illumination[channel]
+
 
     def plot_crosstalk(self):
         """Requires matplotlib.

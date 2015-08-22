@@ -29,6 +29,8 @@ RED = tuple(range(256) + [0] * 512)
 GREEN = tuple([0] * 256 + range(256) + [0] * 256)
 BLUE = tuple([0] * 512 + range(256))
 MAGENTA = tuple(range(256) + [0] * 256 + range(256))
+GRAY = tuple(range(256)*3)
+CYAN = tuple([0]*256 + range(256)*2)
 
 DEFAULT_LUTS = (BLUE, GREEN, RED, MAGENTA)
 
@@ -251,6 +253,12 @@ def get_well_site(s):
     print s
     raise NameError('FuckYouError')
 
+def get_round(s):
+    match = re.search('round([0-9]*)', s)
+    if match:
+        return int(match.groups(1)[0])
+    return 0
+
 
 def get_magnification(s):
     match = re.search('([0-9]+X)', s)
@@ -301,7 +309,8 @@ default_dirs = {'raw': 'raw',
                 'analysis': 'analysis',
                 'nuclei': 'analysis/nuclei',
                 'stitch': 'stitch',
-                'calibration': 'calibration'}
+                'calibration': 'calibration',
+                'export': 'export'}
 
 
 class Paths(object):
@@ -325,6 +334,9 @@ class Paths(object):
 
     def full(self, *args):
         return os.path.join(self.lasagna_path, self.dataset, *args)
+
+    def export(self, *args):
+        return self.full(self.dirs['export'], *args)
 
     def relative(self, s):
         return s.replace(self.full() + '/', '')
@@ -355,7 +367,7 @@ class Paths(object):
 
         stitch_dict = {}
         for f in stitch_files:
-            tmp = get_magnification(f), self.parent(f), get_well_site(f)[0]
+            tmp = get_magnification(f), get_round(f), self.parent(f), get_well_site(f)[0]
             stitch_dict.update({tmp: f})
 
         raw_well_sites = zip(*[get_well_site(f) for f in raw_files])
@@ -367,8 +379,9 @@ class Paths(object):
                                        'well': raw_well_sites[0],
                                        'site': raw_well_sites[1],
                                        'set': raw_sets,
+                                       'round': [get_round(s) for s in raw_files]
                                        })
-        self.table = self.table.set_index(['mag', 'set', 'well', 'site']).sortlevel()
+        self.table = self.table.set_index(['mag', 'round', 'set', 'well', 'site']).sortlevel()
 
         # match stitch names based on all index values except site
         for ix, row in self.table.iterrows():
