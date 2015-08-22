@@ -320,7 +320,7 @@ spectral_luts = {'empty': io.GRAY,
 
 
 class Calibration(object):
-    def __init__(self, full_path, dead_pixels='dead_pixels.tif'):
+    def __init__(self, full_path, dead_pixels_file='dead_pixels.tif'):
         """Load calibration info from .json file. Looks for dead pixels file in same (calibration)
         folder by default.
         :param full_path:
@@ -332,6 +332,7 @@ class Calibration(object):
         self.calibration, self.calibration_norm, self.calibration_med = [pd.DataFrame() for _ in range(3)]
         self.illumination, self.illumination_mean = pd.Series(), pd.Series()
         self.dead_pixels, self.dead_pixels_pts = None, None
+        self.dead_pixels_std_threshold = 5
 
         with open(full_path + '.json', 'r') as fh:
             self.info = json.load(fh)
@@ -339,13 +340,14 @@ class Calibration(object):
             '\ndyes:', list(set(self.info['wells'].values()))
         self.magnification = io.get_magnification(os.path.basename(full_path))
 
-        self.dead_pixels_file = os.path.join(os.path.dirname(full_path), dead_pixels)
+        self.dead_pixels_file = os.path.join(os.path.dirname(full_path), dead_pixels_file)
 
         self.update_dead_pixels()
         self.update_files()
         self.update_illumination()
 
-    def update_dead_pixels(self, std_threshold=10):
+    def update_dead_pixels(self, std_threshold=5):
+        self.dead_pixels_std_threshold = std_threshold
         self.dead_pixels = io.read_stack(self.dead_pixels_file)
         threshold = self.dead_pixels.std() * std_threshold + np.median(self.dead_pixels)
         self.dead_pixels_pts = np.where(self.dead_pixels > threshold)
@@ -420,6 +422,17 @@ class Calibration(object):
                 return np.abs(frame - background) / self.illumination_mean
         return np.abs(frame - self.calibration_med.loc[channel, 'empty']) / self.illumination[channel]
 
+    def plot_dead_pixels(self):
+        from matplotlib import pyplot as plt
+
+        m, std = self.dead_pixels.mean(), int(self.dead_pixels.std())
+        fig, ax = plt.subplots(figsize=(10, 5))
+        ax.hist((self.dead_pixels.flatten() - m)/std, log=True, bins=range(24))
+        ax.hold('on')
+        ax.plot([self.dead_pixels_std_threshold]*2, [0, 1e8], color='red')
+        ax.set_title('dead pixel distribution')
+        ax.set_xlabel('standardized intensity')
+        ax.set_ylabel('counts')
 
     def plot_crosstalk(self):
         """Requires matplotlib.
@@ -427,7 +440,7 @@ class Calibration(object):
         """
         from matplotlib import pyplot as plt
 
-        df_ = self.color_table_norm
+        df_ = self.calibration_norm
         logged = np.log10(df_)
         logged = logged.replace({-np.infty: 100})
         logged = logged.replace({100: logged.min().min()})
@@ -447,10 +460,10 @@ class Calibration(object):
 
     def plot_illumination(self):
         from matplotlib import pyplot as plt
-        fig, axs = plt.subplots(2, 2, figsize=(12, 12))
-        colors = [c for c in self.colors if c!='empty']
-        for ax, m, color in zip(axs.flatten(), self.arr, colors):
-            ax.imshow(m)
+        df = self.calibration.drop('empty', axis=1)
+        fig, axs = plt.subplots(int(np.ceil(df.shape[1]/2.)), 2, figsize=(12, 12))
+        for ax, color in zip(axs.flatten(), df.columns):
+            ax.imshow(df.loc[color, color])
             ax.set_title(color)
             ax.axis('off')
 
