@@ -63,6 +63,8 @@ def read_stack(filename, master=None, memmap=False):
         data = TF.asarray(series=index, memmap=memmap)
     else:
         data = imread(filename, multifile=False, memmap=memmap)
+    while data.shape[0] == 1:
+        data = np.squeeze(data, axis=(0,))
     return data
 
 
@@ -156,10 +158,13 @@ def _get_stack(name):
 
 
 def save_hyperstack(name, data, autocast=True, resolution=None,
-                    luts=None, display_ranges=None, compress=0):
+                    luts=None, display_ranges=None, compress=0,
+                    auto_make_dir=True):
     """input ND array dimensions as ([time], [z slice], channel, y, x)
     leading dimensions beyond 5 could be wrapped into time, not implemented
     """
+    if name[-4:] != '.tif':
+        name += '.tif'
     if data.ndim == 2:
         data = data[np.newaxis, :, :]
 
@@ -182,6 +187,9 @@ def save_hyperstack(name, data, autocast=True, resolution=None,
     description = ij_description(data.shape)
     tag_50838 = ij_tag_50838(nchannels)
     tag_50839 = ij_tag_50839(luts, display_ranges)
+
+    if auto_make_dir and not os.path.isdir(os.path.dirname(name)):
+        os.makedirs(os.path.dirname(name))
 
     imsave(name, tmp, photometric='minisblack',
            description=description, resolution=resolution, compress=compress,
@@ -524,3 +532,7 @@ def compress_obj(obj):
 
 def decompress_obj(string):
     return pickle.load(StringIO.StringIO(zlib.decompress(string)))
+
+
+def show_file():
+    print __file__

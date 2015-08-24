@@ -7,6 +7,7 @@ class Memoized(object):
     If called later with the same arguments, the cached value is returned, and
     not re-evaluated.
     """
+
     def __init__(self, func):
         self.func = func
         self.cache = {}
@@ -47,7 +48,7 @@ class Filter2D(object):
         :return:
         """
         self.func = func
-        y = np.array([range(window_size)])
+        y = np.array([np.arange(window_size).astype(float)])
         self.filter1D = self.func(y[0])
         self.H = self.func(np.sqrt(y ** 2 + y.T ** 2))
         self.H = self.H / self.H.max()
@@ -80,6 +81,17 @@ class Filter2D(object):
         if pad_width:
             M_f = M_f[pad_width[0][0]:-pad_width[0][1], pad_width[1][0]:-pad_width[1][1]]
         return M_f
+
+    def build_pyramid(self, real_filter, start=1, end=10):
+        pyramid = {}
+        if len(real_filter) < 2 ** end:
+            real_filter = np.pad(real_filter, (0, 2 ** end - len(real_filter)),
+                                 mode='constant', constant_values=0)
+        for width in [2 ** i for i in range(start, end + 1)]:
+            pyramid[width] = np.zeros(width)
+            x = [float(width) / i for i in range(1, width + 1)]
+            pyramid[width] = np.interp(x, range(1, len(real_filter) + 1), real_filter)
+        return pyramid
 
 
 def plot_image_overlay(image0, image1, offset):
