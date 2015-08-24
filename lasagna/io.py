@@ -29,8 +29,8 @@ RED = tuple(range(256) + [0] * 512)
 GREEN = tuple([0] * 256 + range(256) + [0] * 256)
 BLUE = tuple([0] * 512 + range(256))
 MAGENTA = tuple(range(256) + [0] * 256 + range(256))
-GRAY = tuple(range(256)*3)
-CYAN = tuple([0]*256 + range(256)*2)
+GRAY = tuple(range(256) * 3)
+CYAN = tuple([0] * 256 + range(256) * 2)
 
 DEFAULT_LUTS = (BLUE, GREEN, RED, MAGENTA)
 
@@ -260,6 +260,7 @@ def get_well_site(s):
         return well[0], 0
     print s
     raise NameError('FuckYouError')
+
 
 def get_round(s):
     match = re.search('round([0-9]*)', s)
@@ -534,5 +535,11 @@ def decompress_obj(string):
     return pickle.load(StringIO.StringIO(zlib.decompress(string)))
 
 
-def show_file():
-    print __file__
+def load_lut(name):
+    file_name = os.path.join(config.luts, name + '.txt')
+    with open(file_name, 'r') as fh:
+        lines = fh.readlines()
+        values = [line[:-1].split() for line in lines]
+    return [int(y) for x in zip(*values) for y in x]
+
+GLASBEY = load_lut('glasbey')
