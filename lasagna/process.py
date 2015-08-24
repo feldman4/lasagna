@@ -1,22 +1,24 @@
 import json
+import uuid
+import os
+from collections import defaultdict
+
 from skimage import transform
 import skimage
 from skimage.feature import register_translation
 import numpy as np
 import pandas as pd
-import uuid
-import os
-from collections import defaultdict
-
 from skimage.filter import gaussian_filter, threshold_adaptive
 from skimage.morphology import disk, watershed, opening
 from skimage.util import img_as_uint
 import skimage.measure
 from skimage.feature import peak_local_max
+
 from scipy import ndimage
 
 from lasagna import io
 from lasagna import config
+from lasagna.utils import Filter2D
 
 DOWNSAMPLE = 2
 
@@ -237,50 +239,6 @@ def get_blobs(row, pad=(3, 3), threshold=0.01, method='dog'):
     return blobs_all
 
 
-class Filter2D(object):
-    def __init__(self, func, window_size=200):
-        """Create 2D fourier filter from 1D radial function.
-        The filter itself is available as Filter2D.filter1D, .filter2D.
-        :param func: 1D radial function in fourier space.
-        :param window_size: can be anything, really
-        :return:
-        """
-        self.func = func
-        y = np.array([range(window_size)])
-        self.filter1D = self.func(y[0])
-        self.H = self.func(np.sqrt(y ** 2 + y.T ** 2))
-        self.H = self.H / self.H.max()
-        self.__call__(self.H)
-
-    def __call__(self, M, pad_width=None):
-        """
-        :param M:
-        :param pad_width: minimum pad width, pads up to next power of 2
-        :return:
-        """
-        if pad_width:
-            sz = 2 ** (int(np.log2(max(M.shape) + pad_width)) + 1)
-            pad_width = [((sz - s) / 2, (sz - s) - (sz - s) / 2) for s in M.shape]
-            M_ = np.pad(M, pad_width, mode='linear_ramp', end_values=(M.mean(),))
-        else:
-            M_ = M
-        H = self.H
-        M_fft = np.fft.fft2(M_)
-        s, t = [s / 2 for s in M_fft.shape]
-        h = np.zeros(M_.shape)
-        h[:s, :t] = H[:s, :t]
-        h[:-s - 1:-1, :t] = H[:s, :t]
-        h[:-s - 1:-1, :-t - 1:-1] = H[:s, :t]
-        h[:s, :-t - 1:-1] = H[:s, :t]
-        self.M_pre_abs = np.fft.ifft2(h * M_fft)
-        M_f = np.abs(self.M_pre_abs)
-        self.filter2D = np.fft.fftshift(h)
-        # out = M_f * (M_.sum()/M_f.sum())
-        if pad_width:
-            M_f = M_f[pad_width[0][0]:-pad_width[0][1], pad_width[1][0]:-pad_width[1][1]]
-        return M_f
-
-
 def gaussian(x, sigma):
     return np.exp(-x ** 2 / (2 * sigma ** 2))
 
@@ -369,7 +327,7 @@ class Calibration(object):
         """
         tmp = np.pad(frame, ((0, 1), (0, 1)), mode='constant', constant_values=(np.nan,)).copy()
         ii, jj = self.dead_pixels_pts
-        tmp[ii, jj] = np.nanmean([tmp[ii-1, jj], tmp[ii+1, jj], tmp[ii, jj-1], tmp[ii, jj+1]])
+        tmp[ii, jj] = np.nanmean([tmp[ii - 1, jj], tmp[ii + 1, jj], tmp[ii, jj - 1], tmp[ii, jj + 1]])
 
         return tmp[:-1, :-1]
 
@@ -407,9 +365,16 @@ class Calibration(object):
         stack = np.array([self.illumination_mean] + list(self.illumination))
         luts = [io.GRAY] + [spectral_luts[dye] for dye in self.calibration.columns if dye != 'empty']
         save_name = os.path.join(os.path.dirname(self.full_path), 'illumination_correction.tif')
-        io.save_hyperstack(save_name, 10000*stack, luts=luts)
+        io.save_hyperstack(save_name, 10000 * stack, luts=luts)
 
     def fix_illumination(self, frame, channel=None):
+        """Apply background subtraction and illumination correction. If no channel is provided and input
+        dimension matches number of channels for which illumination correction is available, apply correction
+        per channel. Otherwise, apply channel-specific correction, or median correction if no channel is provided.
+        :param frame: ndarray, final two dimensions must match calibration height and width
+        :param channel: name of channel, must match column in Calibration.calibration
+        :return:
+        """
         if channel is None:
             try:
                 if frame.shape[-3] == self.illumination.shape:
@@ -427,9 +392,9 @@ class Calibration(object):
 
         m, std = self.dead_pixels.mean(), int(self.dead_pixels.std())
         fig, ax = plt.subplots(figsize=(10, 5))
-        ax.hist((self.dead_pixels.flatten() - m)/std, log=True, bins=range(24))
+        ax.hist((self.dead_pixels.flatten() - m) / std, log=True, bins=range(24))
         ax.hold('on')
-        ax.plot([self.dead_pixels_std_threshold]*2, [0, 1e8], color='red')
+        ax.plot([self.dead_pixels_std_threshold] * 2, [0, 1e8], color='red')
         ax.set_title('dead pixel distribution')
         ax.set_xlabel('standardized intensity')
         ax.set_ylabel('counts')
@@ -450,7 +415,7 @@ class Calibration(object):
 
         fig, axs = plt.subplots(1, len(to_plot), figsize=(12, 6))
         for (title, data), ax in zip(to_plot, axs):
-            plt.colorbar(ax.imshow(data), ax=ax,fraction=0.046, pad=0.04)
+            plt.colorbar(ax.imshow(data), ax=ax, fraction=0.046, pad=0.04)
             ax.set_xticklabels(data.columns)
             ax.set_xlabel('dye')
             ax.set_ylabel('channel')
@@ -461,9 +426,96 @@ class Calibration(object):
     def plot_illumination(self):
         from matplotlib import pyplot as plt
         df = self.calibration.drop('empty', axis=1)
-        fig, axs = plt.subplots(int(np.ceil(df.shape[1]/2.)), 2, figsize=(12, 12))
+        fig, axs = plt.subplots(int(np.ceil(df.shape[1] / 2.)), 2, figsize=(12, 12))
         for ax, color in zip(axs.flatten(), df.columns):
             ax.imshow(df.loc[color, color])
             ax.set_title(color)
             ax.axis('off')
 
+
+def stitch_grid(arr, overlap):
+    """Returns offsets between neighbors, [row/column offset, row, column, row_i/col_i]
+    :param arr: grid of identically-sized images to stitch, [row, column, height, width]
+    :param overlap: image overlap in [0, 1]
+    :return:
+    """
+    # find true offset, assume all same shape
+    overlap_dist = arr[0][0].shape[0] * overlap
+
+    def subset_array(offset):
+        return [slice(None, o) if o < 0 else slice(o, None) for o in offset]
+
+    offsets = []
+
+    offset_guesses = [np.array([0, overlap_dist]),
+                      np.array([overlap_dist, 0])]
+
+    for offset_guess, arr_ in zip(offset_guesses,
+                                  [arr, np.transpose(arr, axes=[1, 0, 2, 3])]):
+        for row in arr_[:-1]:
+            offsets_ = []
+            for a, b in zip(row[:-1], row[1:]):
+                image0_ = a[subset_array(offset_guess)]
+                image1_ = b[subset_array(-offset_guess)]
+                shift = register_images([image0_, image1_],
+                                        window=(2000, 2000))[1]
+                offsets_ += [offset_guess + shift]
+            offsets += [offsets_]
+
+    cols = arr.shape[1] - 1
+    offsets = np.array(offsets)
+    return np.array([offsets[:cols], offsets[cols:]])
+
+
+def alpha_blend(arr, offset_matrix, clip=True, edge=0.95, edge_width=0.02):
+    """Blend grid of images, translating image coordinates according to offset matrix.
+    :param arr:
+    :param grid:
+    :param offset_matrix:
+    :return:
+    """
+
+    def make_coords(s):
+        return np.array([[x for x in range(s[0]) for _ in range(s[1])],
+                         [x % s[1] for x in range(s[0] * s[1])]])
+
+    def make_alpha(s, edge=0.95, edge_width=0.02):
+        sigmoid = lambda r: 1 / (1 + np.exp(-r))
+
+        x, y = np.meshgrid(range(s[0]), range(s[1]))
+        xy = np.concatenate([x[None, ...] - s[0] / 2,
+                             y[None, ...] - s[1] / 2])
+        R = np.max(np.abs(xy), axis=0)
+
+        return sigmoid(-(R - s[0] * edge) / (s[0] * edge_width))
+
+    z = offset_matrix.dot(make_coords(arr.shape[:2]))
+    z -= z.min(axis=1)[:, None]
+
+    shape = arr[0][0].shape
+    m = np.zeros(z.max(axis=1) + shape + 1)
+    c = np.zeros(m.shape)
+
+    alpha = make_alpha(shape, edge=edge, edge_width=edge_width)
+
+    for a, (z1, z2) in zip(arr.reshape(-1, *shape), z.T):
+        z1, z2 = round(z1), round(z2)
+        m[z1:z1 + shape[0], z2:z2 + shape[1]] += a * alpha
+        c[z1:z1 + shape[0], z2:z2 + shape[1]] += alpha
+
+    n = m / c
+
+    if clip:
+        def edges(n):
+            return np.r_[n[:4, :].flatten(), n[-4:, :].flatten(),
+                             n[:, :4].flatten(), n[:, -4:].flatten()]
+
+        while np.isnan(edges(n)).any():
+            n = n[4:-4, 4:-4]
+
+    return n
+
+
+def compress_offsets(off):
+    y = off.mean(axis=(1, 2))
+    return y[::-1, :].T

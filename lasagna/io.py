@@ -384,6 +384,7 @@ class Paths(object):
         self.table = self.table.set_index(['mag', 'round', 'set', 'well', 'site']).sortlevel()
 
         # match stitch names based on all index values except site
+        self.table['stitch'] = None
         for ix, row in self.table.iterrows():
             if ix[:-1] in stitch_dict:
                 self.table.loc[ix, 'stitch'] = stitch_dict[ix[:-1]]
@@ -402,11 +403,13 @@ class Paths(object):
         :param analysis_name: name of new analysis folder, e.g., analysis/nuclei/path/to/data
         :return:
         """
+        ixs, names = [], []
         for ix, row in self.table.iterrows():
             name_in = row[column_in]
             if pandas.notnull(name_in):
-                self.table.loc[ix, analysis_name] = os.path.join(self.dirs['analysis'],
-                                                                 analysis_name, name_in)
+                names += [os.path.join(self.dirs['analysis'], analysis_name, name_in)]
+                ixs += [ix]
+        self.table.loc[ixs, analysis_name] = names
 
     def make_dirs(self, files):
         """Create sub-directories for files in column, if they don't exist.

@@ -3,15 +3,15 @@
 
 from ij import IJ, ImagePlus, WindowManager
 import ij.io.FileSaver
-import time
+import time, os
 from glob import glob
 
 # C
 channel_luts = (('Grays', (400, 8000)),)
-#channel_luts = (('Blue', (600, 2000)), 
-#				('Green', (800,3500)),
-#				('Red', (800,3500)),
-#                ('Magenta', (800, 3500)))
+channel_luts = (('Blue', (600, 2000)), 
+				('Green', (800,3500)),
+				('Red', (800,3500)),
+                ('Magenta', (800, 3500)))
 #channel_luts = (('Blue', (400, 60000)),
 #				('Green', (400, 1200)))
                 
@@ -21,19 +21,20 @@ frames = 1;  # T
 # 40X
 tiles, overlap = (5, 5), int(100*(1. - 300./350))
 # 4X
-tiles, overlap = (3, 3), int(100*(1. - 1800./3379))
+# tiles, overlap = (3, 3), int(100*(1. - 1800./3379))
 print tiles, overlap
 nuclei_singleton = False
 
 if False:
     filesep = '/'
-    home_dir = '/broad/blainey_lab/David/lasagna/20150817 6 round/raw/'
+    home_dir = '/broad/blainey_lab/David/lasagna/20150817 6 round/analysis/calibrated/raw/'
 else:
-    home_dir = 'D:\User Folders\David\lasagna\\20150817\\'
+    home_dir = 'D:\\User Folders\\David\\lasagna\\20150817\\to_stitch\\'
+    # home_dir = '\\\\neon-cifs\\blainey_lab\\David\\lasagna\\20150817 6 round\\analysis\\calibrated\\raw\\'
     filesep = '\\'
 
 
-data_dirs = ['4X_round4_1']
+data_dirs = ['40X_round4_1']
 
 
 def savename(well, data_dir):
@@ -52,7 +53,7 @@ def stitch_cmd(grid_size, overlap, directory, file_pattern):
     return s % (grid_size[0], grid_size[1], overlap, directory, file_pattern)
 
 
-rows = 'ABCDEFGH'
+rows = 'DEFGH'
 columns = '12345678'
 
 wells = [r + c for r in rows for c in columns]

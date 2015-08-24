@@ -1,4 +1,5 @@
 import functools
+import numpy as np
 
 
 class Memoized(object):
@@ -35,3 +36,61 @@ class Memoized(object):
 
     def _reset(self):
         self.cache = {}
+
+
+class Filter2D(object):
+    def __init__(self, func, window_size=200):
+        """Create 2D fourier filter from 1D radial function.
+        The filter itself is available as Filter2D.filter1D, .filter2D.
+        :param func: 1D radial function in fourier space.
+        :param window_size: can be anything, really
+        :return:
+        """
+        self.func = func
+        y = np.array([range(window_size)])
+        self.filter1D = self.func(y[0])
+        self.H = self.func(np.sqrt(y ** 2 + y.T ** 2))
+        self.H = self.H / self.H.max()
+        self.__call__(self.H)
+
+    def __call__(self, M, pad_width=None):
+        """
+        :param M:
+        :param pad_width: minimum pad width, pads up to next power of 2
+        :return:
+        """
+        if pad_width:
+            sz = 2 ** (int(np.log2(max(M.shape) + pad_width)) + 1)
+            pad_width = [((sz - s) / 2, (sz - s) - (sz - s) / 2) for s in M.shape]
+            M_ = np.pad(M, pad_width, mode='linear_ramp', end_values=(M.mean(),))
+        else:
+            M_ = M
+        H = self.H
+        M_fft = np.fft.fft2(M_)
+        s, t = [s / 2 for s in M_fft.shape]
+        h = np.zeros(M_.shape)
+        h[:s, :t] = H[:s, :t]
+        h[:-s - 1:-1, :t] = H[:s, :t]
+        h[:-s - 1:-1, :-t - 1:-1] = H[:s, :t]
+        h[:s, :-t - 1:-1] = H[:s, :t]
+        self.M_pre_abs = np.fft.ifft2(h * M_fft)
+        M_f = np.abs(self.M_pre_abs)
+        self.filter2D = np.fft.fftshift(h)
+        # out = M_f * (M_.sum()/M_f.sum())
+        if pad_width:
+            M_f = M_f[pad_width[0][0]:-pad_width[0][1], pad_width[1][0]:-pad_width[1][1]]
+        return M_f
+
+
+def plot_image_overlay(image0, image1, offset):
+    from matplotlib import pyplot as plt
+    from matplotlib import cm
+
+    sz0, sz1 = image0.shape, image1.shape
+    extent = (0 + offset[1], sz1[1] + offset[1],
+              sz1[0] + offset[0], 0 + offset[0])
+    fig, ax = plt.subplots(figsize=(10, 10))
+    ax.imshow(image0, cmap=cm.Blues, alpha=0.5)
+    ax.hold('on')
+    ax.imshow(image1, cmap=cm.Reds, extent=extent, alpha=0.5)
+    ax.axis('image')
