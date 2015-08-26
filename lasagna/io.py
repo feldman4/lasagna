@@ -154,7 +154,10 @@ def montage(arr, shape=None):
 
 @Memoized
 def _get_stack(name):
-    return imread(config.paths.full(name), multifile=False)
+    data = imread(config.paths.full(name), multifile=False)
+    while data.shape[0] == 1:
+        data = np.squeeze(data, axis=(0,))
+    return data
 
 
 def save_hyperstack(name, data, autocast=True, resolution=None,
@@ -378,7 +381,7 @@ class Paths(object):
         for f in stitch_files:
             tmp = get_magnification(f), get_round(f), self.parent(f), get_well_site(f)[0]
             stitch_dict.update({tmp: f})
-
+        self.stitch_dict = stitch_dict
         raw_well_sites = zip(*[get_well_site(f) for f in raw_files])
         raw_sets = [self.parent(f) for f in raw_files]
 

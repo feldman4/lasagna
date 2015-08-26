@@ -94,6 +94,54 @@ class Filter2D(object):
         return pyramid
 
 
+class Filter2DReal(object):
+    def __init__(self, func, max_size=10):
+        self.pyramid = None
+        self.pyramid_2D = None
+        self.max_size = max_size
+        self.x = np.arange(0., 2. ** (max_size + 1), 0.2)
+        self.real_filter = [func(x) for x in self.x]
+
+        self.build_pyramid()
+
+    def __call__(self, M, pad_width=2):
+        i = np.ceil(np.log2(max(M.shape) + pad_width))
+        width = 2 ** i
+
+        pad_width = [((width - s) / 2, (width - s) - (width - s) / 2) for s in M.shape]
+
+        M_ = np.pad(M, pad_width, mode='linear_ramp', end_values=(M.mean(),))
+
+        self.M_ = M_
+
+        M_fft = np.fft.fft2(M_)
+        M_filt = np.abs(np.fft.ifft2(M_fft * self.pyramid_2D[i]))
+
+        return M_filt[pad_width[0][0]:-pad_width[0][1], pad_width[1][0]:-pad_width[1][1]]
+
+    def build_pyramid(self):
+        self.pyramid = {}
+        self.pyramid_2D = {}
+
+        y = np.array([self.x])
+
+        for i in range(1, self.max_size + 1):
+            width = 2. ** (i - 1)
+
+            y = [width / x for x in np.arange(1, width + 1)]
+            self.pyramid[i] = np.interp(y, self.x, self.real_filter)
+
+            z = np.array([np.arange(1, width + 1)])
+            r = np.sqrt(z ** 2 + z.T ** 2)
+
+            f = np.interp(r, z[0], self.pyramid[i])
+            self.pyramid_2D[i] = self.quadrant_to_full(f)
+
+    def quadrant_to_full(self, m):
+        n = np.r_[m, m[::-1, :]]
+        return np.c_[n, n[:, ::-1]]
+
+
 def plot_image_overlay(image0, image1, offset):
     from matplotlib import pyplot as plt
     from matplotlib import cm
