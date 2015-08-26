@@ -105,11 +105,11 @@ class Filter2DReal(object):
         self.build_pyramid()
 
     def __call__(self, M, pad_width=2):
-        i = np.ceil(np.log2(max(M.shape) + pad_width))
+        i = int(np.ceil(np.log2(max(M.shape) + pad_width)))
         width = 2 ** i
 
-        pad_width = [((width - s) / 2, (width - s) - (width - s) / 2) for s in M.shape]
-
+        pad_width = [(int((width - s) / 2), int((width - s) - (width - s) / 2)) for s in M.shape]
+        print width, pad_width, M.shape
         M_ = np.pad(M, pad_width, mode='linear_ramp', end_values=(M.mean(),))
 
         self.M_ = M_

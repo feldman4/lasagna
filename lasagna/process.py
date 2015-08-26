@@ -66,11 +66,14 @@ def regionprops(*args, **kwargs):
 
 
 def table_from_nuclei(file_table, source='stitch', nuclei='nuclei', channels=None,
-                      features=None):
+                      features=None, nuclei_dilation=None):
     """
     :param file_table:
     :param source:
     :param nuclei:
+    :param channels:
+    :param features:
+    :param nuclei_dilation: structuring element by which to dilate nuclei image
     :return:
     """
     # prefix to channel-specific features
@@ -83,6 +86,8 @@ def table_from_nuclei(file_table, source='stitch', nuclei='nuclei', channels=Non
         print 'processing:', row[source]
         # load nuclei file
         segmented = io.read_stack(config.paths.full(row[nuclei]))
+        if nuclei_dilation is not None:
+            segmented = skimage.morphology.dilation(segmented, nuclei_dilation)
         data = io.read_stack(config.paths.full(row[source]))
 
         info = [region_fields(r) for r in regionprops(segmented)]
@@ -264,8 +269,7 @@ def fourier_then_blob(region, pad_width=5, threshold=50):
 
 default_features = {'mean': lambda region: region.intensity_image.mean(),
                     'median': lambda region: np.median(region.intensity_image),
-                    'max': lambda region: region.intensity_image.max(),
-                    'blob': lambda region: fourier_then_blob(region),
+                    'max': lambda region: region.intensity_image.max()
                     }
 
 spectral_order = ['empty', 'Atto488', 'Cy3', 'A594', 'Cy5', 'Atto647']

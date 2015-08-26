@@ -1,6 +1,7 @@
 import lasagna.io
 import lasagna.config
 import lasagna.process
+import lasagna.utils
 import copy
 import numpy as np
 import os
@@ -16,6 +17,8 @@ pipeline = None
 
 channels = 'DAPI', 'Cy3', 'A594', 'Atto647'
 
+filters = lasagna.utils.Filter2DReal(lasagna.process.double_gaussian(6, 0.5)),
+
 
 def setup():
     """Construct Paths and Calibration objects for dataset. Copy a smaller version of Calibration object
@@ -23,14 +26,40 @@ def setup():
     :return:
     """
     lasagna.config.paths = lasagna.io.Paths(dataset)
+    for condition in ('strip', 'hyb'):
+        lasagna.config.paths.table[condition] = [condition in name for name in lasagna.config.paths.table['raw']]
+        lasagna.config.paths.table.set_index(condition, append=True, inplace=True)
+
     lasagna.config.paths.add_analysis('raw', 'calibrated')
 
     config_path = lasagna.config.paths.full(lasagna.config.paths.calibrations[0])
-    lasagna.config.calibration = (
-    lasagna.process.Calibration(config_path, dead_pixels_file='dead_pixels_empirical.tif'))
+    lasagna.config.calibration = lasagna.process.Calibration(config_path,
+                                                             dead_pixels_file='dead_pixels_empirical.tif')
     c = copy.deepcopy(lasagna.config.calibration)
     c.calibration = None
     lasagna.config.calibration_short = c
+
+
+def apply_watermark(arr, func, trail=3, **kwargs):
+    """Apply function over trailing dimensions of array and append watermark of result. Function should
+    return string or list of strings.
+    :param arr:
+    :param func:
+    :return:
+    """
+    n = np.prod(arr.shape[:-trail])
+    arr_ = arr.reshape(-1, *arr.shape[-3:]).copy()
+    new_arr = []
+    for stack in arr_:
+        try:
+            annotation = lasagna.io.watermark(stack.shape[1:], func(stack), **kwargs)
+        except ValueError:
+            annotation = np.zeros(stack.shape[1:])
+        new_arr += [np.concatenate((stack, annotation[None, :, :]))]
+
+    new_shape = list(arr.shape)
+    new_shape[-3] = -1  # expand to fill
+    return np.array(new_arr).reshape(new_shape)
 
 
 def table_from_nuclei(df, *args, **kwargs):
@@ -113,7 +142,7 @@ def stitch(df, offsets=None, overlap=925. / 1024):
     stitch = lasagna.config.paths.full(stitch)
 
     data = np.array([lasagna.io.read_stack(lasagna.config.paths.full(f))
-                     for f in df['raw']])
+                     for f in df['calibrated']])
     grid = np.sqrt(data.size / np.prod(data.shape[-3:]))
     print data.shape
     gridded_data = data.reshape([grid, grid] + list(data.shape[-3:]))
