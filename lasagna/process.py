@@ -27,7 +27,7 @@ def region_fields(region):
     return {'area': region.area,
             'centroid': region.centroid,
             'bounds': region.bbox,
-            'label': region.label,
+            'label': np.median(region.intensity_image),
             'mask': io.compress_obj(region.image)}
 
 
@@ -90,7 +90,7 @@ def table_from_nuclei(file_table, source='stitch', nuclei='nuclei', channels=Non
             segmented = skimage.morphology.dilation(segmented, nuclei_dilation)
         data = io.read_stack(config.paths.full(row[source]))
 
-        info = [region_fields(r) for r in regionprops(segmented)]
+        info = [region_fields(r) for r in regionprops(segmented, intensity_image=segmented)]
         df = pd.DataFrame(info, index=[list(x) for x in zip(*[list(ix)] * len(info))])
         df['file'] = row[source]
         df['hash'] = [uuid.uuid4().hex for _ in range(df.shape[0])]
@@ -523,3 +523,15 @@ def alpha_blend(arr, offset_matrix, clip=True, edge=0.95, edge_width=0.02):
 def compress_offsets(off):
     y = off.mean(axis=(1, 2))
     return y[::-1, :].T
+
+
+def replace_minimum(img):
+    """Replace local minima with minimum of neighboring points. Useful to eliminate dead pixels.
+    :param img:
+    :return:
+    """
+    selem = np.array([[1, 1, 1], [1, 0, 1], [1, 1, 1]])
+    mi = skimage.filters.rank.minimum(img, selem)
+    img_ = img.copy()
+    img_[img_ < mi] = mi[img_ < mi]
+    return img_

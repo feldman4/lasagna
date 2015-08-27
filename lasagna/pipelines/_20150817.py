@@ -17,7 +17,7 @@ pipeline = None
 
 channels = 'DAPI', 'Cy3', 'A594', 'Atto647'
 
-filters = lasagna.utils.Filter2DReal(lasagna.process.double_gaussian(6, 0.5)),
+filters = lasagna.utils.Filter2DReal(lasagna.process.double_gaussian(10, 1)),
 
 
 def setup():

@@ -82,7 +82,10 @@ def get_row_stack(row, full=False, nuclei=False, apply_offset=False, pad=(0, 0))
     :param apply_offset:
     :return:
     """
-    I = _get_stack(row[('all', 'file')])
+    file_name = row[('all', 'file')]
+    if nuclei:
+        file_name = config.paths.lookup('nuclei', stitch=row[('all', 'file')])
+    I = _get_stack(file_name)
     if full is False:
         I = I[b_idx(row, padding=(pad, I.shape))]
     if apply_offset:
@@ -179,6 +182,9 @@ def save_hyperstack(name, data, autocast=True, resolution=None,
     if display_ranges is None:
         display_ranges = tuple([(x.min(), x.max())
                                 for x in np.rollaxis(data, -3)])
+
+    if len(luts) != len(display_ranges) or len(luts) != data.shape[-3]:
+        raise ValueError('lookup table, display ranges, and data shape must match')
 
     # convert to uint16
     tmp = data.copy()
@@ -449,7 +455,8 @@ class Paths(object):
 
     def lookup(self, column, **kwargs):
         """Convenient search.
-            :param kwargs:
+            :param column: column to return item from
+            :param kwargs: search_column=value
             :return:
             """
         source, value = kwargs.items()[0]

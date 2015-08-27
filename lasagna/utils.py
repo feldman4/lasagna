@@ -15,6 +15,8 @@ class Memoized(object):
     def __call__(self, *args, **kwargs):
         key = str(args) + str(kwargs)
         try:
+            if type(self.cache[key]) == np.ndarray:
+                return self.cache[key].copy()
             return self.cache[key]
         except KeyError:
             value = self.func(*args, **kwargs)
@@ -94,6 +96,11 @@ class Filter2D(object):
         return pyramid
 
 
+def mad(arr, axis=None, keepdims=True):
+    med = np.median(arr, axis=axis, keepdims=keepdims)
+    return np.median(np.abs(arr - med), axis=axis, keepdims=keepdims)
+
+
 class Filter2DReal(object):
     def __init__(self, func, max_size=10):
         self.pyramid = None
@@ -109,15 +116,22 @@ class Filter2DReal(object):
         width = 2 ** i
 
         pad_width = [(int((width - s) / 2), int((width - s) - (width - s) / 2)) for s in M.shape]
-        print width, pad_width, M.shape
         M_ = np.pad(M, pad_width, mode='linear_ramp', end_values=(M.mean(),))
 
         self.M_ = M_
 
         M_fft = np.fft.fft2(M_)
-        M_filt = np.abs(np.fft.ifft2(M_fft * self.pyramid_2D[i]))
 
-        return M_filt[pad_width[0][0]:-pad_width[0][1], pad_width[1][0]:-pad_width[1][1]]
+        slic = (slice(pad_width[0][0], -pad_width[0][1]),
+                slice(pad_width[1][0], -pad_width[1][1]))
+
+        self.M_pre_abs = np.fft.ifft2(M_fft * self.pyramid_2D[i])
+        M_filt = np.abs(self.M_pre_abs)
+        M_filt[M_filt < 0] = 0
+
+        self.M_pre_abs = self.M_pre_abs[slic]
+
+        return M_filt[slic]
 
     def build_pyramid(self):
         self.pyramid = {}
