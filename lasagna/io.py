@@ -332,7 +332,8 @@ default_dirs = {'raw': 'raw',
                 'export': 'export'}
 
 default_file_pattern = '(data)/(.*)/(((([0-9]*X)_(.*)_MMStack_([A-Z][0-9]))-Site_([0-9]*)).ome.tif)'
-default_file_groups = 'data', 'set', 'file', 'file_well_site', 'file_well', 'mag', 'set_', 'well', 'site'
+default_file_pattern = '(data)/(.*)/(((([0-9]*X)_(.*round([0-9]))*.*_MMStack_([A-Z][0-9]))-Site_([0-9]*)).ome.tif)'
+default_file_groups = 'data', 'set', 'file', 'file_well_site', 'file_well', 'mag', '', 'round', 'well', 'site'
 default_path_formula = {'raw': '[data]/[set]/[file]',
                         'calibrated': '[data]/[set]/[file_well_site].calibrated.tif',
                         'stitched': '[data]/[set]/[file_well_site].stitched.tif',
@@ -420,7 +421,7 @@ class Paths(object):
         for entry in d:
             for key, pattern in path_formula.items():
                 for group, value in entry.items():
-                    pattern = pattern.replace('[%s]' % group, value)
+                    pattern = pattern.replace('[%s]' % group, str(value))
                 entry.update({key: pattern})
 
         self.table = pandas.DataFrame(d)
