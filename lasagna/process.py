@@ -13,7 +13,6 @@ from skimage.morphology import disk, watershed, opening
 from skimage.util import img_as_uint
 import skimage.measure
 from skimage.feature import peak_local_max
-
 from scipy import ndimage
 
 from lasagna import io
@@ -567,18 +566,6 @@ def get_corner_offsets(data, n=500):
     return offsets, tforms
 
 
-def plot_corner_alignments(data, n=500, axs=None):
-    import matplotlib.pyplot as plt
-    if axs is None:
-        fig, axs = plt.subplots(2, 2, figsize=(10, 10))
-    axs = axs.flatten()
-    corners = _get_corners(n)
-    for ax, corner in zip(axs, (0, 1, 3, 2)):
-        lasagna.utils.plot_image_overlay(data[corners[corner]][0],
-                                         data[corners[corner]][1],
-                                         np.array([0, 0]), ax=ax)
-
-
 def _get_corners(n):
     """Retrieve slice index for 2-D corners of 3-D array.
     :param n:
@@ -590,3 +577,30 @@ def _get_corners(n):
                (a, c, c),
                (a, c, b))
     return corners
+
+
+def scaled_align(data, align_layer, in_place=True, n=500):
+    # transform (scale), repeat and apply offset
+    offsets, transforms = get_corner_offsets(align_layer, n=n)
+    align_layer_rescale = np.array([skimage.transform.warp(raw, inverse_map=tform.inverse)
+                                    for tform, raw in zip(transforms, align_layer)])
+
+    offsets2, transforms2 = get_corner_offsets(align_layer_rescale, n=n)
+    offsets_ = np.round(offsets2.mean(axis=1)).astype(int)
+
+    if not in_place:
+        aligned = np.zeros(data.shape, dtype=data.dtype)
+    for (i, _), offset, tform in zip(enumerate(data), offsets_, transforms):
+        new_stack = np.array([skimage.transform.warp(frame,
+                                                     inverse_map=tform.inverse,
+                                                     preserve_range=True,
+                                                     mode='constant', cval=0)
+                              for frame in data[i]])
+        if in_place:
+            data[i] = lasagna.io.offset_stack(new_stack, offset)
+        else:
+            aligned[i] = lasagna.io.offset_stack((new_stack, offset))
+
+    if in_place:
+        return data
+    return aligned

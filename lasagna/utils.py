@@ -1,5 +1,6 @@
 import functools
 import numpy as np
+from lasagna.process import _get_corners
 
 
 class Memoized(object):
@@ -169,3 +170,21 @@ def plot_image_overlay(image0, image1, offset, ax=None):
     ax.hold('on')
     ax.imshow(image1, cmap=cm.Reds, extent=extent, alpha=0.5)
     ax.axis('image')
+
+
+def plot_corner_alignments(data, n=500, axs=None):
+    """Superimpose corners of 3-D array. Only uses first two entries in leading dimension.
+    :param data: [2, height, width] array
+    :param n: corner window width
+    :param axs: list of up to 4 axes to plot to (clockwise from top left)
+    :return:
+    """
+    import matplotlib.pyplot as plt
+    if axs is None:
+        fig, axs = plt.subplots(2, 2, figsize=(10, 10))
+    axs = axs.flatten()
+    corners = _get_corners(n)
+    for ax, corner in zip(axs, (0, 1, 3, 2)):
+        plot_image_overlay(data[corners[corner]][0],
+                           data[corners[corner]][1],
+                           np.array([0, 0]), ax=ax)
