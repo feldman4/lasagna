@@ -17,6 +17,8 @@ pipeline = None
 
 channels = 'DAPI', 'Cy3', 'A594', 'Atto647'
 
+luts = lasagna.io.DEFAULT_LUTS
+
 filters = lasagna.utils.Filter2DReal(lasagna.process.double_gaussian(10, 1)),
 
 
@@ -31,12 +33,90 @@ def setup():
             condition in name for name in lasagna.config.paths.table.index.get_level_values('set')]
         lasagna.config.paths.table.set_index(condition, append=True, inplace=True)
 
+
+
     config_path = lasagna.config.paths.full(lasagna.config.paths.calibrations[0])
     lasagna.config.calibration = lasagna.process.Calibration(config_path,
                                                              dead_pixels_file='dead_pixels_empirical.tif')
     c = copy.deepcopy(lasagna.config.calibration)
     c.calibration = None
     lasagna.config.calibration_short = c
+
+
+def initialize_engines(client):
+    """Import modules and define Paths and Calibration objects on remote engines. Use short version
+    of Calibration object to save on time.
+    :param client:
+    :return:
+    """
+    dview = client[:]
+    dview.execute('import numpy as np')
+    dview.execute('import lasagna.io')
+    dview.execute('import lasagna.process')
+    dview.execute('import lasagna.config')
+    dview.execute('import lasagna.pipelines._20150817')
+    dview.execute('import os')
+    dview.execute('import lasagna.pipelines._20150817 as pipeline')
+
+    dview['lasagna.config.paths'] = lasagna.config.paths
+    dview['lasagna.config.calibration'] = lasagna.config.calibration_short
+    print len(client.ids), 'engines initialized'
+
+
+def calibrate(row):
+    """Calibrate row of Paths DataFrame. Call with map_async to farm out.
+    :param row:
+    :return:
+    """
+    channels = [None, 'Cy3', 'A594', 'Atto647']
+
+    raw, calibrated = row['raw'], row['calibrated']
+    raw_data = lasagna.io.read_stack(lasagna.config.paths.full(raw))
+    raw_data = np.array([lasagna.config.calibration.fix_dead_pixels(frame) for frame in raw_data])
+    fixed_data = np.array([lasagna.config.calibration.fix_illumination(frame, channel=channel)
+                           for frame, channel in zip(raw_data, channels)])
+    lasagna.io.save_hyperstack(lasagna.config.paths.full(calibrated), fixed_data, luts=luts)
+
+
+def align(files, save_name, n=500, trim=150):
+    """Align data using first channel (DAPI). Register corners using FFT, build similarity transform,
+    warp, and trim edges.
+    :param files: files to align
+    :param save_name:
+    :param n: width of corner alignment window
+    :param trim: # of pixels to trim in from each size
+    :return:
+    """
+    data = [lasagna.io.read_stack(f) for f in files]
+    data = lasagna.io.compose_stacks(data)
+
+    offsets, transforms = lasagna.process.get_corner_offsets(data[:, 0], n=n)
+    for i, transform in zip(range(data.shape[0]), transforms):
+        for j in range(data.shape[1]):
+            data[i, j] = skimage.transform.warp(data[i, j], transform.inverse, preserve_range=True)
+
+    data = data[:, :, trim:-trim, trim:-trim]
+    lasagna.io.save_hyperstack(save_name, data)
+
+
+def find_nuclei(row, block_size, source='aligned'):
+    """Find nuclei in data from row of Paths DataFrame, using local threshold and watershed separation.
+    Automatically processes single frame of trailing two dimensions of data only.
+    :param row:
+    :param block_size:
+    :return:
+    """
+    data = lasagna.io.read_stack(lasagna.config.paths.full(row[source]))
+    s = [0]*(data.ndim - 2) + [slice(None)]*2
+    nuclei = lasagna.process.get_nuclei(data[s], block_size=block_size)
+    lasagna.io.save_hyperstack(lasagna.config.paths.full(row['nuclei']), nuclei)
+
+
+def table_from_nuclei(df, *args, **kwargs):
+    df_ = lasagna.process.table_from_nuclei(df, *args, **kwargs)
+    save_name = df['file'][0] + '.pkl'
+    df_.to_pickle(lasagna.config.paths.export(save_name))
+    return df_
 
 
 def apply_watermark(arr, func, trail=3, **kwargs):
@@ -61,75 +141,9 @@ def apply_watermark(arr, func, trail=3, **kwargs):
     return np.array(new_arr).reshape(new_shape)
 
 
-def table_from_nuclei(df, *args, **kwargs):
-    df_ = lasagna.process.table_from_nuclei(df, *args, **kwargs)
-    save_name = df['file'][0] + '.pkl'
-    df_.to_pickle(lasagna.config.paths.export(save_name))
-    return df_
-
-
-def calibrate(row):
-    """Use map_async to farm out calibrate to rows of Paths DataFrame with particular chunksize.
-    :param row:
-    :return:
-    """
-    channels = ['Cy3', 'Cy3', 'A594', 'Atto647']
-    luts = [lasagna.io.BLUE, lasagna.io.GREEN, lasagna.io.RED, lasagna.io.MAGENTA]
-    raw, calibrated = row['raw'], row['calibrated']
-    raw_data = lasagna.io.read_stack(lasagna.config.paths.full(raw))
-    raw_data = np.array([lasagna.config.calibration.fix_dead_pixels(frame) for frame in raw_data])
-    fixed_data = np.array([lasagna.config.calibration.fix_illumination(frame, channel=channel)
-                           for frame, channel in zip(raw_data, channels)])
-    lasagna.io.save_hyperstack(lasagna.config.paths.full(calibrated), fixed_data, luts=luts)
-
-
-def find_nuclei(row, block_size):
-    M = lasagna.io.read_stack(lasagna.config.paths.full(row['stitch']))
-    N = lasagna.process.get_nuclei(M[0, :, :], block_size=block_size)
-    lasagna.io.save_hyperstack(lasagna.config.paths.full(row['nuclei']), N)
-
-
-def initialize_engines(client):
-    """Import modules and define Paths and Calibration objects on remote engines. Use short version
-    of Calibration object to save on time.
-    :param client:
-    :return:
-    """
-    dview = client[:]
-    dview.execute('import numpy as np')
-    dview.execute('import lasagna.io')
-    dview.execute('import lasagna.process')
-    dview.execute('import lasagna.config')
-    dview.execute('import lasagna.pipelines._20150817')
-    dview.execute('import os')
-    dview.execute('import lasagna.pipelines._20150817 as pipeline')
-
-    dview['lasagna.config.paths'] = lasagna.config.paths
-    dview['lasagna.config.calibration'] = lasagna.config.calibration_short
-    print len(client.ids), 'engines initialized'
-
-
-def align(files, save_name, n=500, trim=150):
-    """Align data using first channel (DAPI). Register corners using FFT, build similarity transform,
-    warp, and trim edges.
-    :param files: files to align
-    :param save_name:
-    :param n: width of corner alignment window
-    :param trim: # of pixels to trim in from each size
-    :return:
-    """
-    data = [lasagna.io.read_stack(f) for f in files]
-    data = lasagna.io.compose_stacks(data)
-
-    offsets, transforms = lasagna.process.get_corner_offsets(data[:, 0], n=n)
-    for i, transform in zip(range(data.shape[0]), transforms):
-        for j in range(data.shape[1]):
-            data[i, j] = skimage.transform.warp(data[i, j], transform.inverse, preserve_range=True)
-
-    data = data[:, :, trim:-trim, trim:-trim]
-    lasagna.io.save_hyperstack(save_name, data)
-
-
+###################
+# NOT IN USE, needs sub-pixel alignment, better blending, individual offsets instead of mean
+###################
 def stitch(df, offsets=None, overlap=925. / 1024):
     """Stitch calibrated images into square grid. Calculate offsets using lasagna.process.stitch_grid
     unless provided.

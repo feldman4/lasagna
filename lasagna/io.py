@@ -32,7 +32,7 @@ MAGENTA = tuple(range(256) + [0] * 256 + range(256))
 GRAY = tuple(range(256) * 3)
 CYAN = tuple([0] * 256 + range(256) * 2)
 
-DEFAULT_LUTS = (BLUE, GREEN, RED, MAGENTA)
+DEFAULT_LUTS = BLUE, GREEN, RED, MAGENTA
 
 DIR = {}
 
@@ -331,7 +331,6 @@ default_dirs = {'raw': 'raw',
                 'calibration': 'calibration',
                 'export': 'export'}
 
-default_file_pattern = '(data)/(.*)/(((([0-9]*X)_(.*)_MMStack_([A-Z][0-9]))-Site_([0-9]*)).ome.tif)'
 default_file_pattern = '(data)/(.*)/(((([0-9]*X)_(.*round([0-9]))*.*_MMStack_([A-Z][0-9]))-Site_([0-9]*)).ome.tif)'
 default_file_groups = 'data', 'set', 'file', 'file_well_site', 'file_well', 'mag', '', 'round', 'well', 'site'
 default_path_formula = {'raw': '[data]/[set]/[file]',
@@ -340,7 +339,7 @@ default_path_formula = {'raw': '[data]/[set]/[file]',
                         'aligned': '[data]/aligned/[set]/[file_well].aligned.tif',
                         'nuclei': '[data]/aligned/[set]/[file_well].aligned.nuclei.tif',
                         }
-default_table_index = ['mag', 'set', 'well', 'site']
+default_table_index = ['mag', 'round', 'set', 'well', 'site']
 
 
 class Paths(object):
