@@ -19,6 +19,7 @@ from scipy import ndimage
 from lasagna import io
 from lasagna import config
 from lasagna.utils import Filter2D
+import lasagna.utils
 
 DOWNSAMPLE = 2
 
@@ -512,7 +513,7 @@ def alpha_blend(arr, offset_matrix, clip=True, edge=0.95, edge_width=0.02):
     if clip:
         def edges(n):
             return np.r_[n[:4, :].flatten(), n[-4:, :].flatten(),
-                             n[:, :4].flatten(), n[:, -4:].flatten()]
+                         n[:, :4].flatten(), n[:, -4:].flatten()]
 
         while np.isnan(edges(n)).any():
             n = n[4:-4, 4:-4]
@@ -531,7 +532,61 @@ def replace_minimum(img):
     :return:
     """
     selem = np.array([[1, 1, 1], [1, 0, 1], [1, 1, 1]])
-    mi = skimage.filters.rank.minimum(img, selem)
+    mi = skimage.filter.rank.minimum(img, selem)
     img_ = img.copy()
     img_[img_ < mi] = mi[img_ < mi]
     return img_
+
+
+# find offsets using 4 corners
+def get_corner_offsets(data, n=500):
+    """Find offsets between images in a 3-D stack by registering corners. Uses register_images, FFT-baesd.
+    Constructs skimage.transform.SimilarityTransform based on offsets and stack dimensions. Allows for scaling
+     and translation, but skimage.transform.warp doesn't seem to apply translation correctly.
+    :param data: 3-D stack
+    :param n: height/width of window placed at corners for alignment
+    :return:
+    """
+    h, w = data.shape[-2:]
+    corners = _get_corners(n)
+
+    offsets = [register_images(data[index]) for index in corners]
+    offsets = np.array(offsets).transpose([1, 0, 2])
+
+    src = ((n / 2, n / 2),
+           (n / 2, w - n / 2),
+           (h - n / 2, w - n / 2),
+           (h - n / 2, n / 2))
+    src = np.array((src,) * data.shape[0])
+    dst = src + offsets
+
+    tforms = []
+    for src_, dst_ in zip(src, dst):
+        tforms += [skimage.transform.estimate_transform('similarity', src_, dst_)]
+
+    return offsets, tforms
+
+
+def plot_corner_alignments(data, n=500, axs=None):
+    import matplotlib.pyplot as plt
+    if axs is None:
+        fig, axs = plt.subplots(2, 2, figsize=(10, 10))
+    axs = axs.flatten()
+    corners = _get_corners(n)
+    for ax, corner in zip(axs, (0, 1, 3, 2)):
+        lasagna.utils.plot_image_overlay(data[corners[corner]][0],
+                                         data[corners[corner]][1],
+                                         np.array([0, 0]), ax=ax)
+
+
+def _get_corners(n):
+    """Retrieve slice index for 2-D corners of 3-D array.
+    :param n:
+    :return:
+    """
+    a, b, c = slice(None), slice(None, n), slice(-n, None)
+    corners = ((a, b, b),
+               (a, b, c),
+               (a, c, c),
+               (a, c, b))
+    return corners

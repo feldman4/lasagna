@@ -156,14 +156,15 @@ class Filter2DReal(object):
         return np.c_[n, n[:, ::-1]]
 
 
-def plot_image_overlay(image0, image1, offset):
+def plot_image_overlay(image0, image1, offset, ax=None):
     from matplotlib import pyplot as plt
     from matplotlib import cm
 
     sz0, sz1 = image0.shape, image1.shape
     extent = (0 + offset[1], sz1[1] + offset[1],
               sz1[0] + offset[0], 0 + offset[0])
-    fig, ax = plt.subplots(figsize=(10, 10))
+    if ax is None:
+        fig, ax = plt.subplots(figsize=(10, 10))
     ax.imshow(image0, cmap=cm.Blues, alpha=0.5)
     ax.hold('on')
     ax.imshow(image1, cmap=cm.Reds, extent=extent, alpha=0.5)

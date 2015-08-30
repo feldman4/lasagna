@@ -4,7 +4,6 @@ import lasagna.process
 import lasagna.utils
 import copy
 import numpy as np
-import os
 
 display_ranges = ((500, 20000),
                   (500, 3500),
@@ -69,43 +68,25 @@ def table_from_nuclei(df, *args, **kwargs):
     return df_
 
 
-# TODO check if single function can be called with lview.map_async(func, [arg1], ..., chunksize=10)
-def calibrate(row, paths, calibration):
+def calibrate(row):
+    """Use map_async to farm out calibrate to rows of Paths DataFrame with particular chunksize.
+    :param row:
+    :return:
+    """
     channels = ['Cy3', 'Cy3', 'A594', 'Atto647']
     luts = [lasagna.io.BLUE, lasagna.io.GREEN, lasagna.io.RED, lasagna.io.MAGENTA]
     raw, calibrated = row['raw'], row['calibrated']
-    raw_data = lasagna.io.read_stack(paths.full(raw))
-    raw_data = np.array([calibration.fix_dead_pixels(frame) for frame in raw_data])
-    fixed_data = np.array([calibration.fix_illumination(frame, channel=channel)
+    raw_data = lasagna.io.read_stack(lasagna.config.paths.full(raw))
+    raw_data = np.array([lasagna.config.calibration.fix_dead_pixels(frame) for frame in raw_data])
+    fixed_data = np.array([lasagna.config.calibration.fix_illumination(frame, channel=channel)
                            for frame, channel in zip(raw_data, channels)])
-    lasagna.io.save_hyperstack(paths.full(calibrated), fixed_data, luts=luts)
+    lasagna.io.save_hyperstack(lasagna.config.paths.full(calibrated), fixed_data, luts=luts)
 
 
 def find_nuclei(row, block_size):
     M = lasagna.io.read_stack(lasagna.config.paths.full(row['stitch']))
     N = lasagna.process.get_nuclei(M[0, :, :], block_size=block_size)
     lasagna.io.save_hyperstack(lasagna.config.paths.full(row['nuclei']), N)
-
-
-def calibrate_sge(dfs, lview):
-    """Apply current calibration, with results saved according to current paths. Farm out jobs to
-     provided load-balanced view.
-    :param dfs:
-    :param lview:
-    :return:
-    """
-    async_results = []
-    c_ = copy.deepcopy(lasagna.config.calibration)
-    c_.calibration = None
-
-    for df in dfs:
-        def func(df_, paths=lasagna.config.paths, calibration=c_):
-            for ix, row in df_.iterrows():
-                pipeline.calibrate(row, paths, calibration)
-
-        async_results += [lview.apply_async(func, df)]
-
-    return async_results
 
 
 def initialize_engines(client):
