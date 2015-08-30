@@ -28,7 +28,7 @@ def setup():
     lasagna.config.paths = lasagna.io.Paths(dataset)
     for condition in ('strip', 'hyb'):
         lasagna.config.paths.table[condition] = [
-            condition in name for name in lasagna.config.paths.table.get_level_values('set')]
+            condition in name for name in lasagna.config.paths.table.index.get_level_values('set')]
         lasagna.config.paths.table.set_index(condition, append=True, inplace=True)
 
     config_path = lasagna.config.paths.full(lasagna.config.paths.calibrations[0])
