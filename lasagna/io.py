@@ -342,6 +342,7 @@ class Paths(object):
         :return:
         """
         self.calibrations = []
+        self.datafiles = []
         self.dirs = default_dirs if sub_dirs is None else sub_dirs
         self.table = None
         self.dataset = dataset
@@ -351,19 +352,73 @@ class Paths(object):
         self.update()
 
     def full(self, *args):
+        """Prepend dataset location, multiple arguments are joined.
+        :param args:
+        :return:
+        """
         return os.path.join(self.lasagna_path, self.dataset, *args)
 
     def export(self, *args):
+        """Shortcut to export directory.
+        :param args:
+        :return:
+        """
         return self.full(self.dirs['export'], *args)
 
     def relative(self, s):
+        """Convert absolute paths to relative paths within dataset.
+        :param s:
+        :return:
+        """
         return s.replace(self.full() + '/', '')
 
     def parent(self, s):
+        """Shortcut to name of parent directory of file or directory.
+        :param s:
+        :return:
+        """
         return os.path.basename(os.path.dirname(s))
 
-    def update(self):
-        """Look for .tif files in stitched directory. Look for matching raw data in other subdirectories.
+    def update_(self, pattern='(data/)(.*/)*(.*).ome.tif'):
+        default_pattern = '(data)/(.*)/(((([0-9]*X)_(.*)_MMStack_([A-Z][0-9]))-Site_([0-9]*)).ome.tif)'
+        default_groups = 'data', 'set', 'file', 'file_well_site', 'file_well', 'mag', 'set_', 'well', 'site'
+
+        self.patterns = {'raw': '[data]/[set]/[file]',
+                         'calibrated': '[data]/[set]/[file_well_site].calibrated.tif',
+                         'stitched': '[data]/[set]/[file_well_site].stitched.tif',
+                         'aligned': '[data]/aligned/[set]/[file_well].aligned.tif',
+                         'nuclei': '[data]/aligned/[set]/[file_well].aligned.nuclei.tif',
+                         }
+
+        self.datafiles = []
+        for dirpath, dirnames, filenames in os.walk(self.full(self.dirs['data'])):
+            self.datafiles += [os.path.join(dirpath, f) for f in filenames]
+
+        d = []
+        for f in self.datafiles:
+            m = re.match(default_pattern, self.relative(f))
+            if m:
+                d += [{k: v for k, v in zip(default_groups, m.groups())}]
+        for entry in d:
+            for key, pattern in self.patterns.items():
+                for group, value in entry.items():
+                    pattern = pattern.replace('[%s]' % group, value)
+                entry.update({key: pattern})
+
+        self.table = pandas.DataFrame(d)
+
+    def update(self, pattern='(data/)(.*/)*(.*).ome.tif'):
+        """Match pattern to find original files in dataset. For each raw file, apply patterns in
+        self.dirs to generate new file names and add to self.table if file exists (else nan).
+
+        E.g., raw file 'data/set/Site1.ome.tif' is captured as ('set', 'Site1'). Pattern-matching yields:
+         'aligned': '[data]aligned/[set][file].tif'
+         ==> data/aligned/set/Site1.tif
+         'calibrated': '[data][set][file].calibrated.tif'
+         ==> data/set/asdf.calibrated.tif
+
+
+        Look for .tif files in stitched directory. Look for matching raw data in other subdirectories.
         :return:
         """
         raw_files = []
@@ -551,5 +606,6 @@ def load_lut(name):
         lines = fh.readlines()
         values = [line[:-1].split() for line in lines]
     return [int(y) for x in zip(*values) for y in x]
+
 
 GLASBEY = load_lut('glasbey')
