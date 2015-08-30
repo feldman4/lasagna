@@ -425,7 +425,8 @@ class Paths(object):
                 entry.update({key: pattern})
 
         self.table = pandas.DataFrame(d)
-        self.table.set_index(table_index, inplace=True).sortlevel(inplace=True)
+        self.table.set_index(table_index, inplace=True)
+        self.table.sortlevel(inplace=True)
 
     def update_calibration(self):
         calibration_dir = self.full(self.dirs['calibration'])
