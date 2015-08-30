@@ -4,6 +4,7 @@ import lasagna.process
 import lasagna.utils
 import copy
 import numpy as np
+import skimage.transform
 
 display_ranges = ((500, 20000),
                   (500, 3500),
@@ -107,6 +108,27 @@ def initialize_engines(client):
     dview['lasagna.config.paths'] = lasagna.config.paths
     dview['lasagna.config.calibration'] = lasagna.config.calibration_short
     print len(client.ids), 'engines initialized'
+
+
+def align(files, save_name, n=500, trim=150):
+    """Align data using first channel (DAPI). Register corners using FFT, build similarity transform,
+    warp, and trim edges.
+    :param files: files to align
+    :param save_name:
+    :param n: width of corner alignment window
+    :param trim: # of pixels to trim in from each size
+    :return:
+    """
+    data = [lasagna.io.read_stack(f) for f in files]
+    data = lasagna.io.compose_stacks(data)
+
+    offsets, transforms = lasagna.process.get_corner_offsets(data[:, 0], n=n)
+    for i, transform in zip(range(data.shape[0]), transforms):
+        for j in range(data.shape[1]):
+            data[i, j] = skimage.transform.warp(data[i, j], transform.inverse, preserve_range=True)
+
+    data = data[:, :, trim:-trim, trim:-trim]
+    lasagna.io.save_hyperstack(save_name, data)
 
 
 def stitch(df, offsets=None, overlap=925. / 1024):

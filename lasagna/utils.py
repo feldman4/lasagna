@@ -1,6 +1,5 @@
 import functools
 import numpy as np
-from lasagna.process import _get_corners
 
 
 class Memoized(object):
@@ -188,3 +187,17 @@ def plot_corner_alignments(data, n=500, axs=None):
         plot_image_overlay(data[corners[corner]][0],
                            data[corners[corner]][1],
                            np.array([0, 0]), ax=ax)
+    return axs
+
+
+def _get_corners(n):
+    """Retrieve slice index for 2-D corners of 3-D array.
+    :param n:
+    :return:
+    """
+    a, b, c = slice(None), slice(None, n), slice(-n, None)
+    corners = ((a, b, b),
+               (a, b, c),
+               (a, c, c),
+               (a, c, b))
+    return corners
