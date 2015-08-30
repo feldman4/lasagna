@@ -340,7 +340,7 @@ default_path_formula = {'raw': '[data]/[set]/[file]',
                         'aligned': '[data]/aligned/[set]/[file_well].aligned.tif',
                         'nuclei': '[data]/aligned/[set]/[file_well].aligned.nuclei.tif',
                         }
-default_table_index = 'mag', 'set', 'well', 'site'
+default_table_index = ['mag', 'set', 'well', 'site']
 
 
 class Paths(object):
@@ -425,7 +425,7 @@ class Paths(object):
                 entry.update({key: pattern})
 
         self.table = pandas.DataFrame(d)
-        self.table.set_index(table_index, append=True, inplace=True)
+        self.table.set_index(table_index, inplace=True).sortlevel(inplace=True)
 
     def update_calibration(self):
         calibration_dir = self.full(self.dirs['calibration'])
