@@ -331,15 +331,19 @@ default_dirs = {'raw': 'raw',
                 'calibration': 'calibration',
                 'export': 'export'}
 
-default_file_pattern = '(data)/(.*)/(((([0-9]*X)_(.*round([0-9]))*.*_MMStack_([A-Z][0-9]))-Site_([0-9]*)).ome.tif)'
-default_file_groups = 'data', 'set', 'file', 'file_well_site', 'file_well', 'mag', '', 'round', 'well', 'site'
+default_file_pattern = '(data)/((([0-9]*X).*round([0-9]))*.*)/(((.*_([A-Z][0-9]))-Site_([0-9]*)).ome.tif)'
+default_file_groups = 'data', 'set', '', 'mag', 'round', 'file', 'file_well_site', 'file_well',  'well', 'site'
 default_path_formula = {'raw': '[data]/[set]/[file]',
                         'calibrated': '[data]/[set]/[file_well_site].calibrated.tif',
                         'stitched': '[data]/[set]/[file_well_site].stitched.tif',
                         'aligned': '[data]/aligned/[set]/[file_well].aligned.tif',
                         'nuclei': '[data]/aligned/[set]/[file_well].aligned.nuclei.tif',
                         }
-default_table_index = ['mag', 'round', 'set', 'well', 'site']
+default_table_index = {'mag': str,
+                       'round': float,
+                       'set': str,
+                       'well': str,
+                       'site': int}
 
 
 class Paths(object):
@@ -424,7 +428,11 @@ class Paths(object):
                 entry.update({key: pattern})
 
         self.table = pandas.DataFrame(d)
-        self.table.set_index(table_index, inplace=True)
+
+        for k, v in table_index.items():
+            self.table[k] = self.table[k].astype(v)
+
+        self.table.set_index(table_index.keys(), inplace=True)
         self.table.sortlevel(inplace=True)
 
     def update_calibration(self):

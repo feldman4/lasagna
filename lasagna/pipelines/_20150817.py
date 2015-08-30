@@ -33,8 +33,6 @@ def setup():
             condition in name for name in lasagna.config.paths.table.index.get_level_values('set')]
         lasagna.config.paths.table.set_index(condition, append=True, inplace=True)
 
-
-
     config_path = lasagna.config.paths.full(lasagna.config.paths.calibrations[0])
     lasagna.config.calibration = lasagna.process.Calibration(config_path,
                                                              dead_pixels_file='dead_pixels_empirical.tif')
