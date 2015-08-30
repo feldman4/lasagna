@@ -324,11 +324,22 @@ def offset_stack(stack, offsets):
 
 
 default_dirs = {'raw': 'raw',
+                'data': 'data',
                 'analysis': 'analysis',
                 'nuclei': 'analysis/nuclei',
                 'stitch': 'stitch',
                 'calibration': 'calibration',
                 'export': 'export'}
+
+default_file_pattern = '(data)/(.*)/(((([0-9]*X)_(.*)_MMStack_([A-Z][0-9]))-Site_([0-9]*)).ome.tif)'
+default_file_groups = 'data', 'set', 'file', 'file_well_site', 'file_well', 'mag', 'set_', 'well', 'site'
+default_path_formula = {'raw': '[data]/[set]/[file]',
+                        'calibrated': '[data]/[set]/[file_well_site].calibrated.tif',
+                        'stitched': '[data]/[set]/[file_well_site].stitched.tif',
+                        'aligned': '[data]/aligned/[set]/[file_well].aligned.tif',
+                        'nuclei': '[data]/aligned/[set]/[file_well].aligned.nuclei.tif',
+                        }
+default_table_index = 'mag', 'set', 'well', 'site'
 
 
 class Paths(object):
@@ -349,7 +360,9 @@ class Paths(object):
         # resolve path, strip trailing slashes
         self.lasagna_path = os.path.abspath(lasagna_path)
 
-        self.update()
+        self.update_datafiles()
+        self.update_table()
+        self.update_calibration()
 
     def full(self, *args):
         """Prepend dataset location, multiple arguments are joined.
@@ -379,110 +392,44 @@ class Paths(object):
         """
         return os.path.basename(os.path.dirname(s))
 
-    def update_(self, pattern='(data/)(.*/)*(.*).ome.tif'):
-        default_pattern = '(data)/(.*)/(((([0-9]*X)_(.*)_MMStack_([A-Z][0-9]))-Site_([0-9]*)).ome.tif)'
-        default_groups = 'data', 'set', 'file', 'file_well_site', 'file_well', 'mag', 'set_', 'well', 'site'
-
-        self.patterns = {'raw': '[data]/[set]/[file]',
-                         'calibrated': '[data]/[set]/[file_well_site].calibrated.tif',
-                         'stitched': '[data]/[set]/[file_well_site].stitched.tif',
-                         'aligned': '[data]/aligned/[set]/[file_well].aligned.tif',
-                         'nuclei': '[data]/aligned/[set]/[file_well].aligned.nuclei.tif',
-                         }
-
+    def update_datafiles(self):
         self.datafiles = []
         for dirpath, dirnames, filenames in os.walk(self.full(self.dirs['data'])):
             self.datafiles += [os.path.join(dirpath, f) for f in filenames]
 
+    def update_table(self, file_pattern=default_file_pattern, groups=default_file_groups,
+                     path_formula=default_path_formula, table_index=default_table_index):
+
+        """Match pattern to find original files in dataset. For each raw file, apply patterns in
+        self.dirs to generate new file names and add to self.table if file exists (else nan).
+
+        E.g., raw file 'data/set/set_A1-Site1.ome.tif' is captured as ('set', 'Site1'). Pattern-matching yields:
+         'aligned': '[data]/aligned/[set]/[file_well].aligned.tif'
+         ==> data/aligned/set/set_A1.tif
+         'calibrated': '[data]/[set]/[file_well_site].calibrated.tif'
+         ==> data/set/set_A1-Site1.calibrated.tif
+
+        :return:
+        """
+
         d = []
         for f in self.datafiles:
-            m = re.match(default_pattern, self.relative(f))
+            m = re.match(file_pattern, self.relative(f))
             if m:
-                d += [{k: v for k, v in zip(default_groups, m.groups())}]
+                d += [{k: v for k, v in zip(groups, m.groups())}]
         for entry in d:
-            for key, pattern in self.patterns.items():
+            for key, pattern in path_formula.items():
                 for group, value in entry.items():
                     pattern = pattern.replace('[%s]' % group, value)
                 entry.update({key: pattern})
 
         self.table = pandas.DataFrame(d)
-
-    def update(self, pattern='(data/)(.*/)*(.*).ome.tif'):
-        """Match pattern to find original files in dataset. For each raw file, apply patterns in
-        self.dirs to generate new file names and add to self.table if file exists (else nan).
-
-        E.g., raw file 'data/set/Site1.ome.tif' is captured as ('set', 'Site1'). Pattern-matching yields:
-         'aligned': '[data]aligned/[set][file].tif'
-         ==> data/aligned/set/Site1.tif
-         'calibrated': '[data][set][file].calibrated.tif'
-         ==> data/set/asdf.calibrated.tif
-
-
-        Look for .tif files in stitched directory. Look for matching raw data in other subdirectories.
-        :return:
-        """
-        raw_files = []
-
-        # look for raw images
-        raw_dir = self.full(self.dirs['raw'])
-        for root, dirs, files in os.walk(raw_dir):
-            parent = os.path.basename(root)
-            files = [self.relative(os.path.join(root, f)) for f in files]
-            raw_files += [f for f in files if parent in f and '.tif' in f]
-
-        # look for corresponding stitched images
-        stitch_files = []
-        stitch_dir = self.full(self.dirs['stitch'])
-        for root, dirs, files in os.walk(stitch_dir):
-            parent = os.path.basename(root)
-            files = [self.relative(os.path.join(root, f)) for f in files]
-            stitch_files += [f for f in files if parent in f and '.tif' in f]
-
-        stitch_dict = {}
-        for f in stitch_files:
-            tmp = get_magnification(f), get_round(f), self.parent(f), get_well_site(f)[0]
-            stitch_dict.update({tmp: f})
-        self.stitch_dict = stitch_dict
-        raw_well_sites = zip(*[get_well_site(f) for f in raw_files])
-        raw_sets = [self.parent(f) for f in raw_files]
-
-        self.table = pandas.DataFrame({'file': [os.path.basename(f) for f in raw_files],
-                                       'raw': raw_files,
-                                       'mag': [get_magnification(s) for s in raw_files],
-                                       'well': raw_well_sites[0],
-                                       'site': raw_well_sites[1],
-                                       'set': raw_sets,
-                                       'round': [get_round(s) for s in raw_files]
-                                       })
-        self.table = self.table.set_index(['mag', 'round', 'set', 'well', 'site']).sortlevel()
-
-        # match stitch names based on all index values except site
-        self.table['stitch'] = None
-        for ix, row in self.table.iterrows():
-            if ix[:-1] in stitch_dict:
-                self.table.loc[ix, 'stitch'] = stitch_dict[ix[:-1]]
-
-        self.add_analysis('stitch', 'nuclei')
-        self.update_calibration()
+        self.table.set_index(table_index, append=True, inplace=True)
 
     def update_calibration(self):
         calibration_dir = self.full(self.dirs['calibration'])
         _, calibrations, _ = os.walk(calibration_dir).next()
         self.calibrations = [os.path.join(self.dirs['calibration'], c) for c in calibrations]
-
-    def add_analysis(self, column_in, analysis_name):
-        """Generate a new column of analysis filenames based on paths in given column.
-        :param column_in: column containing base filename
-        :param analysis_name: name of new analysis folder, e.g., analysis/nuclei/path/to/data
-        :return:
-        """
-        ixs, names = [], []
-        for ix, row in self.table.iterrows():
-            name_in = row[column_in]
-            if pandas.notnull(name_in):
-                names += [os.path.join(self.dirs['analysis'], analysis_name, name_in)]
-                ixs += [ix]
-        self.table.loc[ixs, analysis_name] = names
 
     def make_dirs(self, files):
         """Create sub-directories for files in column, if they don't exist.
