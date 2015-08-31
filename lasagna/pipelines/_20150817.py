@@ -5,6 +5,7 @@ import lasagna.utils
 import copy
 import numpy as np
 import skimage.transform
+import skimage.morphology
 import os
 import pandas as pd
 
@@ -116,7 +117,8 @@ def find_nuclei(row, block_size, source='aligned'):
     lasagna.io.save_hyperstack(lasagna.config.paths.full(row['nuclei']), nuclei)
 
 
-def table_from_nuclei(row, index_names, round_=0, nuclei_dilation=5):
+def table_from_nuclei(row, index_names, save_name=None, round_=0,
+                      nuclei_dilation=skimage.morphology.disk(5)):
     """Build nuclei table from
     :param df:
     :return:
@@ -125,8 +127,9 @@ def table_from_nuclei(row, index_names, round_=0, nuclei_dilation=5):
     data = data[round_]
     df_ = lasagna.process.table_from_nuclei(row, index_names, data=data,
                                             channels=channels, nuclei_dilation=nuclei_dilation)
-    save_name = row['file_well'] + '.pkl'
-    df_.to_pickle(lasagna.config.paths.export(save_name))
+    if save_name is None:
+        save_name = lasagna.config.paths.export(row['file_well'] + '.pkl')
+    df_.to_pickle(save_name)
 
 
 def apply_watermark(arr, func, trail=3, **kwargs):

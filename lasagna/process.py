@@ -27,7 +27,7 @@ def region_fields(region):
     return {'area': region.area,
             'centroid': region.centroid,
             'bounds': region.bbox,
-            'label': np.median(region.intensity_image),
+            'label': np.median(region.intensity_image[region.intensity_image > 0]),
             'mask': io.compress_obj(region.image)}
 
 
