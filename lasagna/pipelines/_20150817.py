@@ -123,7 +123,7 @@ def table_from_nuclei(row, index_names, round_=0, nuclei_dilation=5):
     """
     data = lasagna.io.read_stack(lasagna.config.paths.full(row['aligned']))
     data = data[round_]
-    df_ = lasagna.process.table_from_nuclei(pd.DataFrame(row), index_names, data=data,
+    df_ = lasagna.process.table_from_nuclei(row, index_names, data=data,
                                             channels=channels, nuclei_dilation=nuclei_dilation)
     save_name = row['file_well'] + '.pkl'
     df_.to_pickle(lasagna.config.paths.export(save_name))
