@@ -117,7 +117,7 @@ def find_nuclei(row, block_size, source='aligned'):
     lasagna.io.save_hyperstack(lasagna.config.paths.full(row['nuclei']), nuclei)
 
 
-def table_from_nuclei(row, index_names, save_name=None, round_=0,
+def table_from_nuclei(row, index_names, save_name=None, round_=1,
                       nuclei_dilation=None):
     """Build nuclei table from
     :param df:
@@ -125,8 +125,13 @@ def table_from_nuclei(row, index_names, save_name=None, round_=0,
     """
 
     data = lasagna.io.read_stack(lasagna.config.paths.full(row['aligned']))
-    data = data[round_]
-    row['round'] = round_
+    data = data[round_ - 1]
+
+    # update row name to correspond to round being analyzed
+    x = list(row.name)
+    x[index_names.index('round')] = round_
+    row.name = x
+
     df_ = lasagna.process.table_from_nuclei(row, index_names, data=data,
                                             channels=channels, nuclei_dilation=nuclei_dilation)
     if save_name is None:
