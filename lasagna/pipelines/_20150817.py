@@ -126,6 +126,7 @@ def table_from_nuclei(row, index_names, save_name=None, round_=0,
 
     data = lasagna.io.read_stack(lasagna.config.paths.full(row['aligned']))
     data = data[round_]
+    row['round'] = round_
     df_ = lasagna.process.table_from_nuclei(row, index_names, data=data,
                                             channels=channels, nuclei_dilation=nuclei_dilation)
     if save_name is None:
