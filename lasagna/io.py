@@ -335,7 +335,7 @@ default_file_pattern = '(data)/((([0-9]*X).*round([0-9]))*.*)/(((.*_([A-Z][0-9])
 default_file_groups = 'data', 'set', '', 'mag', 'round', 'file', 'file_well_site', 'file_well',  'well', 'site'
 default_path_formula = {'raw': '[data]/[set]/[file]',
                         'calibrated': '[data]/[set]/[file_well_site].calibrated.tif',
-                        'stitched': '[data]/[set]/[file_well_site].stitched.tif',
+                        'stitched': '[data]/[set]/[file_well].stitched.tif',
                         'aligned': '[data]/aligned/[set]/[file_well].aligned.tif',
                         'nuclei': '[data]/aligned/[set]/[file_well].aligned.nuclei.tif',
                         }
@@ -413,9 +413,9 @@ class Paths(object):
          'calibrated': '[data]/[set]/[file_well_site].calibrated.tif'
          ==> data/set/set_A1-Site1.calibrated.tif
 
-        :return:
         """
 
+        # one dict per raw data file, keys are regex groups and patterns after substitution
         d = []
         for f in self.datafiles:
             m = re.match(file_pattern, self.relative(f))
