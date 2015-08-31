@@ -65,56 +65,54 @@ def regionprops(*args, **kwargs):
     return regions
 
 
-def table_from_nuclei(file_table, source='stitch', nuclei='nuclei', channels=None,
-                      features=None, nuclei_dilation=None):
+def table_from_nuclei(row, index_names, source='aligned', nuclei='nuclei', channels=None,
+                      features=None, nuclei_dilation=None, data=None):
     """
-    :param file_table:
+    :param row:
     :param source:
     :param nuclei:
     :param channels:
     :param features:
     :param nuclei_dilation: structuring element by which to dilate nuclei image
+    :param data: [channels, height, width] from which channel data is drawn, otherwise loaded from source
     :return:
     """
     # prefix to channel-specific features
     channels = ['channel' + str(i) for i in range(100)] if channels is None else channels
     features = default_features if features is None else features
 
-    dataframes = []
-    for ix, row in file_table.iterrows():
 
-        print 'processing:', row[source]
-        # load nuclei file
-        segmented = io.read_stack(config.paths.full(row[nuclei]))
-        if nuclei_dilation is not None:
-            segmented = skimage.morphology.dilation(segmented, nuclei_dilation)
+    # load nuclei file, data
+    segmented = io.read_stack(config.paths.full(row[nuclei]))
+    if data is None:
         data = io.read_stack(config.paths.full(row[source]))
 
-        info = [region_fields(r) for r in regionprops(segmented, intensity_image=segmented)]
-        df = pd.DataFrame(info, index=[list(x) for x in zip(*[list(ix)] * len(info))])
-        df['file'] = row[source]
-        df['hash'] = [uuid.uuid4().hex for _ in range(df.shape[0])]
+    if nuclei_dilation is not None:
+        segmented = skimage.morphology.dilation(segmented, nuclei_dilation)
 
-        df.columns = pd.MultiIndex(labels=zip(*[[0, i] for i in range(len(df.columns))]),
-                                   levels=[['all'], df.columns],
-                                   names=['channel', 'feature'])
 
-        # add channel-specific features
-        if data.ndim == 2:
-            data = data[np.newaxis, :, :]
 
-        for channel, image in zip(channels, data):
-            channel_regions = regionprops(segmented, intensity_image=image)
-            for name, fcn in features.items():
-                df[channel, name] = [fcn(r) for r in channel_regions]
+    info = [region_fields(r) for r in regionprops(segmented, intensity_image=segmented)]
+    df = pd.DataFrame(info, index=[list(x) for x in zip(*[list(row.name)] * len(info))])
+    df['file'] = row[source]
+    df['hash'] = [uuid.uuid4().hex for _ in range(df.shape[0])]
 
-        df.index.names = file_table.index.names
-        df = df.set_index(('all', 'label'), append=True)
-        df.index.set_names('label', level=[('all', 'label')], inplace=True)
+    df.columns = pd.MultiIndex(labels=zip(*[[0, i] for i in range(len(df.columns))]),
+                               levels=[['all'], df.columns],
+                               names=['channel', 'feature'])
 
-        dataframes.append(df)
+    # add channel-specific features
+    if data.ndim == 2:
+        data = data[np.newaxis, :, :]
 
-    df = pd.concat(dataframes)
+    for channel, image in zip(channels, data):
+        channel_regions = regionprops(segmented, intensity_image=image)
+        for name, fcn in features.items():
+            df[channel, name] = [fcn(r) for r in channel_regions]
+
+    df.index.names = index_names
+    df = df.set_index(('all', 'label'), append=True)
+    df.index.set_names('label', level=[('all', 'label')], inplace=True)
 
     return df
 
