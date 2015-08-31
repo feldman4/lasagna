@@ -86,7 +86,7 @@ def align(files, save_name, n=500, trim=150):
     :param trim: # of pixels to trim in from each size
     :return:
     """
-    import os
+    import os  # mysteriously not imported by dview.execute
     if not os.path.isfile(save_name):
         save_name = lasagna.config.paths.full(save_name)
 
