@@ -8,24 +8,25 @@ from glob import glob
 
 # C
 channel_luts = (('Grays', (400, 8000)),)
-channel_luts = (('Blue', (600, 2000)), 
-				('Green', (800,3500)),
-				('Red', (800,3500)),
+channel_luts = (('Blue', (600, 2000)),
+                ('Green', (800, 3500)),
+                ('Red', (800, 3500)),
                 ('Magenta', (800, 3500)))
-#channel_luts = (('Blue', (400, 60000)),
+# channel_luts = (('Blue', (400, 60000)),
 #				('Green', (400, 1200)))
-                
+
 channels = len(channel_luts)
 slices = 1  # Z
 frames = 1;  # T
 # 40X
-tiles, overlap = (5, 5), int(100*(1. - 300./350))
+tiles = (5, 5)
+overlap = int(100 * (1. - 300. / 350))
 # 4X
 # tiles, overlap = (3, 3), int(100*(1. - 1800./3379))
 print tiles, overlap
 nuclei_singleton = False
 
-if False:
+if True:
     filesep = '/'
     home_dir = '/broad/blainey_lab/David/lasagna/20150817 6 round/analysis/calibrated/raw/'
 else:
@@ -33,13 +34,12 @@ else:
     # home_dir = '\\\\neon-cifs\\blainey_lab\\David\\lasagna\\20150817 6 round\\analysis\\calibrated\\raw\\'
     filesep = '\\'
 
-
-data_dirs = ['40X_round4_1']
+data_dirs = ['40X_round3_1']
 
 
 def savename(well, data_dir):
     # TODO better naming convention, use Site_0?
-    return home_dir + data_dir + '_stitch_' + well + '-Site_0.tif'
+    return home_dir + data_dir + well + 'stitched.tif'
 
 
 def stitch_cmd(grid_size, overlap, directory, file_pattern):
@@ -60,8 +60,8 @@ wells = [r + c for r in rows for c in columns]
 
 for data_dir in data_dirs:
     print home_dir + data_dir + filesep + '*.tif'
-    files = glob(home_dir + data_dir + filesep + '*.tif')
-#    print files
+    files = glob(home_dir + data_dir + filesep + '*.calibrated.tif')
+    #    print files
     this_wells = [w for w in wells if any(w in x for x in files)]
     print 'wells to stitch:', this_wells
     for well in this_wells:
@@ -74,15 +74,14 @@ for data_dir in data_dirs:
             print channels, slices, frames
             IJ.run("Stack to Hyperstack...",
                    "order=xyzct channels=%d slices=%d frames=%d display=Composite" % (channels, slices, frames));
- 
 
         ip = IJ.getImage()
         for i, (color, display_range) in enumerate(channel_luts):
             ip.setC(i + 1)
             ip.setDisplayRange(*display_range)
             IJ.run(color)
-        
-#        ij.io.FileSaver(ip).saveAsTiff(savename(well, data_dir))
+
+        #        ij.io.FileSaver(ip).saveAsTiff(savename(well, data_dir))
         IJ.saveAs("Tiff", savename(well, data_dir))
         IJ.run("Close All")
 

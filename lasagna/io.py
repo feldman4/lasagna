@@ -337,6 +337,7 @@ default_path_formula = {'raw': '[data]/[set]/[file]',
                         'calibrated': '[data]/[set]/[file_well_site].calibrated.tif',
                         'stitched': '[data]/[set]/[file_well].stitched.tif',
                         'aligned': '[data]/aligned/[set]/[well].aligned.tif',
+                        'aligned_FFT': '[data]/aligned/[set]/[well].aligned.FFT.tif',
                         'nuclei': '[data]/aligned/[set]/[well].aligned.nuclei.tif',
                         }
 default_table_index = {'mag': str,
