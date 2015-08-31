@@ -5,6 +5,7 @@ import lasagna.utils
 import copy
 import numpy as np
 import skimage.transform
+import os
 
 display_ranges = ((500, 20000),
                   (500, 3500),
@@ -85,7 +86,7 @@ def align(files, save_name, n=500, trim=150):
     :param trim: # of pixels to trim in from each size
     :return:
     """
-    data = [lasagna.io.read_stack(f) for f in files]
+    data = [lasagna.io.read_stack(lasagna.config.paths.full(f)) for f in files]
     data = lasagna.io.compose_stacks(data)
 
     offsets, transforms = lasagna.process.get_corner_offsets(data[:, 0], n=n)
@@ -94,6 +95,8 @@ def align(files, save_name, n=500, trim=150):
             data[i, j] = skimage.transform.warp(data[i, j], transform.inverse, preserve_range=True)
 
     data = data[:, :, trim:-trim, trim:-trim]
+    if not os.path.isfile(save_name):
+        save_name = lasagna.config.paths.full(save_name)
     lasagna.io.save_hyperstack(save_name, data)
 
 
