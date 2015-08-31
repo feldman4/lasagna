@@ -28,7 +28,7 @@ nuclei_singleton = False
 
 if True:
     filesep = '/'
-    home_dir = '/broad/blainey_lab/David/lasagna/20150817 6 round/analysis/calibrated/raw/'
+    home_dir = '/broad/blainey_lab/David/lasagna/20150817 6 round/data/'
 else:
     home_dir = 'D:\\User Folders\\David\\lasagna\\20150817\\to_stitch\\'
     # home_dir = '\\\\neon-cifs\\blainey_lab\\David\\lasagna\\20150817 6 round\\analysis\\calibrated\\raw\\'
