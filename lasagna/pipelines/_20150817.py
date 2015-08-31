@@ -118,11 +118,12 @@ def find_nuclei(row, block_size, source='aligned'):
 
 
 def table_from_nuclei(row, index_names, save_name=None, round_=0,
-                      nuclei_dilation=skimage.morphology.disk(5)):
+                      nuclei_dilation=None):
     """Build nuclei table from
     :param df:
     :return:
     """
+
     data = lasagna.io.read_stack(lasagna.config.paths.full(row['aligned']))
     data = data[round_]
     df_ = lasagna.process.table_from_nuclei(row, index_names, data=data,
