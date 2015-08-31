@@ -47,14 +47,14 @@ def stitch_cmd(grid_size, overlap, directory, file_pattern):
     grid_size_x=%d grid_size_y=%d tile_overlap=%d first_file_index_i=0 directory=[%s]
     file_names=%s output_textfile_name=TileConfiguration.txt fusion_method=[Linear Blending]
     regression_threshold=0.30 max/avg_displacement_threshold=2.50
-    absolute_displacement_threshold=3.50 compute_overlap  
+    absolute_displacement_threshold=3.50 compute_overlap subpixel_accuracy
     computation_parameters=[Save computation time (but use more RAM)]
     image_output=[Fuse and display]"""
     return s % (grid_size[0], grid_size[1], overlap, directory, file_pattern)
 
 
-rows = 'DEFGH'
-columns = '12345678'
+rows = 'ABCDEFGH'
+columns = '123456789'
 
 wells = [r + c for r in rows for c in columns]
 
