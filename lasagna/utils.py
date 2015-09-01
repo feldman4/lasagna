@@ -161,8 +161,10 @@ def plot_image_overlay(image0, image1, offset, ax=None):
     from matplotlib import cm
 
     sz0, sz1 = image0.shape, image1.shape
+    # (x0, x1, y0, y1); flip y by convention
     extent = (0 + offset[1], sz1[1] + offset[1],
-              sz1[0] + offset[0], 0 + offset[0])
+                sz1[0] + offset[0], 0 + offset[0])
+    print extent, sz1
     if ax is None:
         fig, ax = plt.subplots(figsize=(10, 10))
     ax.imshow(image0, cmap=cm.Blues, alpha=0.5)

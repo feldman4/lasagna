@@ -59,7 +59,7 @@ columns = '123456789'
 wells = [r + c for r in rows for c in columns]
 
 for data_dir in data_dirs:
-    print home_dir + data_dir + filesep + '*.tif'
+    print home_dir + data_dir + filesep + '*.calibrated.tif'
     files = glob(home_dir + data_dir + filesep + '*.calibrated.tif')
     #    print files
     this_wells = [w for w in wells if any(w in x for x in files)]

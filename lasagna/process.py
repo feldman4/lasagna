@@ -90,8 +90,6 @@ def table_from_nuclei(row, index_names, source='aligned', nuclei='nuclei', chann
     if nuclei_dilation is not None:
         segmented = skimage.morphology.dilation(segmented, nuclei_dilation)
 
-
-
     info = [region_fields(r) for r in regionprops(segmented, intensity_image=segmented)]
     df = pd.DataFrame(info, index=[list(x) for x in zip(*[list(row.name)] * len(info))])
     df['file'] = row[source]
@@ -117,11 +115,12 @@ def table_from_nuclei(row, index_names, source='aligned', nuclei='nuclei', chann
     return df
 
 
-def register_images(images, index=None, window=(500, 500)):
+def register_images(images, index=None, window=(500, 500), upsample=1.):
     """Register a series of image stacks to pixel accuracy.
     :param images: list of N-dim image arrays, height and width may differ
     :param index: image[index] should yield 2D array with which to perform alignment
     :param window: centered window in which to perform registration, smaller is faster
+    :param upsample: align to sub-pixels of width 1/upsample
     :return list[(int)]: list of offsets
     """
     if index is None:
@@ -130,7 +129,7 @@ def register_images(images, index=None, window=(500, 500)):
     sz = [image[index].shape for image in images]
     sz = np.array([max(x) for x in zip(*sz)])
 
-    origin = np.array(images[0].shape) * 0
+    origin = np.array(images[0].shape) * 0.
 
     center = tuple([slice(s / 2 - min(s / 2, rw), s / 2 + min(s / 2, rw))
                     for s, rw in zip(sz, window)])
@@ -138,15 +137,15 @@ def register_images(images, index=None, window=(500, 500)):
     def pad(img):
         pad_width = [(s / 2, s - s / 2) for s in (sz - img.shape)]
         img = np.pad(img, pad_width, 'constant')
-        return img[center], [x[0] for x in pad_width]
+        return img[center], np.array([x[0] for x in pad_width]).astype(float)
 
     image0, pad_width = pad(images[0][index])
     offsets = [origin.copy()]
     offsets[0][-2:] += pad_width
     for image in [x[index] for x in images[1:]]:
         padded, pad_width = pad(image)
-        shift, error, _ = register_translation(image0,
-                                               padded)
+        shift, error, _ = register_translation(image0, padded, upsample_factor=upsample)
+
         offsets += [origin.copy()]
         offsets[-1][-2:] = shift + pad_width  # automatically cast to uint64
 
@@ -435,22 +434,22 @@ class Calibration(object):
             ax.axis('off')
 
 
-def stitch_grid(arr, overlap):
-    """Returns offsets between neighbors, [row/column offset, row, column, row_i/col_i]
+def stitch_grid(arr, overlap, upsample=1):
+    """Returns offsets between neighbors, [down rows/across columns, row, column, row_i/col_i]
     :param arr: grid of identically-sized images to stitch, [row, column, height, width]
-    :param overlap: image overlap in [0, 1]
+    :param overlap: fraction of image overlapping in [0, 1]
     :return:
     """
     # find true offset, assume all same shape
-    overlap_dist = arr[0][0].shape[0] * overlap
+    overlap_dist = arr[0][0].shape[0] * (1 - overlap)
 
     def subset_array(offset):
         return [slice(None, o) if o < 0 else slice(o, None) for o in offset]
 
     offsets = []
 
-    offset_guesses = [np.array([0, overlap_dist]),
-                      np.array([overlap_dist, 0])]
+    offset_guesses = [np.array([0., overlap_dist]),
+                      np.array([overlap_dist, 0.])]
 
     for offset_guess, arr_ in zip(offset_guesses,
                                   [arr, np.transpose(arr, axes=[1, 0, 2, 3])]):
@@ -460,29 +459,31 @@ def stitch_grid(arr, overlap):
                 image0_ = a[subset_array(offset_guess)]
                 image1_ = b[subset_array(-offset_guess)]
                 shift = register_images([image0_, image1_],
-                                        window=(2000, 2000))[1]
+                                        window=(2000, 2000), upsample=upsample)[1]
                 offsets_ += [offset_guess + shift]
             offsets += [offsets_]
 
     cols = arr.shape[1] - 1
     offsets = np.array(offsets)
-    return np.array([offsets[:cols], offsets[cols:]])
+    return np.array([offsets[cols:], offsets[:cols]])
 
 
-def alpha_blend(arr, offset_matrix, clip=True, edge=0.95, edge_width=0.02):
-    """Blend grid of images, translating image coordinates according to offset matrix.
+def alpha_blend(arr, positions, clip=True, edge=0.95, edge_width=0.02):
+    """Blend array of images, translating image coordinates according to offset matrix.
     :param arr:
     :param grid:
     :param offset_matrix:
     :return:
     """
 
-    def make_coords(s):
-        return np.array([[x for x in range(s[0]) for _ in range(s[1])],
-                         [x % s[1] for x in range(s[0] * s[1])]])
-
     def make_alpha(s, edge=0.95, edge_width=0.02):
-        sigmoid = lambda r: 1 / (1 + np.exp(-r))
+        """Unity in center, drop-off near edge
+        :param s: shape
+        :param edge: mid-point of drop-off
+        :param edge_width: width of drop-off in exponential
+        :return:
+        """
+        sigmoid = lambda r: 1. / (1. + np.exp(-r))
 
         x, y = np.meshgrid(range(s[0]), range(s[1]))
         xy = np.concatenate([x[None, ...] - s[0] / 2,
@@ -491,31 +492,42 @@ def alpha_blend(arr, offset_matrix, clip=True, edge=0.95, edge_width=0.02):
 
         return sigmoid(-(R - s[0] * edge) / (s[0] * edge_width))
 
-    z = offset_matrix.dot(make_coords(arr.shape[:2]))
-    z -= z.min(axis=1)[:, None]
+    positions = np.array(positions)
+    # determine output shape, offset positions as necessary
 
-    shape = arr[0][0].shape
-    m = np.zeros(z.max(axis=1) + shape + 1)
-    c = np.zeros(m.shape)
+    positions -= positions.min(axis=0)
+    output_shape = np.ceil(positions.max(axis=0)[::-1]) + arr.shape[1:]
+    # output_shape = np.r_[output_shape, [2]]
 
-    alpha = make_alpha(shape, edge=edge, edge_width=edge_width)
+    alpha = 100 * make_alpha(arr.shape[1:], edge=edge, edge_width=edge_width)
 
-    for a, (z1, z2) in zip(arr.reshape(-1, *shape), z.T):
-        z1, z2 = round(z1), round(z2)
-        m[z1:z1 + shape[0], z2:z2 + shape[1]] += a * alpha
-        c[z1:z1 + shape[0], z2:z2 + shape[1]] += alpha
+    # store summed data and alpha layer in trailing channel dimension
+    output = np.zeros(np.r_[[2], output_shape], dtype=float)
+    reshape = lambda x: x.reshape(-1, *x.shape[1:])
+    for image, xy in zip(reshape(arr), reshape(positions)):
+        ST = skimage.transform.SimilarityTransform(translation=xy)
+        # to_warp = np.r_['2,3,0', image, alpha]
+        tmp = np.array([skimage.transform.warp(image, inverse_map=ST.inverse,
+                                              output_shape=output_shape,
+                                              preserve_range=True, mode='reflect'),
+                       skimage.transform.warp(alpha, inverse_map=ST.inverse,
+                                              output_shape=output_shape,
+                                              preserve_range=True, mode='constant')])
+        tmp[0, :, :] *= tmp[1, :, :]
+        output += tmp
 
-    n = m / c
+    output_alpha = output[1, :, :]
+    output = (output[0, :, :] / output[1, :, :])
 
     if clip:
         def edges(n):
             return np.r_[n[:4, :].flatten(), n[-4:, :].flatten(),
                          n[:, :4].flatten(), n[:, -4:].flatten()]
 
-        while np.isnan(edges(n)).any():
-            n = n[4:-4, 4:-4]
+        while np.isnan(edges(output)).any():
+            output = output[4:-4, 4:-4]
 
-    return n
+    return output.astype(arr.dtype)
 
 
 def compress_offsets(off):

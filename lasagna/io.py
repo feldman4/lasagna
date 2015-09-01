@@ -565,4 +565,12 @@ def load_lut(name):
     return [int(y) for x in zip(*values) for y in x]
 
 
+def load_tile_configuration(path):
+    with open(path, 'r') as fh:
+        tile_config = fh.read()
+    m = re.findall('\(.*\)', tile_config)
+    translations = [[float(x) for x in pos[1:-1].split(',')] for pos in m ]
+    return translations
+
+
 GLASBEY = load_lut('glasbey')
