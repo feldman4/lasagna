@@ -96,10 +96,13 @@ def stitch(df, translations=None, clip=True):
 
     # kluge for 3x3 vs 5x5 grids
     grid_size = int(np.sqrt(df.shape[0])) * np.array([1, 1])
-    tile_grid_size = int(np.sqrt(len(translations))) * np.array([1, 1])
+    if grid_size[0] == 3:
+        index = [0, 1, 2,
+                 5, 6, 7,
+                 10, 11, 12]
+        translations = [translations[i] for i in index]
 
-    files = np.array([f for f in df['calibrated']]).reshape(tile_grid_size)
-    files = files[:grid_size[0], :grid_size[1]]
+    files = np.array([f for f in df['calibrated']]).reshape(grid_size)
     data = np.array([[lasagna.io.read_stack(lasagna.config.paths.full(x)) for x in y] for y in files])
     arr = []
     for channel in range(data.shape[2]):
