@@ -99,7 +99,7 @@ def stitch(df, translations=None, clip=True):
     grid_size = int(np.sqrt(len(translations))) * np.array([1, 1])
 
     files = np.array([f for f in df['calibrated']]).reshape(*grid_size)
-    data = np.array([[lasagna.io.read_stack(x) for x in y] for y in files])
+    data = np.array([[lasagna.io.read_stack(lasagna.config.paths.full(x)) for x in y] for y in files])
     arr = []
     for channel in range(data.shape[2]):
         arr += [lasagna.process.alpha_blend(data[:, :, channel].reshape(-1, *data.shape[-2:]),
