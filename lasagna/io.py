@@ -566,6 +566,11 @@ def load_lut(name):
 
 
 def load_tile_configuration(path):
+    """Reads output of Fiji Grid/Collection stitching (TileConfiguration.registered.txt),
+    returns list of tile coordinates.
+    :param path:
+    :return:
+    """
     with open(path, 'r') as fh:
         tile_config = fh.read()
     m = re.findall('\(.*\)', tile_config)

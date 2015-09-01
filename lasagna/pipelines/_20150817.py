@@ -17,7 +17,7 @@ display_ranges = ((500, 20000),
 dataset = '20150817 6 round'
 
 pipeline = None
-
+tile_configuration = 'calibration/TileConfiguration.registered.txt'
 channels = 'DAPI', 'Cy3', 'A594', 'Atto647'
 
 luts = lasagna.io.DEFAULT_LUTS
@@ -42,6 +42,8 @@ def setup():
     c = copy.deepcopy(lasagna.config.calibration)
     c.calibration = None
     lasagna.config.calibration_short = c
+    global tile_configuration
+    tile_configuration = lasagna.config.paths.full(tile_configuration)
 
 
 def initialize_engines(client):
@@ -76,7 +78,36 @@ def calibrate(row):
     raw_data = np.array([lasagna.config.calibration.fix_dead_pixels(frame) for frame in raw_data])
     fixed_data = np.array([lasagna.config.calibration.fix_illumination(frame, channel=channel)
                            for frame, channel in zip(raw_data, channels)])
-    lasagna.io.save_hyperstack(lasagna.config.paths.full(calibrated), fixed_data, luts=luts)
+    lasagna.io.save_hyperstack(lasagna.config.paths.full(calibrated), fixed_data,
+                               display_ranges=display_ranges, luts=luts)
+
+
+def stitch(df, translations=None, clip=True):
+    """Stitches images with alpha blending, provided Paths DataFrame with tile filenames in column
+    'calibrated' and TileConfiguration.registered.txt file (from GridCollection stitching) with location
+    stored in pipeline.tile_configuration. Alternately, provide list of translations (xy).
+    :param df:
+    :param translations: list of [x,y] offsets of tiles
+    :return:
+    """
+
+    if translations is None:
+        translations = lasagna.io.load_tile_configuration(tile_configuration)
+
+    if not (len(translations)) == df.shape[0]: raise IndexError('# of files must match # of tiles')
+
+    grid_size = int(np.sqrt(len(translations))) * np.array([1, 1])
+
+    files = np.array([f for f in df['calibrated']]).reshape(*grid_size)
+    data = np.array([[lasagna.io.read_stack(x) for x in y] for y in files])
+    arr = []
+    for channel in range(data.shape[2]):
+        arr += [lasagna.process.alpha_blend(data[:, :, channel].reshape(-1, *data.shape[-2:]),
+                                            translations, edge=0.48,
+                                            edge_width=0.01,
+                                            clip=clip)]
+    save_name = lasagna.config.paths.full(df['stitched'][0])
+    lasagna.io.save_hyperstack(save_name, np.array(arr), display_ranges=display_ranges, luts=luts)
 
 
 def align(files, save_name, n=500, trim=150):
@@ -112,7 +143,7 @@ def find_nuclei(row, block_size, source='aligned'):
     :return:
     """
     data = lasagna.io.read_stack(lasagna.config.paths.full(row[source]))
-    s = [0]*(data.ndim - 2) + [slice(None)]*2
+    s = [0] * (data.ndim - 2) + [slice(None)] * 2
     nuclei = lasagna.process.get_nuclei(data[s], block_size=block_size)
     lasagna.io.save_hyperstack(lasagna.config.paths.full(row['nuclei']), nuclei)
 
@@ -164,7 +195,7 @@ def apply_watermark(arr, func, trail=3, **kwargs):
 ###################
 # NOT IN USE, needs sub-pixel alignment, better blending, individual offsets instead of mean
 ###################
-def stitch(df, offsets=None, overlap=925. / 1024):
+def _stitch(df, offsets=None, overlap=925. / 1024):
     """Stitch calibrated images into square grid. Calculate offsets using lasagna.process.stitch_grid
     unless provided.
     :param df:
