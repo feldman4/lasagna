@@ -94,11 +94,12 @@ def stitch(df, translations=None, clip=True):
     if translations is None:
         translations = lasagna.io.load_tile_configuration(tile_configuration)
 
-    if not (len(translations)) == df.shape[0]: raise IndexError('# of files must match # of tiles')
+    # kluge for 3x3 vs 5x5 grids
+    grid_size = int(np.sqrt(df.shape[0])) * np.array([1, 1])
+    tile_grid_size = int(np.sqrt(len(translations))) * np.array([1, 1])
 
-    grid_size = int(np.sqrt(len(translations))) * np.array([1, 1])
-
-    files = np.array([f for f in df['calibrated']]).reshape(*grid_size)
+    files = np.array([f for f in df['calibrated']]).reshape(tile_grid_size)
+    files = files[:grid_size[0], :grid_size[1]]
     data = np.array([[lasagna.io.read_stack(lasagna.config.paths.full(x)) for x in y] for y in files])
     arr = []
     for channel in range(data.shape[2]):
