@@ -22,13 +22,18 @@ import lasagna.utils
 
 DOWNSAMPLE = 2
 
+default_features = {'mean': lambda region: region.intensity_image.mean(),
+                    'median': lambda region: np.median(region.intensity_image),
+                    'max': lambda region: region.intensity_image.max()
+                    }
 
-def region_fields(region):
-    return {'area': region.area,
-            'centroid': region.centroid,
-            'bounds': region.bbox,
-            'label': np.median(region.intensity_image[region.intensity_image > 0]),
-            'mask': io.compress_obj(region.image)}
+default_nucleus_features = {
+    'area': lambda region: region.area,
+    'centroid': lambda region: region.centroid,
+    'bounds': lambda region: region.bbox,
+    'label': lambda region: np.median(region.intensity_image[region.intensity_image > 0]),
+    'mask': lambda region: io.compress_obj(region.image)
+}
 
 
 def binary_contours(img):
@@ -66,21 +71,23 @@ def regionprops(*args, **kwargs):
 
 
 def table_from_nuclei(row, index_names, source='aligned', nuclei='nuclei', channels=None,
-                      features=None, nuclei_dilation=None, data=None):
-    """
-    :param row:
-    :param source:
-    :param nuclei:
-    :param channels:
-    :param features:
-    :param nuclei_dilation: structuring element by which to dilate nuclei image
+                      features=default_features, nucleus_features=default_nucleus_features,
+                      nuclei_dilation=None, data=None):
+    """Build Cells DataFrame from Paths DataFrame, list of features, calibrated aligned data, and image with
+    segmented nuclei.
+
+    :param row: from Paths DataFrame, containing filenames in source and nuclei columns
+    :param source: column with filename of data file, [channels, height, width]
+    :param nuclei: column with filename of segmented nuclei, [height, width]
+    :param channels: names of channels, used to name first column index level
+    :param features: dict of functions accepting regionprops region as argument, key used to name
+    second column index level
+    :param nuclei_dilation: structuring element by which to dilate nuclei image before calling regionprops
     :param data: [channels, height, width] from which channel data is drawn, otherwise loaded from source
     :return:
     """
     # prefix to channel-specific features
     channels = ['channel' + str(i) for i in range(100)] if channels is None else channels
-    features = default_features if features is None else features
-
 
     # load nuclei file, data
     segmented = io.read_stack(config.paths.full(row[nuclei]))
@@ -90,7 +97,10 @@ def table_from_nuclei(row, index_names, source='aligned', nuclei='nuclei', chann
     if nuclei_dilation is not None:
         segmented = skimage.morphology.dilation(segmented, nuclei_dilation)
 
-    info = [region_fields(r) for r in regionprops(segmented, intensity_image=segmented)]
+    info = []
+    for region in regionprops(segmented, intensity_image=segmented):
+        info += [{k: v(region) for k, v in nucleus_features.items()}]
+
     df = pd.DataFrame(info, index=[list(x) for x in zip(*[list(row.name)] * len(info))])
     df['file'] = row[source]
     df['hash'] = [uuid.uuid4().hex for _ in range(df.shape[0])]
@@ -263,11 +273,6 @@ def fourier_then_blob(region, pad_width=5, threshold=50):
 
     return I_filt.max()
 
-
-default_features = {'mean': lambda region: region.intensity_image.mean(),
-                    'median': lambda region: np.median(region.intensity_image),
-                    'max': lambda region: region.intensity_image.max()
-                    }
 
 spectral_order = ['empty', 'Atto488', 'Cy3', 'A594', 'Cy5', 'Atto647']
 spectral_luts = {'empty': io.GRAY,
@@ -508,11 +513,11 @@ def alpha_blend(arr, positions, clip=True, edge=0.95, edge_width=0.02):
         ST = skimage.transform.SimilarityTransform(translation=xy)
         # to_warp = np.r_['2,3,0', image, alpha]
         tmp = np.array([skimage.transform.warp(image, inverse_map=ST.inverse,
-                                              output_shape=output_shape,
-                                              preserve_range=True, mode='reflect'),
-                       skimage.transform.warp(alpha, inverse_map=ST.inverse,
-                                              output_shape=output_shape,
-                                              preserve_range=True, mode='constant')])
+                                               output_shape=output_shape,
+                                               preserve_range=True, mode='reflect'),
+                        skimage.transform.warp(alpha, inverse_map=ST.inverse,
+                                               output_shape=output_shape,
+                                               preserve_range=True, mode='constant')])
         tmp[0, :, :] *= tmp[1, :, :]
         output += tmp
 

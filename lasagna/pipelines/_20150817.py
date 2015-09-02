@@ -19,7 +19,6 @@ dataset = '20150817 6 round'
 pipeline = None
 tile_configuration = 'calibration/TileConfiguration.registered.txt'
 channels = 'DAPI', 'Cy3', 'A594', 'Atto647'
-
 luts = lasagna.io.DEFAULT_LUTS
 
 filters = lasagna.utils.Filter2DReal(lasagna.process.double_gaussian(10, 1)),
@@ -30,7 +29,7 @@ def setup():
     to be synced to remote engines.
     :return:
     """
-    lasagna.config.paths = lasagna.io.Paths(dataset)
+    lasagna.config.paths = lasagna.io.Paths(dataset, lasagna_path=lasagna.config.home)
     for condition in ('strip', 'hyb'):
         lasagna.config.paths.table[condition] = [
             condition in name for name in lasagna.config.paths.table.index.get_level_values('set')]
@@ -152,12 +151,15 @@ def find_nuclei(row, block_size, source='aligned'):
     lasagna.io.save_hyperstack(lasagna.config.paths.full(row['nuclei']), nuclei)
 
 
-def table_from_nuclei(row, index_names, save_name=None, round_=1,
+def table_from_nuclei(row, index_names=None, save_name=None, round_=1,
                       nuclei_dilation=None):
-    """Build nuclei table from
-    :param df:
+    """Build nuclei table from segmented nuclei files. Separate entry for each round, labels not preserved.
+    :param row: row from Paths DataFrame
+    :param index_names: name of levels in row MultiIndex (row from DataFrame saves level values but not names)
     :return:
     """
+    if index_names is None:
+        index_names = lasagna.config.paths.table.index.names
 
     data = lasagna.io.read_stack(lasagna.config.paths.full(row['aligned']))
     data = data[round_ - 1]
@@ -172,6 +174,15 @@ def table_from_nuclei(row, index_names, save_name=None, round_=1,
     if save_name is None:
         save_name = lasagna.config.paths.export(row['file_well'] + '.pkl')
     df_.to_pickle(save_name)
+
+
+def match_nuclei_table(table , area_fraction=0.9):
+    """Match nuclei between rounds based on overlap of segmented regions.
+    :param area_fraction: minimum required overlap, defined as # shared pixels/max(# of pixels)
+    :return:
+    """
+
+    pass
 
 
 def apply_watermark(arr, func, trail=3, **kwargs):

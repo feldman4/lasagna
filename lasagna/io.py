@@ -285,7 +285,8 @@ def get_magnification(s):
 
 
 def b_idx(row, padding=None):
-    """For a given DataFrame row, get slice index to cell in original data. Assumes 4D data.
+    """For a given DataFrame row, get slice index to cell in original data. Assumes bounds constrain
+    trailing two dimensions, keeps remainder [..., height, width].
     :param row:
     :return:
     """
