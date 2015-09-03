@@ -15,8 +15,8 @@ class Memoized(object):
     def __call__(self, *args, **kwargs):
         key = str(args) + str(kwargs)
         try:
-            if type(self.cache[key]) == np.ndarray:
-                return self.cache[key].copy()
+            # if type(self.cache[key]) == np.ndarray:
+#                 return self.cache[key].copy()
             return self.cache[key]
         except KeyError:
             value = self.func(*args, **kwargs)

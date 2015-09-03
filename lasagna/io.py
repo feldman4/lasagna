@@ -163,6 +163,7 @@ def _get_stack(name):
     return data
 
 
+# TODO fix extension of luts and display_ranges when not provided
 def save_hyperstack(name, data, autocast=True, resolution=None,
                     luts=None, display_ranges=None, compress=0,
                     auto_make_dir=True):
@@ -333,7 +334,7 @@ default_dirs = {'raw': 'raw',
                 'export': 'export'}
 
 default_file_pattern = '(data)/((([0-9]*X).*round([0-9]))*.*)/(((.*_([A-Z][0-9]))-Site_([0-9]*)).ome.tif)'
-default_file_groups = 'data', 'set', '', 'mag', 'round', 'file', 'file_well_site', 'file_well',  'well', 'site'
+default_file_groups = 'data', 'set', '', 'mag', 'round', 'file', 'file_well_site', 'file_well', 'well', 'site'
 default_path_formula = {'raw': '[data]/[set]/[file]',
                         'calibrated': '[data]/[set]/[file_well_site].calibrated.tif',
                         'stitched': '[data]/[set]/[file_well].stitched.tif',
@@ -496,7 +497,7 @@ def watermark(shape, text, spacing=1, corner='top left'):
 
 
 def bitmap_text(text, spacing=1):
-    if type(text) is str:
+    if type(text) in (str, np.string_):
         text = [text]
 
     def get_text(s):
@@ -521,7 +522,26 @@ def bitmap_text(text, spacing=1):
     return full_text
 
 
-def mark_features(shape, features, type='box'):
+def mark_text(arr, text, inplace=False, value=255, **kwargs):
+    """ arr[...,channels,height,width]
+    if inplace=True, add text to last channel; otherwise insert into new channel
+    """
+    if not inplace:
+        frames = np.zeros(arr.shape[:-3] + (1,) + arr.shape[-2:], dtype=arr.dtype)
+    for index in np.ndindex(arr.shape[:-3]):
+        frame = watermark(arr[index][-1].shape, text[index], **kwargs)
+        if inplace:
+            arr[index][-1] += frame * value
+        else:
+            frames[index][-1] = frame * value
+    if not inplace:
+        return np.concatenate([arr, frames], axis=-3)
+    return arr
+
+
+def mark_disk(shape, features, type='box'):
+    """ features contains [i, j, diameter]
+    """
     disk_size = 31
     disks = [np.pad(skimage.morphology.square(i, dtype=np.uint16), disk_size / 2 - i / 2, mode='constant')
              for i in range(1, disk_size / 2, 2)]
@@ -542,7 +562,7 @@ def mark_blobs(row, n):
     for channel, blobs in row.loc[:, 'blob'].iteritems():
         if channel != 'DAPI':
             i = channels.index(channel)
-            im += mark_features(im.shape, blobs) * 2 ** i
+            im += mark_disk(im.shape, blobs) * 2 ** i
     return im
 
 
@@ -575,7 +595,7 @@ def load_tile_configuration(path):
     with open(path, 'r') as fh:
         tile_config = fh.read()
     m = re.findall('\(.*\)', tile_config)
-    translations = [[float(x) for x in pos[1:-1].split(',')] for pos in m ]
+    translations = [[float(x) for x in pos[1:-1].split(',')] for pos in m]
     return translations
 
 

@@ -156,6 +156,7 @@ def table_from_nuclei(row, index_names=None, save_name=None, round_=1,
     """Build nuclei table from segmented nuclei files. Separate entry for each round, labels not preserved.
     :param row: row from Paths DataFrame
     :param index_names: name of levels in row MultiIndex (row from DataFrame saves level values but not names)
+    :param round_: number of round, one-indexed
     :return:
     """
     if index_names is None:
@@ -172,7 +173,7 @@ def table_from_nuclei(row, index_names=None, save_name=None, round_=1,
     df_ = lasagna.process.table_from_nuclei(row, index_names, data=data,
                                             channels=channels, nuclei_dilation=nuclei_dilation)
     if save_name is None:
-        save_name = lasagna.config.paths.export(row['file_well'] + '.pkl')
+        save_name = lasagna.config.paths.export(row['file_well'] + '.' + str(round_) + '.pkl')
     df_.to_pickle(save_name)
 
 
