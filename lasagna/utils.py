@@ -1,5 +1,6 @@
 import functools
 import numpy as np
+import pandas as pd
 
 
 class Memoized(object):
@@ -203,3 +204,21 @@ def _get_corners(n):
                (a, c, c),
                (a, c, b))
     return corners
+
+
+def standardize(x):
+    # only standardize numeric columns
+    numerics = (np.float64, np.int64)
+    filt = [d[0] for d in x.dtypes.iteritems() if d[1] in numerics]
+    return (x[filt] - x[filt].mean())/ x[filt].std()
+
+
+def show_grid(z, force_fit=False):
+    import qgrid
+    qgrid.set_defaults(remote_js=True, precision=4)
+
+    new = pd.DataFrame()
+    for x in z.columns:
+        new[' '.join(x)] = z[x]
+    return qgrid.show_grid(new, grid_options={'forceFitColumns': force_fit, 'defaultColumnWidth': 120})
+

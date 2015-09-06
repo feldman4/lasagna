@@ -80,6 +80,7 @@ def get_row_stack(row, full=False, nuclei=False, apply_offset=False, pad=(0, 0))
     :param full:
     :param nuclei:
     :param apply_offset:
+    :param pad: (height, width), adds to both sides
     :return:
     """
     file_name = row[('all', 'file')]
