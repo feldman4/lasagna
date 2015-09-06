@@ -26,12 +26,12 @@ luts = lasagna.io.DEFAULT_LUTS
 filters = lasagna.utils.Filter2DReal(lasagna.process.double_gaussian(10, 1)),
 
 
-def setup():
+def setup(lasagna_path):
     """Construct Paths and Calibration objects for dataset. Copy a smaller version of Calibration object
     to be synced to remote engines.
     :return:
     """
-    lasagna.config.paths = lasagna.io.Paths(dataset, lasagna_path=lasagna.config.home)
+    lasagna.config.paths = lasagna.io.Paths(dataset, lasagna_path=lasagna_path)
     for condition in ('strip', 'hyb'):
         lasagna.config.paths.table[condition] = [
             condition in name for name in lasagna.config.paths.table.index.get_level_values('set')]
