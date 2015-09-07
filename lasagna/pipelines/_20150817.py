@@ -55,6 +55,7 @@ def initialize_engines(client):
     """
     dview = client[:]
     dview.execute('import numpy as np')
+    dview.execute('import pandas as pd')
     dview.execute('import lasagna.io')
     dview.execute('import lasagna.process')
     dview.execute('import lasagna.config')
