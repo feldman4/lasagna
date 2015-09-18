@@ -321,7 +321,7 @@ def load_conditions():
     barcodes = dyes[(dyes != '').all(axis=1)].drop_duplicates()
     bc = barcodes.set_index(pd.Index(range(barcodes.shape[0]), name='barcode'))
     bc = bc.stack('round')
-    bc = bc.reset_index().rename(columns={0:'channel'})
+    bc = bc.reset_index().rename(columns={0: 'channel'})
     bc['dummy'] = 1
     bc = bc.pivot_table(values='dummy',
                    index=['channel', 'round'],

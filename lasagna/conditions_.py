@@ -1,8 +1,12 @@
-import json, gspread
-import numpy as np
-from oauth2client.client import SignedJwtAssertionCredentials
+import json
 from itertools import product
 from collections import defaultdict, OrderedDict
+import regex as re
+
+import gspread
+import numpy as np
+from oauth2client.client import SignedJwtAssertionCredentials
+import pandas as pd
 
 CREDENTIALS_JSON = '/Users/feldman/Downloads/gspread-da2f80418147.json'
 
@@ -12,98 +16,227 @@ ROWS = 'ABCDEFGH'
 COLS = [str(x) for x in range(1,17)]
 
 
-def load_xsheet(worksheet, gfile='Lasagna FISH'):
-    # see http://gspread.readthedocs.org/en/latest/oauth2.html
-    json_key = json.load(open(CREDENTIALS_JSON))
-    scope = ['https://spreadsheets.google.com/feeds']
-    credentials = SignedJwtAssertionCredentials(json_key['client_email'], json_key['private_key'], scope)
-    gc = gspread.authorize(credentials)
-    xsheet = gc.open(gfile)
-
-    if type(worksheet) is int:
-        wks = xsheet.get_worksheet(worksheet)
-    else:
-        wks = xsheet.worksheet(worksheet)
-    xs_values = np.array(wks.get_all_values())
-    return xs_values
+def flatten_layout_row_col(x):
+    x = pd.DataFrame(x.stack())
+    index = [a + str(b) for a, b in x.index.values]
+    x.index = pd.Index(index, name='sample')
+    return x
 
 
-def load_sheet(worksheet, gfile='Lasagna FISH', grid_size=(6, 6),
-              find_conditions=True):
-    """Find conditions demarcated in grid format from local .xls or google sheet.
-    :param str worksheet: name of google sheet, can provide int index as well
-    :param str file: google sheet to search in
-    :param tuple grid_size: dimensions of sample layout (rows, columns)
-    :return (dict[str, tuple], dict[str, list], numpy.ndarray): (wells: dict of tuples, {well: condition},
-     conditions: OrderedDict, {variable_name: conditions},
-     cube: N-d array representing space of conditions, integer entries indicate number of replicates)
-    """
-    xs_values = load_xsheet(worksheet, gfile=gfile)
-    # pad edges with empty string
-    xs_values = np.pad(xs_values, ((0, 1), (0, 1)), mode='constant')
+class Experiment(object):
+    def __init__(self, worksheet=None, g_file='Lasagna FISH'):
+        """Represent independent variables and their values for each sample.
+        Load spreadsheet, extract independent variable dict and sample layout.
+        Optionally update independent variable dict (layout notation may not match ind. var.
+        list).
+        Construct DataFrame with samples as index, independent variables as columns.
+        Optionally restructure columns to indicate nested independent variables (e.g., probes
+        in each round).
+        Optionally pivot into binary DataFrame which can be expanded and reshaped into ndarray.
+        Optionally extract first and second order comparisons from either DataFrame (edit distance)
+        or ndarray (geometric, written earlier).
 
-    # find grids containing variable conditions
-    grids = find_grids(xs_values, grid_size)
+        To construct manually:
 
-    wells = defaultdict(list)
-    for (i, j) in product(range(grid_size[0]), range(grid_size[1])):
-        well = ROWS[i] + COLS[j]
-        for title, grid in grids.items():
-            val = xs_values[grid][i*grid_size[1] + j]
-            wells[well] += [val]
-            
-    
-    wells_ = {}
-    for well, values in wells.items():
-        # exclude fully empty wells
-        if all(x == '' for x in values):
-            continue
-            
-        tmp = []
-        for x in values:
-            try:
-                tmp += [float(x)]
-            except ValueError:
-                tmp += [np.nan]
-        wells.update({well: tmp})
-            
-    wells = {a: [float(x) for x in b] for a, b in wells.items()
-             if not all(x == '' for x in b)}
+        exp = Experiment()
+        exp.load_sheet(worksheet)
+        exp.parse_grids()
+        exp.parse_ind_vars()
+        # modify exp.ind_vars if keys don't match layout notation
+        exp.make_ind_vars_table()
 
-    # easy out for non-standard condition indexing
-    if not find_conditions:
-        return wells
-    
-    # get the named conditions for each variable
-    conditions = extract_conditions(xs_values, grids.keys())
+        :return:
+        """
 
-    cube = np.zeros([max(x) + 1 for x in zip(*wells.values())])
-    for coords in wells.values():
-        cube[tuple(coords)] += 1
+        self.grids = {}
+        self.ind_vars = {}
+        self.sheet = None
+        self.ind_vars_table = None
+        self.flatten_layout = flatten_layout_row_col
 
-    return wells, conditions, cube
+        if worksheet:
+            self.load_and_go(worksheet, g_file=g_file)
+
+    def load_and_go(self, worksheet, g_file='Lasagna FISH'):
+        """Shortcut to load sheet, parse sheet, and make independent variable table when
+        notation is sheet is sufficient.
+        :param worksheet:
+        :param g_file:
+        :return:
+        """
+        self.load_sheet(worksheet, g_file=g_file)
+        self.parse_grids()
+        self.parse_ind_vars()
+        return self.make_ind_vars_table()
 
 
-def find_grids(xs_values, grid_size, title_offset=(-1, 0), A_offset=(1, 0)):
-    """Look for first row labelled by ROW_INDICATOR, find origin and return boolean mask to values.
-    :param numpy.ndarray xs_values:
-    :param tuple grid_size:
-    :param tuple title_offset:
-    :param tuple A_offset:
-    :return: (dict, wells): ({title: mask}, {well_name:
-    :rtype : dict[str, numpy.nparray]
-    """
-    grids = OrderedDict()
-    for candidate in zip(*np.where(xs_values == ROW_INDICATOR)):
-        origin = np.array(candidate) - A_offset
-        grid = np.zeros(xs_values.shape, bool)
-        coords = tuple([slice(a + 1, a + b + 1) for a, b in zip(origin, grid_size)])
-        grid[coords] = True
+    def load_sheet(self, worksheet, g_file='Lasagna FISH'):
 
-        title = xs_values[tuple(origin + title_offset)]
-        grids[title] = grid
+        # see http://gspread.readthedocs.org/en/latest/oauth2.html
+        json_key = json.load(open(CREDENTIALS_JSON))
+        scope = ['https://spreadsheets.google.com/feeds']
+        credentials = SignedJwtAssertionCredentials(json_key['client_email'], json_key['private_key'], scope)
+        gc = gspread.authorize(credentials)
+        xsheet = gc.open(g_file)
 
-    return grids
+        if type(worksheet) is int:
+            wks = xsheet.get_worksheet(worksheet)
+        else:
+            wks = xsheet.worksheet(worksheet)
+        xs_values = np.array(wks.get_all_values())
+        self.sheet = xs_values
+
+    def parse_grids(self, title_offset=(-1, 0), A_offset=(1, 0)):
+        """Look for first row labelled by ROW_INDICATOR, find origin and return boolean mask to values.
+        :param numpy.ndarray xs_values:
+        :param tuple grid_size:
+        :param tuple title_offset:
+        :param tuple A_offset:
+        :return: (dict, wells): ({title: mask}, {well_name:
+        :rtype : dict[str, numpy.nparray]
+        """
+        xs_values = np.pad(self.sheet, ((0, 1), (0, 1)), mode='constant')
+
+        grids = OrderedDict()
+        for candidate in zip(*np.where(xs_values == ROW_INDICATOR)):
+            origin = np.array(candidate) - A_offset
+
+            columns = xs_values[origin[0], origin[1]+1:]
+            columns = columns[:list(columns).index('')]
+
+            rows = xs_values[origin[0] + 1:, origin[1]]
+            rows = rows[:list(rows).index('')]
+
+            shape = len(rows), len(columns)
+
+            values = xs_values[origin[0] + 1: origin[0] + 1 + shape[0],
+                               origin[1] + 1: origin[1] + 1 + shape[1]]
+
+            title = xs_values[tuple(origin + title_offset)]
+            grids[title] = pd.DataFrame(values, index=pd.Index(rows, name='row'),
+                                        columns=pd.Index(columns, name='column'))
+
+        self.grids.update(grids)
+        return grids
+
+    def parse_ind_vars(self):
+        """Define values of independent variables by parsing first example of form:
+        [var name]  [value 0]
+                    [value 1]
+                    ...
+                    [value n]
+                    [blank]
+                *or*
+        [text]
+        :return:
+        """
+        selem = np.array([[1, 0],
+                         [1, 1]])
+        xs_values = np.pad(self.sheet, ((0, 1), (0, 1)), mode='constant')
+
+        mask = (xs_values[:, :2] != '').astype(int)
+        mask[:, 1] *= 2
+        mask_string = ''.join(['ABCD'[i] for i in mask.sum(axis=1)])
+
+        ind_vars = {}
+        for x in re.finditer('(DC+)[ABD]', mask_string):
+            name = xs_values[x.span()[0], 0]
+            values = xs_values[x.span()[0]:x.span()[1] - 1, 1]
+            ind_vars[name] = list(values)
+
+        self.ind_vars.update(ind_vars)
+
+    def make_ind_vars_table(self):
+        """Create table with independent variables as columns, samples as rows,
+        and independent variable values as entries.
+        :return:
+        """
+
+        def apply_try(y):
+            def func(x):
+                try:
+                    x_ = float(x)
+                    if x_ % 1:
+                        return y[x_]
+                    return y[int(x_)]
+                except ValueError:
+                    return x
+            return func
+
+        arr = []
+        for ind_var, grid in self.grids.items():
+            values = self.ind_vars[ind_var]
+            grid = self.flatten_layout(grid)
+            grid.columns = [ind_var]
+            arr += [grid.applymap(apply_try(values))]
+
+        table = pd.concat(arr, axis=1).fillna('')
+        return table[(table != '').any(axis=1)]
+
+
+
+
+
+
+
+#
+#
+#
+#
+#
+#
+# def load_sheet(worksheet, gfile='Lasagna FISH', grid_size=(6, 6),
+#               find_conditions=True):
+#     """Find conditions demarcated in grid format from local .xls or google sheet.
+#     :param str worksheet: name of google sheet, can provide int index as well
+#     :param str file: google sheet to search in
+#     :param tuple grid_size: dimensions of sample layout (rows, columns)
+#     :return (dict[str, tuple], dict[str, list], numpy.ndarray): (wells: dict of tuples, {well: condition},
+#      conditions: OrderedDict, {variable_name: conditions},
+#      cube: N-d array representing space of conditions, integer entries indicate number of replicates)
+#     """
+#
+#
+#     wells = defaultdict(list)
+#     for (i, j) in product(range(grid_size[0]), range(grid_size[1])):
+#         well = ROWS[i] + COLS[j]
+#         for title, grid in grids.items():
+#             val = xs_values[grid][i*grid_size[1] + j]
+#             wells[well] += [val]
+#
+#
+#     wells_ = {}
+#     for well, values in wells.items():
+#         # exclude fully empty wells
+#         if all(x == '' for x in values):
+#             continue
+#
+#         tmp = []
+#         for x in values:
+#             try:
+#                 tmp += [float(x)]
+#             except ValueError:
+#                 tmp += [np.nan]
+#         wells.update({well: tmp})
+#
+#     wells = {a: [float(x) for x in b] for a, b in wells.items()
+#              if not all(x == '' for x in b)}
+#
+#     # easy out for non-standard condition indexing
+#     if not find_conditions:
+#         return wells
+#
+#     # get the named conditions for each variable
+#     conditions = extract_conditions(xs_values, grids.keys())
+#
+#     cube = np.zeros([max(x) + 1 for x in zip(*wells.values())])
+#     for coords in wells.values():
+#         cube[tuple(coords)] += 1
+#
+#     return wells, conditions, cube
+#
+
+
 
 
 def get_named_wells(wells, conditions):
@@ -111,26 +244,6 @@ def get_named_wells(wells, conditions):
     """
     return {k: [arr[x] for x, arr in zip(v, conditions.values())] for k, v in wells.items()}
 
-
-def extract_conditions(xs_values, names):
-    # assume conditions are listed in blocks
-    conditions = OrderedDict()
-    [conditions.update({title: []}) for title in names]
-    rows = []
-    for title in names:
-        hits = sorted(zip(*np.where(xs_values == title)), key=lambda x: x[1])
-        rows.append(hits[0][0])
-        if len(hits) < 2:
-            # condition names must exactly match
-            raise IndexError
-        index = np.array(hits[0]) + (0, 1)
-        while xs_values[tuple(index)]:
-            conditions[title] += [xs_values[tuple(index)]]
-            index += (1, 0)
-    # sort by row
-    conditions = OrderedDict((key, conditions[key]) for _, key in sorted(zip(rows, names)))
-
-    return conditions
 
 def get_named_comparisons(comparisons, conditions):
 

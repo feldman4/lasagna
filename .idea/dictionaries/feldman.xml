@@ -4,9 +4,11 @@
       <w>dirnames</w>
       <w>dirpath</w>
       <w>minima</w>
+      <w>ndarray</w>
       <w>numerics</w>
       <w>skimage</w>
       <w>tform</w>
+      <w>xsheet</w>
     </words>
   </dictionary>
 </component>
