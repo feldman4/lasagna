@@ -299,7 +299,8 @@ def load_conditions_():
         if 'probe' in ind_var:
             experiment.ind_vars[ind_var] = probes_
 
-    return experiment.make_ind_vars_table()
+    experiment.make_ind_vars_table()
+    return experiment
 
 
 def load_conditions():

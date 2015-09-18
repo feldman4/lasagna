@@ -175,7 +175,7 @@ class Experiment(object):
             arr += [grid.applymap(apply_try(values))]
 
         table = pd.concat(arr, axis=1).fillna('')
-        return table[(table != '').any(axis=1)]
+        self.ind_vars_table = table[(table != '').any(axis=1)]
 
 
 
