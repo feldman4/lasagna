@@ -292,6 +292,7 @@ class Calibration(object):
         """
         self.files = {}
         self.full_path = full_path
+        self.name = os.path.basename(full_path)
         self.background = None
         self.calibration, self.calibration_norm, self.calibration_med = [pd.DataFrame() for _ in range(3)]
         self.illumination, self.illumination_mean = pd.Series(), pd.Series()
@@ -319,9 +320,10 @@ class Calibration(object):
     def update_files(self):
         self.files = defaultdict(list)
         for f in os.walk(self.full_path).next()[2]:
-            well, site = io.get_well_site(f)
-            channel = self.info['wells'][well]
-            self.files[channel] += [os.path.join(self.full_path, f)]
+            if '.tif' in f:
+                well, site = io.get_well_site(f)
+                channel = self.info['wells'][well]
+                self.files[channel] += [os.path.join(self.full_path, f)]
 
     def update_background(self):
         self.background = np.median([io.read_stack(f) for f in self.files['empty']], axis=0)
@@ -370,7 +372,7 @@ class Calibration(object):
         # dump illumination stack
         stack = np.array([self.illumination_mean] + list(self.illumination))
         luts = [io.GRAY] + [spectral_luts[dye] for dye in self.calibration.columns if dye != 'empty']
-        save_name = os.path.join(os.path.dirname(self.full_path), 'illumination_correction.tif')
+        save_name = os.path.join(os.path.dirname(self.full_path), 'illumination_correction_%s.tif' % self.name)
         io.save_hyperstack(save_name, 10000 * stack, luts=luts)
 
     def fix_illumination(self, frame, channel=None):

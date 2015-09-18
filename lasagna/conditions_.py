@@ -9,18 +9,10 @@ CREDENTIALS_JSON = '/Users/feldman/Downloads/gspread-da2f80418147.json'
 ROW_INDICATOR = 'A'
 
 ROWS = 'ABCDEFGH'
-COLS = '123456789'
+COLS = [str(x) for x in range(1,17)]
 
 
-def load_sheet(worksheet, gfile='Lasagna FISH', grid_size=(6, 6)):
-    """Find conditions demarcated in grid format from local .xls or google sheet.
-    :param str worksheet: name of google sheet, can provide int index as well
-    :param str file: google sheet to search in
-    :param tuple grid_size: dimensions of sample layout (rows, columns)
-    :return (dict[str, tuple], dict[str, list], numpy.ndarray): (wells: dict of tuples, {well: condition},
-     conditions: OrderedDict, {variable_name: conditions},
-     cube: N-d array representing space of conditions, integer entries indicate number of replicates)
-    """
+def load_xsheet(worksheet, gfile='Lasagna FISH'):
     # see http://gspread.readthedocs.org/en/latest/oauth2.html
     json_key = json.load(open(CREDENTIALS_JSON))
     scope = ['https://spreadsheets.google.com/feeds']
@@ -33,6 +25,20 @@ def load_sheet(worksheet, gfile='Lasagna FISH', grid_size=(6, 6)):
     else:
         wks = xsheet.worksheet(worksheet)
     xs_values = np.array(wks.get_all_values())
+    return xs_values
+
+
+def load_sheet(worksheet, gfile='Lasagna FISH', grid_size=(6, 6),
+              find_conditions=True):
+    """Find conditions demarcated in grid format from local .xls or google sheet.
+    :param str worksheet: name of google sheet, can provide int index as well
+    :param str file: google sheet to search in
+    :param tuple grid_size: dimensions of sample layout (rows, columns)
+    :return (dict[str, tuple], dict[str, list], numpy.ndarray): (wells: dict of tuples, {well: condition},
+     conditions: OrderedDict, {variable_name: conditions},
+     cube: N-d array representing space of conditions, integer entries indicate number of replicates)
+    """
+    xs_values = load_xsheet(worksheet, gfile=gfile)
     # pad edges with empty string
     xs_values = np.pad(xs_values, ((0, 1), (0, 1)), mode='constant')
 
@@ -45,12 +51,31 @@ def load_sheet(worksheet, gfile='Lasagna FISH', grid_size=(6, 6)):
         for title, grid in grids.items():
             val = xs_values[grid][i*grid_size[1] + j]
             wells[well] += [val]
-    # remove empty wells
-    wells = {a: [int(x) for x in b] for a, b in wells.items()
+            
+    
+    wells_ = {}
+    for well, values in wells.items():
+        # exclude fully empty wells
+        if all(x == '' for x in values):
+            continue
+            
+        tmp = []
+        for x in values:
+            try:
+                tmp += [float(x)]
+            except ValueError:
+                tmp += [np.nan]
+        wells.update({well: tmp})
+            
+    wells = {a: [float(x) for x in b] for a, b in wells.items()
              if not all(x == '' for x in b)}
 
+    # easy out for non-standard condition indexing
+    if not find_conditions:
+        return wells
+    
     # get the named conditions for each variable
-    conditions = extract_conditions(xs_values, grids)
+    conditions = extract_conditions(xs_values, grids.keys())
 
     cube = np.zeros([max(x) + 1 for x in zip(*wells.values())])
     for coords in wells.values():
@@ -87,12 +112,12 @@ def get_named_wells(wells, conditions):
     return {k: [arr[x] for x, arr in zip(v, conditions.values())] for k, v in wells.items()}
 
 
-def extract_conditions(xs_values, grids):
+def extract_conditions(xs_values, names):
     # assume conditions are listed in blocks
     conditions = OrderedDict()
-    [conditions.update({title: []}) for title in grids]
+    [conditions.update({title: []}) for title in names]
     rows = []
-    for title in grids:
+    for title in names:
         hits = sorted(zip(*np.where(xs_values == title)), key=lambda x: x[1])
         rows.append(hits[0][0])
         if len(hits) < 2:
@@ -103,7 +128,7 @@ def extract_conditions(xs_values, grids):
             conditions[title] += [xs_values[tuple(index)]]
             index += (1, 0)
     # sort by row
-    conditions = OrderedDict((key, conditions[key]) for _, key in sorted(zip(rows, grids.keys())))
+    conditions = OrderedDict((key, conditions[key]) for _, key in sorted(zip(rows, names)))
 
     return conditions
 

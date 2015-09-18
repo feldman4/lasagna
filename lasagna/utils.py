@@ -212,6 +212,60 @@ def standardize(x):
     filt = [d[0] for d in x.dtypes.iteritems() if d[1] in numerics]
     return (x[filt] - x[filt].mean())/ x[filt].std()
 
+def normalize_rows(x):
+    return x.divide(((x**2).sum(axis=1))**(0.5), axis=0)
+
+def to_nd_array(x):
+    """Converts DataFrame with MultiIndex rows and columns to ndarray.
+    Accepts regular Index too.
+    Will throw error if size doesn't match. Inner-most row level can have
+    non-repeated values.
+    """
+    
+    levels = []
+    last = -1
+    for i, index in enumerate((x.columns, x.index)):
+        if type(index) is pd.Index:
+            add = [index]
+        else:
+            # reshape goes from inside out
+            # x = x.sortlevel(axis=1-i)
+            add = list(index.levels)[::-1]
+        levels += add
+    
+    last = -1 * len(add)
+    reshaper = [len(s) for s in levels]
+    if np.prod(reshaper) != x.size:
+        reshaper = reshaper[:last] + [-1] + reshaper[last + 1:]
+        size = np.prod(reshaper[:last] + reshaper[last + 1:])
+        levels[last] = pd.Index(range(x.size / size),
+                                   name=levels[last].name)
+        print 'resetting innermost row index to [%d...%d]' % (levels[last][0], levels[last][-1])
+    
+    output = x.as_matrix().reshape(reshaper[::-1])
+    return output, levels[::-1]
+
+def group_sort(x, columns, top_n=None, **kwargs):
+    """Sort dataframe by column corresponding to groupby index.
+    columns: {index: column}
+    if index is not a tuple, index => (index,)
+    """
+    index = x.index.values[0]
+    for k, column in columns.items():
+        # e.g., index 'B2' => ('B2',)
+        k = (k,) if type(k) != tuple else k
+        # index may cover some but not all levels of row MultiIndex
+        if all(a==b for a,b in zip(k, index)):
+            output = x.sort(columns=column, **kwargs)
+            break
+    else:
+        raise IndexError('index not in keys of `columns`')
+            
+    if top_n:
+        output = output.ix[:top_n]
+        output.index = output.index.droplevel(range(len(k)))
+    return output
+
 
 def show_grid(z, force_fit=False):
     import qgrid

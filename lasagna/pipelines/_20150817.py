@@ -3,6 +3,7 @@ import lasagna.io
 import lasagna.config
 import lasagna.process
 import lasagna.utils
+import lasagna.conditions_
 import copy
 import numpy as np
 import skimage.transform
@@ -10,11 +11,19 @@ import skimage.morphology
 import skimage.feature
 import os
 import pandas as pd
+pdx = pd.IndexSlice
 
 display_ranges = ((500, 20000),
                   (500, 3500),
                   (500, 3500),
                   (500, 3500))
+
+# for matplotlib
+dye_colors = {'A594': 'r', 'Atto647': 'm', 'Cy3': 'g'}
+
+GSPREAD_CREDENTIALS = '/broad/blainey_lab/blainey-ipython/DF/gspread-da2f80418147.json'
+
+worksheet = '20150816 96W-G008'
 
 dataset = '20150817 6 round'
 
@@ -64,6 +73,7 @@ def initialize_engines(client):
     dview.execute('import lasagna.pipelines._20150817 as pipeline')
 
     dview['lasagna.config.paths'] = lasagna.config.paths
+    dview.execute('paths = lasagna.config.paths')
     dview['lasagna.config.calibration'] = lasagna.config.calibration_short
     print len(client.ids), 'engines initialized'
 
@@ -263,6 +273,67 @@ def blob_max_median(df, detect_round=1, detect_channel=3, neighborhood=(9, 9),
         df['all', k] = v
 
     return df.sortlevel(axis=1)
+
+
+def load_conditions():
+    
+    # load spreadsheet, non-standard assignment of conditions
+    lasagna.conditions_.CREDENTIALS_JSON = GSPREAD_CREDENTIALS
+    wells = lasagna.conditions_.load_sheet(worksheet,
+                                           gfile='Lasagna FISH',
+                                           grid_size=(6,9),
+                                           find_conditions=False)
+    xs = lasagna.conditions_.load_xsheet(worksheet,
+                                         gfile='Lasagna FISH')
+    variables = ['cells', 'probes round 1']
+    v = lasagna.conditions_.extract_conditions(xs, variables)
+    probes = v['probes round 1']
+    
+    # convert each grid into a DataFrame, index by name
+    index = pd.MultiIndex.from_product((range(1,7), list('ABCDEF')), 
+               names=['round', 'well'])
+
+    conditions = pd.DataFrame(index=index, columns=range(1,10))
+    conditions.columns.name = 'column'
+
+    # compensate ordering in spreadsheet
+    rounds = [1, 3, 2, 5, 4, 6]
+
+    for i, r in enumerate(rounds):
+        for well, value in wells.items():
+            conditions.loc[pdx[r, well[0]], int(well[1])] = value[i]
+
+    # convert from integer labeling to dye names
+    def f(x):
+        p = [s for s in channels if s in probes[int(x) - 1]]
+        if p:
+            return p[0]
+        return ''
+    dyes = conditions.fillna(probes.index('none') + 1).applymap(f)
+    dyes = dyes.stack('column').unstack('round')
+
+    # don't analyze superposition wells (for now)
+    exclude = 'C1', 'C6', 'F1', 'F6'
+    for well, column in exclude:
+        dyes.loc[pdx[well, int(column)], :] = ''
+        
+    # get barcode presence/absence table
+    barcodes = dyes[(dyes != '').all(axis=1)].drop_duplicates()
+    bc = barcodes.set_index(pd.Index(range(barcodes.shape[0]), name='barcode'))
+    bc = bc.stack('round')
+    bc = bc.reset_index().rename(columns={0:'channel'})
+    bc['dummy'] = 1
+    bc = bc.pivot_table(values='dummy',
+                   index=['channel', 'round'],
+                   columns='barcode').fillna(0)
+    index = pd.MultiIndex.from_product(bc.index.levels, 
+                                       names=bc.index.names)
+    bc = bc.reindex(index, fill_value=0).transpose()
+    
+    encoded_barcodes = bc
+    
+    return dyes, barcodes, encoded_barcodes
+    
 
 
 ###################
