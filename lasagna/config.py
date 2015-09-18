@@ -10,3 +10,5 @@ fonts = os.path.join(home, 'resources', 'fonts')
 luts = os.path.join(home, 'resources', 'luts')
 
 visitor_font = os.path.join(fonts, 'visitor1.ttf')
+
+credentials = '/Users/feldman/Downloads/gspread-da2f80418147.json'

@@ -1,3 +1,4 @@
+from itertools import product
 import scipy.ndimage.filters
 import lasagna.io
 import lasagna.config
@@ -273,6 +274,32 @@ def blob_max_median(df, detect_round=1, detect_channel=3, neighborhood=(9, 9),
         df['all', k] = v
 
     return df.sortlevel(axis=1)
+
+
+def load_conditions_():
+    experiment = lasagna.conditions_.Experiment()
+    experiment.load_sheet(worksheet)
+    experiment.parse_ind_vars()
+    experiment.parse_grids()
+
+    # convert list to dict that accepts floats as combos
+    probes = experiment.ind_vars['probes']
+    probes_ = {}
+    for i, a in enumerate(probes):
+        for j, b in enumerate(probes):
+            i += 1
+            j += 1
+            if i == j:
+                probes_.update({i: (a,)})
+                continue
+            probes_.update({i + 0.01*j: (a, b)})
+            probes_.update({j + 0.01*i: (b, a)})
+
+    for ind_var in experiment.grids:
+        if 'probe' in ind_var:
+            experiment.ind_vars[ind_var] = probes_
+
+    return experiment.make_ind_vars_table()
 
 
 def load_conditions():

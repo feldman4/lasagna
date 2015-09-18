@@ -8,7 +8,8 @@ import numpy as np
 from oauth2client.client import SignedJwtAssertionCredentials
 import pandas as pd
 
-CREDENTIALS_JSON = '/Users/feldman/Downloads/gspread-da2f80418147.json'
+import lasagna.config
+
 
 ROW_INDICATOR = 'A'
 
@@ -69,11 +70,14 @@ class Experiment(object):
         self.parse_ind_vars()
         return self.make_ind_vars_table()
 
-
     def load_sheet(self, worksheet, g_file='Lasagna FISH'):
-
+        """Load sheet as array of strings (drops .xls style index)
+        :param worksheet:
+        :param g_file:
+        :return:
+        """
         # see http://gspread.readthedocs.org/en/latest/oauth2.html
-        json_key = json.load(open(CREDENTIALS_JSON))
+        json_key = json.load(open(lasagna.config.credentials))
         scope = ['https://spreadsheets.google.com/feeds']
         credentials = SignedJwtAssertionCredentials(json_key['client_email'], json_key['private_key'], scope)
         gc = gspread.authorize(credentials)
