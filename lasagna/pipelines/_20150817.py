@@ -5,6 +5,7 @@ import lasagna.config
 import lasagna.process
 import lasagna.utils
 import lasagna.conditions_
+import lasagna.models
 import copy
 import numpy as np
 import skimage.transform
@@ -278,7 +279,7 @@ def blob_max_median(df, detect_round=1, detect_channel=3, neighborhood=(9, 9),
 
 def load_conditions_():
     experiment = lasagna.conditions_.Experiment()
-    experiment.load_sheet(worksheet)
+    experiment.sheet = lasagna.conditions_.load_sheet(worksheet)
     experiment.parse_ind_vars()
     experiment.parse_grids()
 
@@ -286,8 +287,8 @@ def load_conditions_():
     probes = experiment.ind_vars['probes']
     probes_ = {}
     for i, a in enumerate(probes):
+        i += 1
         for j, b in enumerate(probes):
-            i += 1
             j += 1
             if i == j:
                 probes_.update({i: (a,)})
@@ -300,7 +301,13 @@ def load_conditions_():
             experiment.ind_vars[ind_var] = probes_
 
     experiment.make_ind_vars_table()
+    lasagna.config.experiment = experiment
     return experiment
+
+def prepare_linear_model():
+    model = lasagna.models.LinearModel()
+
+    # model.indices =
 
 
 def load_conditions():

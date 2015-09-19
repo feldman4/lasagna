@@ -1,6 +1,7 @@
 from collections import Counter
 import copy
 import numpy as np
+import pandas as pd
 
 
 class Population(object):
@@ -133,6 +134,11 @@ class Population(object):
 
 class Cell(object):
     def __init__(self, cell, fitness=1):
+        """Mimic a generic object with additional fitness parameter.
+        :param cell:
+        :param fitness:
+        :return:
+        """
         self.fitness = fitness
         self.cell = cell
 
@@ -150,3 +156,45 @@ class Cell(object):
 
     def __eq__(self, other):
         return self.cell.__eq__(other)
+
+
+class LinearModel(object):
+    def __init__(self):
+        """Linear model describing specific and non-specific signal, and
+        auto-fluorescence.
+        :return:
+        """
+        self.A = 0.
+        self.B = None
+        self.C = None
+        self.D = None
+        self.b = None
+        self.b_p = None
+
+        self.P = None
+        self.X = None
+
+        self.indices = {}
+        self.tables = {}
+        self.X_table = None
+
+    def evaluate(self, M):
+        md = np.einsum('jl,lk->jlk', M, self.D)
+        self.P = np.einsum('jlk,kn', md, self.C)
+        bbr = np.einsum('lm,m', self.B, self.b)
+        self.X = self.A + np.einsum('jln,l', self.P, bbr + self.b_p)
+
+        if 'j' in self.indices and 'k' in self.indices:
+            self.X_table = pd.DataFrame(self.X,
+                                        index=self.indices['j'],
+                                        columns=self.indices['n'])
+
+    def from_tables(self):
+        """Set LinearModel.indices and LinearModel.tables first.
+        :return:
+        """
+        j, k, l, m, n = [self.indices[x] for x in 'jlkmn']
+        self.B = self.tables['B'].loc[l, m]
+        self.C = self.tables['C'].loc[k, n]
+        self.D = self.tables['D'].loc[k, l]
+

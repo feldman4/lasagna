@@ -24,6 +24,30 @@ def flatten_layout_row_col(x):
     return x
 
 
+def load_sheet(worksheet, g_file='Lasagna FISH'):
+    """Load sheet as array of strings (drops .xls style index)
+    gspread allows for .xlsx export as well, which can capture style info.
+    :param worksheet: provide None to return a dictionary of all sheets
+    :param g_file:
+    :return:
+    """
+    # see http://gspread.readthedocs.org/en/latest/oauth2.html
+    json_key = json.load(open(lasagna.config.credentials))
+    scope = ['https://spreadsheets.google.com/feeds']
+    credentials = SignedJwtAssertionCredentials(json_key['client_email'], json_key['private_key'], scope)
+    gc = gspread.authorize(credentials)
+    xsheet = gc.open(g_file)
+
+    if type(worksheet) is int:
+        wks = xsheet.get_worksheet(worksheet)
+    if worksheet is None:
+        return {x.title: np.array(x.get_all_values()) for x in xsheet.worksheets()}
+    else:
+        wks = xsheet.worksheet(worksheet)
+    xs_values = np.array(wks.get_all_values())
+    return xs_values
+
+
 class Experiment(object):
     def __init__(self, worksheet=None, g_file='Lasagna FISH'):
         """Represent independent variables and their values for each sample.
@@ -40,7 +64,7 @@ class Experiment(object):
         To construct manually:
 
         exp = Experiment()
-        exp.load_sheet(worksheet)
+        exp.sheet = load_sheet(worksheet)
         exp.parse_grids()
         exp.parse_ind_vars()
         # modify exp.ind_vars if keys don't match layout notation
@@ -65,30 +89,10 @@ class Experiment(object):
         :param g_file:
         :return:
         """
-        self.load_sheet(worksheet, g_file=g_file)
+        load_sheet(worksheet, g_file=g_file)
         self.parse_grids()
         self.parse_ind_vars()
         return self.make_ind_vars_table()
-
-    def load_sheet(self, worksheet, g_file='Lasagna FISH'):
-        """Load sheet as array of strings (drops .xls style index)
-        :param worksheet:
-        :param g_file:
-        :return:
-        """
-        # see http://gspread.readthedocs.org/en/latest/oauth2.html
-        json_key = json.load(open(lasagna.config.credentials))
-        scope = ['https://spreadsheets.google.com/feeds']
-        credentials = SignedJwtAssertionCredentials(json_key['client_email'], json_key['private_key'], scope)
-        gc = gspread.authorize(credentials)
-        xsheet = gc.open(g_file)
-
-        if type(worksheet) is int:
-            wks = xsheet.get_worksheet(worksheet)
-        else:
-            wks = xsheet.worksheet(worksheet)
-        xs_values = np.array(wks.get_all_values())
-        self.sheet = xs_values
 
     def parse_grids(self, title_offset=(-1, 0), A_offset=(1, 0)):
         """Look for first row labelled by ROW_INDICATOR, find origin and return boolean mask to values.
@@ -164,7 +168,7 @@ class Experiment(object):
                         return y[x_]
                     return y[int(x_)]
                 except ValueError:
-                    return x
+                    return x  # default
             return func
 
         arr = []
@@ -172,10 +176,17 @@ class Experiment(object):
             values = self.ind_vars[ind_var]
             grid = self.flatten_layout(grid)
             grid.columns = [ind_var]
+            # # set default value (no index in grid) based on type of first entry
+            # try:
+            #     default = type(values.values()[0])()
+            # except AttributeError:
+            #     default = type(values[0])()
             arr += [grid.applymap(apply_try(values))]
 
         table = pd.concat(arr, axis=1).fillna('')
-        self.ind_vars_table = table[(table != '').any(axis=1)]
+        table = table[(table != '').any(axis=1)]
+        self.ind_vars_table = table[sorted(table.columns)]
+
 
 
 

@@ -276,3 +276,52 @@ def show_grid(z, force_fit=False):
         new[' '.join(x)] = z[x]
     return qgrid.show_grid(new, grid_options={'forceFitColumns': force_fit, 'defaultColumnWidth': 120})
 
+
+def pivot(x, plus=1, minus=0, expand=False):
+    """Pivot table keeping existing index. Create full product column MultiIndex from all
+    columns, set entries from original table to plus, rest to minus.
+    :return:
+    """
+    x = x.copy()
+    columns = list(x.columns)
+    x['dummy'] = plus
+    x = x.reset_index().pivot_table(values='dummy',
+                                    index=x.index.name,
+                                    columns=columns)
+    if expand:
+        index = pd.MultiIndex.from_product(x.index.levels,
+                                           names=x.index.names)
+        x = x.transpose().reindex(index, fill_value=minus).transpose()
+
+    return x.fillna(minus)
+
+
+def print_table(df):
+    """Call returned function to print table in IPython notebook with escaped newlines.
+    Doesn't work for MultiIndex.
+    :param df:
+    :return:
+    """
+    from IPython.display import HTML
+    import cgi
+
+    def escape(a):
+        return cgi.escape(a).replace('\n','<br>')
+
+    htm='<table>'+\
+        '<thead><tr><th></th>'+\
+        ''.join(['<th nowrap>'+escape(c)+\
+        '</th>' for c in df])+'</tr></thead>'+ \
+        '<tbody>'+''.join(['<tr>'+'<th>'+str(r[0])+\
+        '</th>'+''.join(['<td nowrap>'+escape(c)+\
+        '</td>' for c in r[1]])+'</tr>' for r in enumerate(df.values)])+\
+        '</tbody></table>'
+
+    return lambda: HTML(htm)
+
+
+def barcode_from_cell():
+    pass
+
+
+

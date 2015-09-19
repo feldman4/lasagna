@@ -3,11 +3,14 @@
     <words>
       <w>dirnames</w>
       <w>dirpath</w>
+      <w>gspread</w>
+      <w>jlkmn</w>
       <w>minima</w>
       <w>ndarray</w>
       <w>numerics</w>
       <w>skimage</w>
       <w>tform</w>
+      <w>xlsx</w>
       <w>xsheet</w>
     </words>
   </dictionary>
