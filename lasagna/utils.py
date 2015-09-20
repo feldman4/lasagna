@@ -249,6 +249,17 @@ def to_nd_array(x):
     return output, levels[::-1]
 
 
+def argsort_nd(a, axis):
+    """Properly format argsort result so it can be used to index original array.
+    :param a:
+    :param axis:
+    :return:
+    """
+    index = list(np.ix_(*[np.arange(i) for i in a.shape]))
+    index[axis] = a.argsort(axis)
+    return index
+
+
 def group_sort(x, columns, top_n=None, **kwargs):
     """Sort dataframe by column corresponding to groupby index.
     columns: {index: column}
