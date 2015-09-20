@@ -189,12 +189,17 @@ class LinearModel(object):
                                         index=self.indices['j'],
                                         columns=self.indices['n'])
 
-    def from_tables(self):
-        """Set LinearModel.indices and LinearModel.tables first.
+    def matrices_from_tables(self):
+        """Set LinearModel.indices and LinearModel.tables first. Ignore j index.
         :return:
         """
-        j, k, l, m, n = [self.indices[x] for x in 'jlkmn']
-        self.B = self.tables['B'].loc[l, m]
-        self.C = self.tables['C'].loc[k, n]
-        self.D = self.tables['D'].loc[k, l]
+        k, l, m, n = [self.indices[x] for x in 'klmn']
+        self.B = self.tables['B'].loc[l, m].as_matrix()
+        self.C = self.tables['C'].loc[k, n].as_matrix()
+        self.D = self.tables['D'].loc[l, k].as_matrix()
+
+        # verify correct dimensions (DataFrame.loc is permissive of missing indices)
+        assert(self.B.shape == (len(l), len(m)))
+        assert(self.C.shape == (len(k), len(n)))
+        assert(self.D.shape == (len(l), len(k)))
 

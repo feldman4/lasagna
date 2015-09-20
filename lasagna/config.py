@@ -41,3 +41,35 @@ def load_sheets():
         # useful for pivoting
         df['dummy'] = 1
         cloning[title] = df.drop_duplicates(subset=name)
+
+
+def set_linear_model_defaults(model):
+    """
+    Default is not set for index j, corresponding to round.
+    :param model:
+    :return:
+    """
+    pr = cloning['probe stocks']
+    pr['oligos'] = pr['oligos'].convert_objects(convert_numeric=True).fillna(0)
+    x = pr.pivot_table(values='oligos', fill_value=0, index='name', columns='targets')
+
+    tiles = (cloning['barcodes']
+             .set_index('name').loc[:, 'tiles'])
+    tiles = {k: v.split(', ') for k,v in dict(tiles).items()}
+
+    B = pd.DataFrame()
+    for barcode, tiles in tiles.items():
+        B[barcode] = x[tiles].sum(axis=1)
+
+    model.tables['B'] = B
+    model.tables['C'] = (cloning['dyes'].drop('dummy', 1)
+                         .set_index('name').astype(float))
+    model.tables['D'] = (cloning['probe stocks']
+                         .pivot_table(values='dummy', index='name',
+                                      columns='dye', fill_value=0))
+
+    # default indices
+    model.indices['k'] = list(model.tables['C'].index)
+    model.indices['l'] = list(model.tables['B'].index)
+    model.indices['m'] = list(model.tables['B'].columns)
+    model.indices['n'] = list(model.tables['C'].columns)

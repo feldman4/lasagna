@@ -1,6 +1,7 @@
 import functools
 import numpy as np
 import pandas as pd
+import subprocess
 
 
 class Memoized(object):
@@ -17,7 +18,7 @@ class Memoized(object):
         key = str(args) + str(kwargs)
         try:
             # if type(self.cache[key]) == np.ndarray:
-#                 return self.cache[key].copy()
+            #                 return self.cache[key].copy()
             return self.cache[key]
         except KeyError:
             value = self.func(*args, **kwargs)
@@ -164,7 +165,7 @@ def plot_image_overlay(image0, image1, offset, ax=None):
     sz0, sz1 = image0.shape, image1.shape
     # (x0, x1, y0, y1); flip y by convention
     extent = (0 + offset[1], sz1[1] + offset[1],
-                sz1[0] + offset[0], 0 + offset[0])
+              sz1[0] + offset[0], 0 + offset[0])
     print extent, sz1
     if ax is None:
         fig, ax = plt.subplots(figsize=(10, 10))
@@ -210,10 +211,12 @@ def standardize(x):
     # only standardize numeric columns
     numerics = (np.float64, np.int64)
     filt = [d[0] for d in x.dtypes.iteritems() if d[1] in numerics]
-    return (x[filt] - x[filt].mean())/ x[filt].std()
+    return (x[filt] - x[filt].mean()) / x[filt].std()
+
 
 def normalize_rows(x):
-    return x.divide(((x**2).sum(axis=1))**(0.5), axis=0)
+    return x.divide(((x ** 2).sum(axis=1)) ** (0.5), axis=0)
+
 
 def to_nd_array(x):
     """Converts DataFrame with MultiIndex rows and columns to ndarray.
@@ -221,7 +224,7 @@ def to_nd_array(x):
     Will throw error if size doesn't match. Inner-most row level can have
     non-repeated values.
     """
-    
+
     levels = []
     last = -1
     for i, index in enumerate((x.columns, x.index)):
@@ -232,18 +235,19 @@ def to_nd_array(x):
             # x = x.sortlevel(axis=1-i)
             add = list(index.levels)[::-1]
         levels += add
-    
+
     last = -1 * len(add)
     reshaper = [len(s) for s in levels]
     if np.prod(reshaper) != x.size:
         reshaper = reshaper[:last] + [-1] + reshaper[last + 1:]
         size = np.prod(reshaper[:last] + reshaper[last + 1:])
         levels[last] = pd.Index(range(x.size / size),
-                                   name=levels[last].name)
+                                name=levels[last].name)
         print 'resetting innermost row index to [%d...%d]' % (levels[last][0], levels[last][-1])
-    
+
     output = x.as_matrix().reshape(reshaper[::-1])
     return output, levels[::-1]
+
 
 def group_sort(x, columns, top_n=None, **kwargs):
     """Sort dataframe by column corresponding to groupby index.
@@ -255,12 +259,12 @@ def group_sort(x, columns, top_n=None, **kwargs):
         # e.g., index 'B2' => ('B2',)
         k = (k,) if type(k) != tuple else k
         # index may cover some but not all levels of row MultiIndex
-        if all(a==b for a,b in zip(k, index)):
+        if all(a == b for a, b in zip(k, index)):
             output = x.sort(columns=column, **kwargs)
             break
     else:
         raise IndexError('index not in keys of `columns`')
-            
+
     if top_n:
         output = output.ix[:top_n]
         output.index = output.index.droplevel(range(len(k)))
@@ -306,22 +310,28 @@ def print_table(df):
     import cgi
 
     def escape(a):
-        return cgi.escape(a).replace('\n','<br>')
+        return cgi.escape(a).replace('\n', '<br>')
 
-    htm='<table>'+\
-        '<thead><tr><th></th>'+\
-        ''.join(['<th nowrap>'+escape(c)+\
-        '</th>' for c in df])+'</tr></thead>'+ \
-        '<tbody>'+''.join(['<tr>'+'<th>'+str(r[0])+\
-        '</th>'+''.join(['<td nowrap>'+escape(c)+\
-        '</td>' for c in r[1]])+'</tr>' for r in enumerate(df.values)])+\
-        '</tbody></table>'
+    htm = '<table>' + \
+          '<thead><tr><th></th>' + \
+          ''.join(['<th nowrap>' + escape(c) + \
+                   '</th>' for c in df]) + '</tr></thead>' + \
+          '<tbody>' + ''.join(['<tr>' + '<th>' + str(r[0]) + \
+                               '</th>' + ''.join(['<td nowrap>' + escape(c) + \
+                                                  '</td>' for c in r[1]]) + '</tr>' for r in enumerate(df.values)]) + \
+          '</tbody></table>'
 
     return lambda: HTML(htm)
 
 
-def barcode_from_cell():
-    pass
-
-
-
+def call(arg, stdin, shell=True):
+    """Call process with stdin provided (equivalent to cat), return stdout.
+    :param arg:
+    :param stdin:
+    :return:
+    """
+    p = subprocess.Popen(arg, stdin=subprocess.PIPE,
+                         stdout=subprocess.PIPE, shell=shell)
+    p.stdin.write(stdin)
+    p.stdin.close()
+    return p.stdout.read()
