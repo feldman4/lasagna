@@ -260,6 +260,10 @@ def argsort_nd(a, axis):
     return index
 
 
+def argmax_nd(a):
+    return np.unravel_index(a.argmax(), a.shape)
+
+
 def group_sort(x, columns, top_n=None, **kwargs):
     """Sort dataframe by column corresponding to groupby index.
     columns: {index: column}

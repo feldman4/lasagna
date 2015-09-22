@@ -77,27 +77,53 @@ def rc(seq):
     return ''.join(watson_crick[x] for x in seq)[::-1]
 
 
-def RNAduplex(a, b):
-    """Returns dot structure, energy, and slices into query strands
-    corresponding to bases in structure.
-    Save dot structure:
-    RNAplot(a[i0] + '.' + b[1], structure, name)
-    :param a:
-    :param b:
+def energy(a):
+    return np.vectorize(lambda x: x.energy if x else 0.)(a)
+
+
+duplex_re = re.compile('(\S*)\s*([0-9]+,[0-9]+)\s*:\s*([0-9]+,[0-9]+)\s*\(\s*(.*)\)')
+fold_re = re.compile('\s*(.*)\n(.*)\s\(\s*(.*)\)')
+
+
+def RNAduplex(a, b, full=True):
+    """Returns RNAResult from folding query strands. Provide full=True to save
+    full sequence, otherwise truncated to window around bound bases.
+    :param a: single str or list of str
+    :param b: single str or list of str; if list and a is str, folds a against each str in b
     :return:
     """
-    arg = ['RNAduplex']
-    out = lasagna.utils.call(arg, '\n'.join([a, b]))
-    pat = '(\S*)\s*([0-9]+,[0-9]+)\s*:\s*([0-9]+,[0-9]+)\s*\(\s*(.*)\)'
-    structure, i0, i1, energy = re.findall(pat, out)[0]
-    energy = float(energy[1:-1])
-    i0, i1 = i0.split(','), i1.split(',')
-    i0 = slice(int(i0[0]) - 1, int(i0[1]))
-    i1 = slice(int(i1[0]) - 1, int(i1[1]))
+    ix = slice(None)
+    is_str = np.lib._iotools._is_string_like
+    if is_str(a):
+        if is_str(b):
+            a = [a]
+            b = [b]
+            ix = slice(0)
+        else:
+            a = [a] * len(b)
 
-    sequence = a[i0] + '.' + b[i1]
-    return RNAResult(sequence=sequence, structure=structure,
-                     energy=energy, ix=(i0, i1))
+    arg = ['RNAduplex']
+    stdin = '\n'.join(sum(zip(a, b), tuple()))
+    out = lasagna.utils.call(arg, stdin)
+    arr = []
+    for a_i, b_i, (structure, i0, i1, energy) in zip(a, b, duplex_re.findall(out)):
+        i0, i1 = i0.split(','), i1.split(',')
+        i0 = slice(int(i0[0]) - 1, int(i0[1]))
+        i1 = slice(int(i1[0]) - 1, int(i1[1]))
+
+        sequence = a_i[i0] + '.' + b_i[i1]
+
+        if full:
+            sequence = a_i + '.' + b_i
+            a_, b_ = structure.split('&')
+            s_a, s_b = ['.'] * len(a_i), ['.'] * len(b_i)
+            s_a[i0] = a_
+            s_b[i1] = b_
+            structure = ''.join(s_a + ['&'] + s_b)
+        arr += [RNAResult(sequence=sequence, structure=structure,
+                          energy=float(energy), ix=(i0, i1))]
+
+    return arr[ix]
 
 
 def RNAfold(a):
@@ -105,20 +131,33 @@ def RNAfold(a):
     :param a:
     :return:
     """
+    ix = slice(None)
+    is_str = np.lib._iotools._is_string_like
+    if is_str(a):
+        a = [a]
+        ix = slice(0)
+
     # default behavior is to save rna.ps
     arg = ['RNAfold --noPS']
-    out = lasagna.utils.call(arg, a)
-    sequence, structure, energy = re.findall('(.*)\n(.*)\s\(\s*(.*)\)', out)[0]
-    energy = float(energy[:-1])
-    return RNAResult(sequence=sequence, structure=structure, energy=energy)
+    stdin = '\n'.join(a)
+    out = lasagna.utils.call(arg, stdin)
+
+    arr = []
+    for sequence, structure, energy in fold_re.findall(out):
+        arr += [RNAResult(sequence=sequence, structure=structure,
+                          energy=float(energy))]
+
+    return arr
 
 
 class RNAResult(object):
-    def __init__(self, sequence=None, structure=None, energy=None, ix=None):
+    def __init__(self, sequence=None, structure=None, energy=None,
+                 ix=None, duplex=None):
         self.sequence = sequence
         self.structure = structure
         self.energy = energy
         self.ix = ix
+        self.duplex = duplex
 
     def plot(self, path, output_format='ps'):
         name = os.path.basename(path)
@@ -139,6 +178,16 @@ class RNAResult(object):
         self.plot('dummy', output_format='svg')
         svg = IPython.display.SVG('dummy_ss.svg')
         os.remove('dummy_ss.svg')
+
+        # polyline representing backbone is automatically split at '.' in ps but not svg
+        dot = re.findall('(<text x=\"(.*)\" y=\"(.*)\">\.<\/text>\n)', svg.data)
+        if dot:
+            svg.data = svg.data.replace(dot[0][0], '')
+            coordinates = ','.join(dot[0][1:3])
+            svg_patch = ' " style="stroke: black; fill: none; stroke-width: 1.5"/> \n' + \
+                        '   <polyline id="outline2" points=" '
+            svg.data = svg.data.replace(coordinates, svg_patch)
+
         return svg
 
     def __repr__(self):
@@ -148,7 +197,7 @@ class RNAResult(object):
 
 def suboptimal_clique(energy, threshold):
     """Find (sub-optimal) clique with no energy below threshold.
-    :param energy:
+    :param energy: matrix
     :param threshold:
     :return:
     """
@@ -161,9 +210,9 @@ def suboptimal_clique(energy, threshold):
 
     # try to remove troublesome nodes
     idx = np.array([e[2]['weight'] for e in edges]).argsort()
-    edges = np.array(edges)[idx[::-1]]
+    edges = np.array(edges)[idx]
     for e in edges:
-        if e[2]['weight'] < threshold:
+        if e[2]['weight'] > threshold:
             break
         # remove a node if edge is still in the graph
         if (e[0] in off_target_G) and (e[1] in off_target_G):
@@ -178,3 +227,34 @@ def suboptimal_clique(energy, threshold):
                 off_target_G.remove_node(e[1])
 
     return off_target_G.nodes()
+
+
+def plot_energies(antisense_fold, energy_thresholds=tuple(range(-30, 0)), ax=None,
+                  bins=tuple(range(-40, -1))):
+    """
+    :param antisense_fold:
+    :param energy_thresholds:
+    :param ax:
+    :param bins:
+    :return:
+    """
+    import matplotlib.pyplot as plt
+
+    on_target = np.diag(energy(antisense_fold))
+    off_target = np.tril(energy(antisense_fold), -1)
+    keep_n = [len(suboptimal_clique(off_target, et)) for et in energy_thresholds]
+    if ax is None:
+        _, ax = plt.subplots()
+
+    ax.hist(on_target, bins=bins, label='on-target',
+            log=True, bottom=0.5, color='g', zorder=10)
+    ax.hist(off_target[off_target != 0].flatten(), bins=bins,
+            log=True, bottom=0.5, color='b', label='off-target')
+    ax.plot(energy_thresholds, keep_n, c='r', zorder=20)
+
+    ax.legend(loc='best')
+    ax.set_xlabel('energy')
+    ax.set_ylabel('count')
+    ax.set_title('probes remaining after iterative exclusion by off-target energy')
+
+    return ax

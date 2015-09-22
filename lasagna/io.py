@@ -199,8 +199,9 @@ def save_hyperstack(name, data, autocast=True, resolution=None,
     tag_50838 = ij_tag_50838(nchannels)
     tag_50839 = ij_tag_50839(luts, display_ranges)
 
-    if auto_make_dir and not os.path.isdir(os.path.dirname(name)):
-        os.makedirs(os.path.dirname(name))
+    if os.path.dirname(name):
+        if auto_make_dir and not os.path.isdir(os.path.dirname(name)):
+            os.makedirs(os.path.dirname(name))
 
     imsave(name, tmp, photometric='minisblack',
            description=description, resolution=resolution, compress=compress,
