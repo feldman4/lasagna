@@ -98,7 +98,7 @@ def RNAduplex(a, b, full=True):
         if is_str(b):
             a = [a]
             b = [b]
-            ix = slice(0)
+            ix = slice(1)
         else:
             a = [a] * len(b)
 
@@ -135,7 +135,7 @@ def RNAfold(a):
     is_str = np.lib._iotools._is_string_like
     if is_str(a):
         a = [a]
-        ix = slice(0)
+        ix = slice(1)
 
     # default behavior is to save rna.ps
     arg = ['RNAfold --noPS']
@@ -147,7 +147,7 @@ def RNAfold(a):
         arr += [RNAResult(sequence=sequence, structure=structure,
                           energy=float(energy))]
 
-    return arr
+    return arr[ix]
 
 
 class RNAResult(object):
