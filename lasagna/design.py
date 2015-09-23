@@ -17,6 +17,7 @@ import lasagna.utils
 
 def greedyTSP(G):
     """greedy nearest-neighbor TSP, trying all starting points
+    minimizes sum of edge values along path
     :param G:
     :return:
     """
