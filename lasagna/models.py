@@ -66,7 +66,7 @@ class Population(object):
                 self.cells += Counter(new_cells)
                 num -= len(new_cells)
 
-    def split(self, num, fast=False):
+    def split(self, num):
         """If num is in [0, 1]  treat as split fraction. If num is >= 1, 
         treat as # of cells to split.
         If fast=True, sample with replacement.
@@ -83,44 +83,11 @@ class Population(object):
         if num >= 1:
             split_size = np.random.binomial(self.population_size,
                                             float(num) / self.population_size)
+        
+        x = [a for a,b in self.cells.items() for _ in range(b)]
+        np.random.shuffle(x)
+        return Population(x[:split_size])
 
-        # sample with replacement, but conserve # of cells
-        if fast:
-            split_cells = Counter()
-            while split_size:
-                weights = self.get_weights()
-                split_cells_ = np.random.choice(self.cells.keys(),
-                                                size=split_size, p=weights)
-                split_size = 0
-                for cell, count in Counter(split_cells_).items():
-                    removed = min(self.cells[cell], count)
-                    self.cells[cell] -= removed
-                    if self.cells[cell] == 0:
-                        del self.cells[cell]
-                    if removed < count:
-                        split_size += count - removed
-                    split_cells[cell] += removed
-
-                # terminate if all cells removed
-                if self.population_size == 0:
-                    break
-            return Population(split_cells)
-
-        # sample without replacement
-        split_cells = []
-        for _ in range(split_size):
-            if sum(self.cells.values()) == 0:
-                raise ValueError('out of cells')
-
-            weights = self.get_weights()
-            split_cell = np.random.choice(self.cells.keys(), size=1,
-                                          p=weights)[0]
-            self.cells[split_cell] -= 1
-            if self.cells[split_cell] == 0:
-                del self.cells[split_cell]
-            split_cells += [split_cell]
-
-        return Population(split_cells)
 
     def __repr__(self):
         return 'population of %d cell types, %d cells' % (
