@@ -6,24 +6,34 @@ import pandas as pd
 
 class Population(object):
     def __init__(self, cells):
-        """Pass a Counter of Cells, or a list of other things that get made into
+        """Pass a dict of Cells, or a list of other things that get made into
         Cells with default fitness 1.
         """
-        if type(cells) == Counter:
-            self.cells = cells
+        if isinstance(cells, dict):
+            self.cells = Counter(cells)
             return
-        if any(type(cell) != Cell for cell in cells):
+        if any(not isinstance(cell, Cell) for cell in cells):
             cells = [Cell(cell) for cell in cells]
         self.cells = Counter(cells)
 
     def __add__(self, other):
-        if type(other) != Population:
+        if not isinstance(other, Population):
             raise TypeError('can only add Population to Population')
-        new_cells = copy.deepcopy(self.cells)
+        new_cells = copy.copy(self.cells)
         new_cells.update(other.cells)
         return Population(new_cells)
-
-    def expand(self, num, generations=5):
+    
+    def __sub__(self, other):
+        """Removes all Cells present in second Population, or in an iterable of Cells.
+        """
+        if isinstance(other, Population):
+            other = other.cells
+        return Population(Counter({k: v for k, v in self.cells.items() if k not in other}))
+    
+    def __contains__(self, other):
+        return other in self.cells
+               
+    def expand(self, num, generations=4):
         """Simulate expansion by accumulating division times of all cells through
         fixed number of generations, then sorting by division time. 
         Stochastic division times can be implemented through Cell.fitness.
@@ -34,18 +44,21 @@ class Population(object):
         if num < 0:
             raise ValueError('requires positive value')
         while num > 0:
-            divisions = np.zeros((2 ** generations - 2) * self.population_size, dtype=complex)
+            divisions = np.zeros((2 ** generations - 1) * self.population_size, dtype=complex)
             i = 0
             cells = np.array(self.cells.keys())
             for i_cell, count in enumerate(self.cells.values()):
-                for gen in range(1, generations):
-                    division_time = (float(gen) / cells[i_cell].fitness) + 0.01 * np.random.randn()
+                for gen in range(generations ):
+                    # uses same noise across generation, amplifies variance
+                    division_time = float(gen + 1) / (cells[i_cell].fitness + cells[i_cell].fitness_noise())
                     icount = count * 2 ** gen
                     divisions[i:i + icount] = division_time + i_cell * 1j
                     i += icount
+                    
             # sort potential new cells by division time
             divisions.sort()
             new_cells = cells[divisions.imag.astype(int)]
+            
             if len(new_cells) > num:
                 self.cells += Counter(new_cells[:num])
                 return
@@ -110,10 +123,9 @@ class Population(object):
         return Population(split_cells)
 
     def __repr__(self):
-        return 'population of %d cell types, %d cells:\n%s' % (
+        return 'population of %d cell types, %d cells' % (
             len(self.cells),
-            self.population_size,
-            self.cells.__repr__())
+            self.population_size)
 
     def get_weights(self):
         weights = np.array([v for k, v in self.cells.items()])
@@ -133,13 +145,15 @@ class Population(object):
 
 
 class Cell(object):
-    def __init__(self, cell, fitness=1):
+    def __init__(self, cell, fitness=1, fitness_noise=lambda: 0):
         """Mimic a generic object with additional fitness parameter.
         :param cell:
-        :param fitness:
+        :param fitness: time to division
+        :param fitness_noise: function that returns noise on fitness
         :return:
         """
         self.fitness = fitness
+        self.fitness_noise = fitness_noise
         self.cell = cell
 
     def __repr__(self):
@@ -155,9 +169,51 @@ class Cell(object):
         return self.cell.__hash__()
 
     def __eq__(self, other):
-        return self.cell.__eq__(other)
+        return hash(self) == hash(other)
 
 
+def make_matrices(wells):
+    """Based on list of Populations where Cells are tuples (barcode, HR_event)
+    binary DataFrames M[barcode, well], N[HR_event, well]
+    
+    """
+    # total observed barcodes, HR events
+    barcodes, HR_events = zip(*sum(wells[1:], wells[0]).cells.keys())
+    
+    well_index = pd.Index(range(len(wells)), name='well')
+    M = pd.DataFrame(index=pd.Index(set(barcodes), name='barcode'), 
+                     columns=well_index).fillna(0)
+    N = pd.DataFrame(index=pd.Index(set(HR_events), name='HR event'), 
+                     columns=well_index).fillna(0)
+    for i, well in enumerate(wells):
+        bc, HR = zip(*well.cells.keys())
+        M.loc[bc, i] += 1
+        N.loc[HR, i] += 1
+    return M, N
+
+
+def score_matrices(M, N):
+    """Find size of logical intersection, complement, differences of DataFrames with 
+    shared columns and return as list of DataFrames.
+    """
+    M_, N_ = M.as_matrix(), N.as_matrix()
+    S = np.zeros((M.shape[0], N.shape[0], 4))
+    
+    not_M = 1 - M_
+    not_N = 1 - N_
+    for i in range(N_.shape[0]):
+        S[:, i, 0] = (M_    & N_[i]   ).sum(axis=1)
+        S[:, i, 1] = (not_M & N_[i]   ).sum(axis=1)
+        S[:, i, 2] = (M_    & not_N[i]).sum(axis=1)
+        S[:, i, 3] = (not_M & not_N[i]).sum(axis=1)
+    
+    S_ = [pd.DataFrame(S[:,:,i], index=M.index, columns=N.index) for i in range(4)]
+    
+    return S_
+
+
+    
+    
 class LinearModel(object):
     def __init__(self):
         """Linear model describing specific and non-specific signal, and

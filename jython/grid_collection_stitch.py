@@ -7,8 +7,8 @@ import time, os
 from glob import glob
 
 # C
-channel_luts = (('Grays', (400, 8000)),)
-channel_luts = (('Blue', (600, 2000)),
+#channel_luts = (('Grays', (400, 8000)),)
+channel_luts = (('Blue', (400, 30000)),
                 ('Green', (800, 3500)),
                 ('Red', (800, 3500)),
                 ('Magenta', (800, 3500)))
@@ -22,24 +22,24 @@ frames = 1;  # T
 tiles = (5, 5)
 overlap = int(100 * (1. - 300. / 350))
 # 4X
-# tiles, overlap = (3, 3), int(100*(1. - 1800./3379))
+#tiles, overlap = (3, 3), int(100*(1. - 1800./3379))
 print tiles, overlap
 nuclei_singleton = False
 
-if True:
+if False:
     filesep = '/'
     home_dir = '/broad/blainey_lab/David/lasagna/20150817 6 round/data/'
 else:
-    home_dir = 'D:\\User Folders\\David\\lasagna\\20150817\\to_stitch\\'
+    home_dir = 'D:\\User Folders\\David\\lasagna\\20150920 96W-G012\\'
     # home_dir = '\\\\neon-cifs\\blainey_lab\\David\\lasagna\\20150817 6 round\\analysis\\calibrated\\raw\\'
     filesep = '\\'
 
-data_dirs = ['40X_round3_1']
+data_dirs = ['40X_4']
 
 
 def savename(well, data_dir):
     # TODO better naming convention, use Site_0?
-    return home_dir + data_dir + well + 'stitched.tif'
+    return home_dir + data_dir + '_' + well + '.stitched.tif'
 
 
 def stitch_cmd(grid_size, overlap, directory, file_pattern):
@@ -59,8 +59,8 @@ columns = '123456789'
 wells = [r + c for r in rows for c in columns]
 
 for data_dir in data_dirs:
-    print home_dir + data_dir + filesep + '*.calibrated.tif'
-    files = glob(home_dir + data_dir + filesep + '*.calibrated.tif')
+    print home_dir + data_dir + filesep + '*.tif'
+    files = glob(home_dir + data_dir + filesep + '*.tif')
     #    print files
     this_wells = [w for w in wells if any(w in x for x in files)]
     print 'wells to stitch:', this_wells

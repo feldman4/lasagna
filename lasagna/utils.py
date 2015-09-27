@@ -2,6 +2,7 @@ import functools
 import numpy as np
 import pandas as pd
 import subprocess
+import sklearn.utils.linear_assignment_
 
 
 class Memoized(object):
@@ -350,3 +351,13 @@ def call(arg, stdin, shell=True):
     p.stdin.write(stdin)
     p.stdin.close()
     return p.stdout.read()
+
+def linear_assignment(df):
+    """Wrapper of sklearn linear assignment algorithm for DataFrame cost matrix. Returns
+    DataFrame with columns for matched labels. Minimizes cost.
+    """
+    x = sklearn.utils.linear_assignment_.linear_assignment(df.as_matrix())
+    y = zip(df.index[x[:,0]], df.columns[x[:,1]])
+    df_out = pd.DataFrame(y, columns = [df.index.name, df.columns.name])
+    return df_out
+
