@@ -63,7 +63,7 @@ def set_linear_model_defaults(model):
 
     model.tables['B'] = B
     model.tables['C'] = (cloning['dyes'].drop('dummy', 1)
-                         .set_index('name').astype(float))
+                         .set_index('name').astype(float).transpose())
     model.tables['D'] = (cloning['probe stocks']
                          .pivot_table(values='dummy', index='name',
                                       columns='dye', fill_value=0))

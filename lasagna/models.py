@@ -202,15 +202,19 @@ class LinearModel(object):
         self.X_table = None
 
     def evaluate(self, M):
-        md = np.einsum('jl,lk->jlk', M, self.D)
-        self.P = np.einsum('jlk,kn', md, self.C)
+        """Evaluate linear model for a single sample.
+        :param M:
+        :return:
+        """
+        md = np.einsum('jl,ln->jln', M, self.D)
+        self.P = np.einsum('jln,kn', md, self.C)
         bbr = np.einsum('lm,m', self.B, self.b)
-        self.X = self.A + np.einsum('jln,l', self.P, bbr + self.b_p)
+        self.X = self.A + np.einsum('jlk,l', self.P, bbr + self.b_p)
 
         if 'j' in self.indices and 'k' in self.indices:
             self.X_table = pd.DataFrame(self.X,
                                         index=self.indices['j'],
-                                        columns=self.indices['n'])
+                                        columns=self.indices['k'])
 
     def matrices_from_tables(self):
         """Set LinearModel.indices and LinearModel.tables first. Ignore j index.
