@@ -40,7 +40,7 @@ def load_sheets():
             print list(duplicates['name'])
         # useful for pivoting
         df['dummy'] = 1
-        cloning[title] = df.drop_duplicates(subset=name)
+        cloning[title] = df.drop_duplicates(subset=name).set_index('name')
 
 
 def set_linear_model_defaults(model):
@@ -51,10 +51,9 @@ def set_linear_model_defaults(model):
     """
     pr = cloning['probe stocks']
     pr['oligos'] = pr['oligos'].convert_objects(convert_numeric=True).fillna(0)
-    x = pr.pivot_table(values='oligos', fill_value=0, index='name', columns='targets')
+    x = pr.reset_index().pivot_table(values='oligos', fill_value=0, index='name', columns='targets')
 
-    tiles = (cloning['barcodes']
-             .set_index('name').loc[:, 'tiles'])
+    tiles = (cloning['barcodes'].loc[:, 'tiles'])
     tiles = {k: v.split(', ') for k,v in dict(tiles).items()}
 
     B = pd.DataFrame()
@@ -63,8 +62,8 @@ def set_linear_model_defaults(model):
 
     model.tables['B'] = B
     model.tables['C'] = (cloning['dyes'].drop('dummy', 1)
-                         .set_index('name').astype(float).transpose())
-    model.tables['D'] = (cloning['probe stocks']
+                         .astype(float))
+    model.tables['D'] = (cloning['probe stocks'].reset_index()
                          .pivot_table(values='dummy', index='name',
                                       columns='dye', fill_value=0))
 

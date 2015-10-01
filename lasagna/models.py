@@ -188,12 +188,12 @@ class LinearModel(object):
         :return:
         """
         self.A = 0.
+        self.b_p = 0.
+
         self.B = None
         self.C = None
         self.D = None
-        self.b = None
-        self.b_p = None
-
+        
         self.P = None
         self.X = None
 
@@ -201,20 +201,31 @@ class LinearModel(object):
         self.tables = {}
         self.X_table = None
 
-    def evaluate(self, M):
+    def evaluate(self, M, b):
         """Evaluate linear model for a single sample.
         :param M:
         :return:
         """
-        md = np.einsum('jl,ln->jln', M, self.D)
-        self.P = np.einsum('jln,kn', md, self.C)
-        bbr = np.einsum('lm,m', self.B, self.b)
-        self.X = self.A + np.einsum('jlk,l', self.P, bbr + self.b_p)
+        j, l, m = [self.indices[x] for x in 'jlm']
 
-        if 'j' in self.indices and 'k' in self.indices:
-            self.X_table = pd.DataFrame(self.X,
-                                        index=self.indices['j'],
-                                        columns=self.indices['k'])
+        if isinstance(M, pd.DataFrame):
+            M = M.loc[j, l].as_matrix()
+        if isinstance(b, pd.Series):
+            b = b.loc[m].as_matrix()
+
+        assert(M.shape == (len(j), len(l)))
+        assert(b.shape == (len(m),))
+
+        md = np.einsum('jl,lk->jlk', M, self.D)
+        
+        self.P = np.einsum('jlk,kn', md, self.C)
+        bbr = np.einsum('lm,m', self.B, b)
+        self.X = self.A + np.einsum('jln,l', self.P, bbr + self.b_p)
+
+        row_index = pd.Index(self.indices['j'], name='round')
+        column_index = pd.Index(self.indices['n'], name='channel')
+        self.X_table = pd.DataFrame(self.X, index=row_index, columns=column_index)
+        return self.X_table
 
     def matrices_from_tables(self):
         """Set LinearModel.indices and LinearModel.tables first. Ignore j index.

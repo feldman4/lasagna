@@ -305,82 +305,50 @@ def load_conditions():
             experiment.ind_vars[ind_var] = probes_
 
     experiment.make_ind_vars_table()
+
+    # remove _d60 and add corresponding barcode
+    cells = [x[:-4] for x in experiment.ind_vars_table['cells']]
+    virus = lasagna.config.cloning['cell lines'].loc[cells, 'lentivirus']
+    plasmids = lasagna.config.cloning['lentivirus'].loc[virus, 'plasmid']
+    barcodes = lasagna.config.cloning['plasmids'].loc[plasmids, 'barcode']
+
+    experiment.ind_vars_table['barcodes'] = list(barcodes)
+
     lasagna.config.experiment = experiment
     return experiment
 
 
 def prepare_linear_model():
     """Create LinearModel, set probes used in experiment, and generate matrices.
-    matrices.
+    
     :return:
     """
     model = lasagna.models.LinearModel()
     lasagna.config.set_linear_model_defaults(model)
     model.indices['l'] = lasagna.config.experiment.ind_vars['probes']
     model.matrices_from_tables()
+
+    ivt = lasagna.config.experiment.ind_vars_table
+    model.indices['j'] = [x for x in ivt.columns 
+                          if 'round' in x]
+
+    # reformat entries in independent vars table as matrix input to LinearModel
+    M = {sample: pd.DataFrame([], index=model.indices['j'], 
+                     columns=model.indices['l']).fillna(0) 
+            for sample in ivt.index}
+    b = {sample: pd.Series({x: 0 for x in model.indices['m']})
+            for sample in ivt.index}
+
+    for sample, row in ivt.iterrows():
+        for rnd in model.indices['j']:
+            M[sample].loc[rnd, list(ivt.loc[sample, rnd])] = 1
+        b[sample][row['barcodes']] = 1
+
+    print b['A1']
+    lasagna.config.experiment.ind_vars_table['M'] = [M[x] for x in ivt.index]
+    lasagna.config.experiment.ind_vars_table['b'] = [b[x] for x in ivt.index]
+
     return model
-
-
-
-# def load_conditions():
-#
-#     # load spreadsheet, non-standard assignment of conditions
-#     lasagna.conditions_.CREDENTIALS_JSON = GSPREAD_CREDENTIALS
-#     wells = lasagna.conditions_.load_sheet(worksheet,
-#                                            gfile='Lasagna FISH',
-#                                            grid_size=(6,9),
-#                                            find_conditions=False)
-#     xs = lasagna.conditions_.load_xsheet(worksheet,
-#                                          gfile='Lasagna FISH')
-#     variables = ['cells', 'probes round 1']
-#     v = lasagna.conditions_.extract_conditions(xs, variables)
-#     probes = v['probes round 1']
-#
-#     # convert each grid into a DataFrame, index by name
-#     index = pd.MultiIndex.from_product((range(1,7), list('ABCDEF')),
-#                names=['round', 'well'])
-#
-#     conditions = pd.DataFrame(index=index, columns=range(1,10))
-#     conditions.columns.name = 'column'
-#
-#     # compensate ordering in spreadsheet
-#     rounds = [1, 3, 2, 5, 4, 6]
-#
-#     for i, r in enumerate(rounds):
-#         for well, value in wells.items():
-#             conditions.loc[pdx[r, well[0]], int(well[1])] = value[i]
-#
-#     # convert from integer labeling to dye names
-#     def f(x):
-#         p = [s for s in channels if s in probes[int(x) - 1]]
-#         if p:
-#             return p[0]
-#         return ''
-#     dyes = conditions.fillna(probes.index('none') + 1).applymap(f)
-#     dyes = dyes.stack('column').unstack('round')
-#
-#     # don't analyze superposition wells (for now)
-#     exclude = 'C1', 'C6', 'F1', 'F6'
-#     for well, column in exclude:
-#         dyes.loc[pdx[well, int(column)], :] = ''
-#
-#     # get barcode presence/absence table
-#     barcodes = dyes[(dyes != '').all(axis=1)].drop_duplicates()
-#     bc = barcodes.set_index(pd.Index(range(barcodes.shape[0]), name='barcode'))
-#     bc = bc.stack('round')
-#     bc = bc.reset_index().rename(columns={0: 'channel'})
-#     bc['dummy'] = 1
-#     bc = bc.pivot_table(values='dummy',
-#                    index=['channel', 'round'],
-#                    columns='barcode').fillna(0)
-#     index = pd.MultiIndex.from_product(bc.index.levels,
-#                                        names=bc.index.names)
-#     bc = bc.reindex(index, fill_value=0).transpose()
-#
-#     encoded_barcodes = bc
-#
-#     return dyes, barcodes, encoded_barcodes
-    
 
 
 ###################
