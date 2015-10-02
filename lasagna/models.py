@@ -228,7 +228,7 @@ class LinearModel(object):
         return self.X_table
 
     def matrices_from_tables(self):
-        """Set LinearModel.indices and LinearModel.tables first. Ignore j index.
+        """Set LinearModel.indices and LinearModel.tables first. Index j set separately.
         :return:
         """
         k, l, m, n = [self.indices[x] for x in 'klmn']

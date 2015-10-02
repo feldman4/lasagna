@@ -32,7 +32,7 @@ MAGENTA = tuple(range(256) + [0] * 256 + range(256))
 GRAY = tuple(range(256) * 3)
 CYAN = tuple([0] * 256 + range(256) * 2)
 
-DEFAULT_LUTS = BLUE, GREEN, RED, MAGENTA
+DEFAULT_LUTS = BLUE, GREEN, RED, MAGENTA, GRAY, GRAY, GRAY
 
 DIR = {}
 
@@ -481,7 +481,7 @@ class Paths(object):
 
 def watermark(shape, text, spacing=1, corner='top left'):
     """ Add rasterized text to empty 2D numpy array.
-    :param shape:
+    :param shape: (height, width)
     :param text: string or list of strings
     :param spacing: spacing between lines, in pixels
     :return:

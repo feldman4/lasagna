@@ -216,7 +216,11 @@ def standardize(x):
 
 
 def normalize_rows(x):
-    return x.divide(((x ** 2).sum(axis=1)) ** (0.5), axis=0)
+    """Divide rows of DataFrame by L2 norm.
+    :param x:
+    :return:
+    """
+    return x.divide(((x ** 2).sum(axis=1)) ** 0.5, axis=0)
 
 
 def to_nd_array(x):
@@ -225,7 +229,8 @@ def to_nd_array(x):
     Will throw error if size doesn't match. Inner-most row level can have
     non-repeated values.
     """
-
+    # update index to remove missing values
+    x = x.set_index(pd.MultiIndex.from_tuples(x.index.values))
     levels = []
     last = -1
     for i, index in enumerate((x.columns, x.index)):
