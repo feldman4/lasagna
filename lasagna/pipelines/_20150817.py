@@ -32,7 +32,7 @@ dataset = '20150817 6 round'
 pipeline = None
 tile_configuration = 'calibration/TileConfiguration.registered.txt'
 channels = 'DAPI', 'Cy3', 'A594', 'Atto647'
-luts = lasagna.io.DEFAULT_LUTS
+luts = lasagna.io.BLUE, lasagna.io.GREEN, lasagna.io.RED, lasagna.io.MAGENTA
 
 filters = lasagna.utils.Filter2DReal(lasagna.process.double_gaussian(10, 1)),
 
@@ -96,35 +96,41 @@ def calibrate(row):
                                display_ranges=display_ranges, luts=luts)
 
 
-def stitch(df, translations=None, clip=True):
+def stitch(files_in, file_out, translations=None, clip=True):
     """Stitches images with alpha blending, provided Paths DataFrame with tile filenames in column
     'calibrated' and TileConfiguration.registered.txt file (from GridCollection stitching) with location
     stored in pipeline.tile_configuration. Alternately, provide list of translations (xy).
-    :param df:
+    :param files_in: list of calibrated files, relative to dataset
+    :param file_out: output file name, relative to dataset
     :param translations: list of [x,y] offsets of tiles
     :return:
     """
 
     if translations is None:
         translations = lasagna.io.load_tile_configuration(tile_configuration)
+    if isinstance(translations, str):
+        translations = lasagna.io.load_tile_configuration(translations)
 
-    # kluge for 3x3 vs 5x5 grids
-    grid_size = int(np.sqrt(df.shape[0])) * np.array([1, 1])
+    # kluge for 5x5 vs 3x3 grids present in some data
+    grid_size = int(np.sqrt(len(files_in))) * np.array([1, 1])
     if grid_size[0] == 3:
         index = [0, 1, 2,
                  5, 6, 7,
                  10, 11, 12]
         translations = [translations[i] for i in index]
 
-    files = np.array([f for f in df['calibrated']]).reshape(grid_size)
+    save_name = lasagna.config.paths.full(file_out)
+    print save_name
+    files = np.array([f for f in files_in]).reshape(grid_size)
     data = np.array([[lasagna.io.read_stack(lasagna.config.paths.full(x)) for x in y] for y in files])
+    print data.shape
     arr = []
     for channel in range(data.shape[2]):
         arr += [lasagna.process.alpha_blend(data[:, :, channel].reshape(-1, *data.shape[-2:]),
                                             translations, edge=0.48,
                                             edge_width=0.01,
                                             clip=clip)]
-    save_name = lasagna.config.paths.full(df['stitched'][0])
+
     lasagna.io.save_hyperstack(save_name, np.array(arr), display_ranges=display_ranges, luts=luts)
 
 

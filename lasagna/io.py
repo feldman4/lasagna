@@ -170,6 +170,7 @@ def save_hyperstack(name, data, autocast=True, resolution=None,
                     auto_make_dir=True):
     """input ND array dimensions as ([time], [z slice], channel, y, x)
     leading dimensions beyond 5 could be wrapped into time, not implemented
+    if no lut provided, use default and pad extra channels with GRAY
     """
     if name[-4:] != '.tif':
         name += '.tif'
@@ -180,7 +181,7 @@ def save_hyperstack(name, data, autocast=True, resolution=None,
     if resolution is None:
         resolution = (1. / (UM_PER_PX[OBJECTIVE] * BINNING),) * 2
     if luts is None:
-        luts = [x for x, _ in zip(DEFAULT_LUTS, range(nchannels))]
+        luts = [x for x, _ in zip(DEFAULT_LUTS + (GRAY,) * nchannels, range(nchannels))]
     if display_ranges is None:
         display_ranges = tuple([(x.min(), x.max())
                                 for x in np.rollaxis(data, -3)])
