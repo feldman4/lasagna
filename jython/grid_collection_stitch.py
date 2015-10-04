@@ -35,7 +35,7 @@ else:
     # home_dir = '\\\\neon-cifs\\blainey_lab\\David\\lasagna\\20150817 6 round\\analysis\\calibrated\\raw\\'
     filesep = '\\'
 
-data_dirs = ['40X_round5_1']
+data_dirs = ['40X_round6_4']
 
 
 def savename(well, data_dir):
@@ -54,9 +54,9 @@ def stitch_cmd(grid_size, overlap, directory, file_pattern, config):
     return s % (grid_size[0], grid_size[1], overlap, directory, file_pattern, config)
 
 
-rows = 'BCDEFGH'
+rows = 'ABCDEFGH'
 columns = '123456789'
-rows = 'BCDEFGH'
+rows = 'A'
 
 wells = [r + c for r in rows for c in columns]
 

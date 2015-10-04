@@ -1,4 +1,5 @@
 from itertools import product
+from matplotlib.colors import LinearSegmentedColormap
 import scipy.ndimage.filters
 import lasagna.io
 import lasagna.config
@@ -13,6 +14,7 @@ import skimage.morphology
 import skimage.feature
 import os
 import pandas as pd
+
 pdx = pd.IndexSlice
 
 display_ranges = ((500, 20000),
@@ -80,7 +82,7 @@ def initialize_engines(client):
     print len(client.ids), 'engines initialized'
 
 
-def calibrate(row):
+def calibrate(row, fix_illumination=False):
     """Calibrate row of Paths DataFrame. Call with map_async to farm out.
     :param row:
     :return:
@@ -90,18 +92,20 @@ def calibrate(row):
     raw, calibrated = row['raw'], row['calibrated']
     raw_data = lasagna.io.read_stack(lasagna.config.paths.full(raw))
     raw_data = np.array([lasagna.config.calibration.fix_dead_pixels(frame) for frame in raw_data])
-    fixed_data = np.array([lasagna.config.calibration.fix_illumination(frame, channel=channel)
-                           for frame, channel in zip(raw_data, channels)])
+    if fix_illumination:
+        fixed_data = np.array([lasagna.config.calibration.fix_illumination(frame, channel=channel)
+                               for frame, channel in zip(raw_data, channels)])
+    else:
+        fixed_data = raw_data
     lasagna.io.save_hyperstack(lasagna.config.paths.full(calibrated), fixed_data,
                                display_ranges=display_ranges, luts=luts)
 
 
-def stitch(files_in, file_out, translations=None, clip=True):
+def stitch(df, translations=None, clip=True):
     """Stitches images with alpha blending, provided Paths DataFrame with tile filenames in column
     'calibrated' and TileConfiguration.registered.txt file (from GridCollection stitching) with location
     stored in pipeline.tile_configuration. Alternately, provide list of translations (xy).
-    :param files_in: list of calibrated files, relative to dataset
-    :param file_out: output file name, relative to dataset
+    :param df: has 'calibrated' and 'stitched' columns
     :param translations: list of [x,y] offsets of tiles
     :return:
     """
@@ -112,16 +116,16 @@ def stitch(files_in, file_out, translations=None, clip=True):
         translations = lasagna.io.load_tile_configuration(translations)
 
     # kluge for 5x5 vs 3x3 grids present in some data
-    grid_size = int(np.sqrt(len(files_in))) * np.array([1, 1])
+    grid_size = int(np.sqrt(len(df['calibrated']))) * np.array([1, 1])
     if grid_size[0] == 3:
         index = [0, 1, 2,
                  5, 6, 7,
                  10, 11, 12]
         translations = [translations[i] for i in index]
 
-    save_name = lasagna.config.paths.full(file_out)
+    save_name = lasagna.config.paths.full(df['stitched'][0])
     print save_name
-    files = np.array([f for f in files_in]).reshape(grid_size)
+    files = np.array([f for f in df['calibrated']]).reshape(grid_size)
     data = np.array([[lasagna.io.read_stack(lasagna.config.paths.full(x)) for x in y] for y in files])
     print data.shape
     arr = []
@@ -157,6 +161,7 @@ def align(files, save_name, n=500, trim=150):
 
     data = data[:, :, trim:-trim, trim:-trim]
     lasagna.io.save_hyperstack(save_name, data)
+    return data
 
 
 def find_nuclei(row, block_size, source='aligned'):
@@ -198,7 +203,7 @@ def table_from_nuclei(row, index_names=None, save_name=None, round_=1,
     df_.to_pickle(save_name)
 
 
-def match_nuclei_table(table , area_fraction=0.9):
+def match_nuclei_table(table, area_fraction=0.9):
     """Match nuclei between rounds based on overlap of segmented regions.
     :param area_fraction: minimum required overlap, defined as # shared pixels/max(# of pixels)
     :return:
@@ -231,7 +236,7 @@ def apply_watermark(arr, label, trail=3, **kwargs):
         it = iter([x for x in label])
         label = lambda _: it.next()
 
-    assert(trail >= 3)
+    assert (trail >= 3)
     arr_ = arr.reshape(-1, *arr.shape[-trail:]).copy()
     new_arr = []
     for stack in arr_:
@@ -296,7 +301,6 @@ def blob_max_median(df, detect_round=1, detect_channel=3, neighborhood=(9, 9),
     blob_info_columns = 'blob_i', 'blob_j', 'blob_sigma'
     blob_info = blobs[best, :] - pad_width_adj
 
-
     for k, v in zip(blob_info_columns, blob_info):
         df['all', k] = v
 
@@ -323,8 +327,8 @@ def load_conditions():
             if i == j:
                 probes_.update({i: (a,)})
                 continue
-            probes_.update({i + 0.01*j: (a, b)})
-            probes_.update({j + 0.01*i: (b, a)})
+            probes_.update({i + 0.01 * j: (a, b)})
+            probes_.update({j + 0.01 * i: (b, a)})
 
     for ind_var in experiment.grids:
         if 'probe' in ind_var:
@@ -346,7 +350,7 @@ def load_conditions():
 
 def prepare_linear_model():
     """Create LinearModel, set probes used in experiment, and generate matrices.
-    
+
     :return:
     """
     model = lasagna.models.LinearModel()
@@ -355,15 +359,15 @@ def prepare_linear_model():
     model.matrices_from_tables()
 
     ivt = lasagna.config.experiment.ind_vars_table
-    model.indices['j'] = [x for x in ivt.columns 
+    model.indices['j'] = [x for x in ivt.columns
                           if 'round' in x]
 
     # reformat entries in independent vars table as matrix input to LinearModel
-    M = {sample: pd.DataFrame([], index=model.indices['j'], 
-                     columns=model.indices['l']).fillna(0) 
-            for sample in ivt.index}
+    M = {sample: pd.DataFrame([], index=model.indices['j'],
+                              columns=model.indices['l']).fillna(0)
+         for sample in ivt.index}
     b = {sample: pd.Series({x: 0 for x in model.indices['m']})
-            for sample in ivt.index}
+         for sample in ivt.index}
 
     for sample, row in ivt.iterrows():
         for rnd in model.indices['j']:
@@ -375,6 +379,42 @@ def prepare_linear_model():
     lasagna.config.experiment.ind_vars_table['b'] = [b[x] for x in ivt.index]
 
     return model
+
+
+def make_barcode_graphic(X):
+    """Run after evaluating LinearModel with b_p = 0. Quite a mess.
+    :param X: dict of X_{jn} DataFrame (index=round, column=channel)
+    :return:
+    """
+    import matplotlib.pyplot as plt
+    cm = LinearSegmentedColormap.from_list('asdf', [(0., '#999966'),
+                                                    (1. / 3.5, '#66A366'), (1.5 / 3.5, '#005C00'),
+                                                    (2. / 3.5, '#FF5050'), (2.5 / 3.5, '#800000'),
+                                                    (3. / 3.5, '#CC80E6'), (3.5 / 3.5, '#A319D1')])
+
+    tmp = []
+    for x, y in X.items():
+        tmp_ = y.as_matrix()
+        tmp += [(x, tmp_.argmax(axis=1) + 0.5 * (tmp_.max(axis=1) > 10))]
+    color_codes = np.array([x[1] for x in sorted(tmp)])
+
+    fig, axs = plt.subplots(ncols=2, figsize=(6, 10))
+
+    titles = ['barcode 1', 'barcode 2']
+    color_codes_grouped = color_codes[:24], color_codes[24:]
+
+    for ax, Z_, i in zip(axs, color_codes_grouped, (0, 24)):
+        ax.matshow(Z_, cmap=cm)
+        ax.set_yticks(np.arange(len(X) / 2))
+        ax.yaxis.set_ticks(np.arange(len(X) / 2) + 0.5, minor=True)
+        ax.set_yticklabels([x[0] for x, _ in zip(sorted(tmp)[i:], Z_)])
+        ax.set_xticks(np.arange(6))
+        ax.xaxis.set_ticks(np.arange(6) + 0.5, minor=True)
+        ax.set_xticklabels([str(x) for x in range(1, 7)])
+        g = ax.grid(which='minor', color='black')
+        ax.set_title(titles[i == 24 + 1 - 1])
+
+    return fig
 
 
 ###################
