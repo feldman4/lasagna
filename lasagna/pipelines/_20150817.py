@@ -263,21 +263,22 @@ def blob_max_median(df, detect_round=1, detect_channel=3, neighborhood=(9, 9),
      for normalization.
     :return:
     """
-
+    df = df.copy()
     pad_width = neighborhood if pad_width is None else pad_width
 
     data = lasagna.io.get_row_stack(df.xs(detect_round, level='round').ix[0], pad=pad_width)
-
+    print data.shape, starting_threshold
     detect_frame = data[detect_round - 1, detect_channel]
 
     threshold = starting_threshold
+    print detect_frame
     blobs = []
     while True:
         blobs = skimage.feature.blob_log(detect_frame, max_sigma=max_sigma, threshold=threshold)
         if len(blobs) != 0:
             break
         threshold /= 4.
-
+    print blobs
     max_size = [1, 1] + list(neighborhood)
     data_max = scipy.ndimage.filters.maximum_filter(window_filter(data), size=max_size)
 
@@ -287,7 +288,7 @@ def blob_max_median(df, detect_round=1, detect_channel=3, neighborhood=(9, 9),
 
     max_values = data_max[:, :, blobs[best, 0], blobs[best, 1]]
     max_median_values = np.median(data_max, axis=[2, 3])
-
+    print max_values
     # uses channels from outer scope
     for i, channel in enumerate(channels):
         df[channel, 'blob_max'] = max_values[:, i].astype(float)
@@ -303,7 +304,7 @@ def blob_max_median(df, detect_round=1, detect_channel=3, neighborhood=(9, 9),
 
     for k, v in zip(blob_info_columns, blob_info):
         df['all', k] = v
-
+    print df['Atto647']
     return df.sortlevel(axis=1)
 
 
@@ -383,6 +384,10 @@ def prepare_linear_model():
 
 def make_barcode_graphic(X):
     """Run after evaluating LinearModel with b_p = 0. Quite a mess.
+    X = {}
+    for sample, row in ivt.iterrows():
+        X[sample] = model.evaluate(row['M'], row['b'])
+
     :param X: dict of X_{jn} DataFrame (index=round, column=channel)
     :return:
     """
