@@ -4,7 +4,8 @@ import pandas as pd
 import numpy as np
 import sys
 from lasagna.design import *
-from itertools import cycle
+from itertools import cycle, product
+import Bio.SeqIO.AbiIO
 
 # bottom strand
 spacer = 'TT'
@@ -117,4 +118,37 @@ class BarcodeSet(object):
     def get_barcodes_fasta(self):
         return '\n'.join(['>%s\n%s' % (bc['name'], bc['sequence'])
                           for _, bc in self.barcodes.iterrows()])
+
+    def score_seqs(self, seqs):
+        """Find barcodes that best fit sequences.
+        :param seqs:
+        :return:
+        """
+        all_barcodes = []
+        tiles = [self.tiles_arr[:6, i] for i in range(self.tiles_arr.shape[1])]
+        for t1, t2, t3 in product(*tiles):
+            all_barcodes += [self.make_barcode([t1, t2, t3])]
+
+        best = []
+        for seq in seqs:
+            arr = []
+            for barcode in all_barcodes:
+                barcode = barcode.upper()
+                arr += [sum(x in seq for x in barcode.split(rc(spacer)))]
+            best += [np.argmax(arr)]
+        return [all_barcodes[i] for i in best]
+
+
+
+
+
+
+def load_abi(f):
+    with open(f, 'rb') as fh:
+        h = Bio.SeqIO.AbiIO.AbiIterator(fh).next()
+        s = Bio.SeqIO.AbiIO._abi_trim(h)
+    return str(s.seq)
+
+
+
 
