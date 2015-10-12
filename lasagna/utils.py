@@ -4,7 +4,9 @@ import pandas as pd
 import signal
 import subprocess
 import sklearn.utils.linear_assignment_
-
+from functools import wraps
+from inspect import getargspec, isfunction
+from itertools import izip, ifilter, starmap
 
 class Memoized(object):
     """Decorator that caches a function's return value each time it is called.
@@ -358,28 +360,88 @@ def call(arg, stdin, shell=True):
     p.stdin.close()
     return p.stdout.read()
 
+
 def linear_assignment(df):
     """Wrapper of sklearn linear assignment algorithm for DataFrame cost matrix. Returns
     DataFrame with columns for matched labels. Minimizes cost.
     """
     x = sklearn.utils.linear_assignment_.linear_assignment(df.as_matrix())
-    y = zip(df.index[x[:,0]], df.columns[x[:,1]])
-    df_out = pd.DataFrame(y, columns = [df.index.name, df.columns.name])
+    y = zip(df.index[x[:, 0]], df.columns[x[:, 1]])
+    df_out = pd.DataFrame(y, columns=[df.index.name, df.columns.name])
     return df_out
 
 
 class TimeoutError(Exception):
     pass
 
+
 class timeout:
     def __init__(self, seconds=1, error_message='Timeout'):
         self.seconds = seconds
         self.error_message = error_message
+
     def handle_timeout(self, signum, frame):
         raise TimeoutError(self.error_message)
+
     def __enter__(self):
         signal.signal(signal.SIGALRM, self.handle_timeout)
         signal.alarm(self.seconds)
+
     def __exit__(self, type, value, traceback):
         signal.alarm(0)
 
+
+def auto_assign(*names, **kwargs):
+    """
+    auto_assign(function) -> method
+    auto_assign(*args) -> decorator
+    auto_assign(exclude=args) -> decorator
+
+    allow a method to assign (some of) its arguments as attributes of
+    'self' automatically.  E.g.
+
+    class Foo(object):
+    ...     @auto_assign
+    ...     def __init__(self, foo, bar): pass
+    ...
+    breakfast = Foo('spam', 'eggs')
+    breakfast.foo, breakfast.bar
+    ('spam', 'eggs')
+
+    To restrict auto-assignment to 'bar' and 'baz', write:
+
+        @auto_assign('bar', 'baz')
+        def method(self, foo, bar, baz): ...
+
+    To prevent 'foo' and 'baz' from being auto_assigned, use:
+
+        @auto_assign(exclude=('foo', 'baz'))
+        def method(self, foo, bar, baz): ...
+    """
+    if kwargs:
+        exclude, f = set(kwargs['exclude']), None
+        sieve = lambda l: ifilter(lambda nv: nv[0] not in exclude, l)
+    elif len(names) == 1 and isfunction(names[0]):
+        f = names[0]
+        sieve = lambda l: l
+    else:
+        names, f = set(names), None
+        sieve = lambda l: ifilter(lambda nv: nv[0] in names, l)
+
+    def decorator(f):
+        fargnames, _, _, fdefaults = getargspec(f)
+        # Remove self from fargnames and make sure fdefault is a tuple
+        fargnames, fdefaults = fargnames[1:], fdefaults or ()
+        defaults = list(sieve(izip(reversed(fargnames), reversed(fdefaults))))
+
+        @wraps(f)
+        def decorated(self, *args, **kwargs):
+            assigned = dict(sieve(izip(fargnames, args)))
+            assigned.update(sieve(kwargs.iteritems()))
+            for _ in starmap(assigned.setdefault, defaults): pass
+            self.__dict__.update(assigned)
+            return f(self, *args, **kwargs)
+
+        return decorated
+
+    return f and decorator(f) or decorator
