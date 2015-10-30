@@ -541,6 +541,9 @@ def mark_text(arr, text, inplace=False, value=255, **kwargs):
         return np.concatenate([arr, frames], axis=-3)
     return arr
 
+def asdf():
+    return 'fuck y'
+
 
 def mark_disk(shape, features, type='box'):
     """ features contains [i, j, diameter]
