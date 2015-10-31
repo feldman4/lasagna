@@ -445,3 +445,45 @@ def auto_assign(*names, **kwargs):
         return decorated
 
     return f and decorator(f) or decorator
+
+
+def jitter(x, r=0.1):
+    """Add jitter to matrix of data, proportional to standard deviation of
+    each column, with scale factor r.
+    """
+    return x + np.random.rand(*x.shape) * np.std(x)[None,:] * r
+
+def better_legend(**kwargs):
+    """Call pyplot.legend after removing duplicates.
+    """
+    import matplotlib.pyplot as plt
+    from collections import OrderedDict
+    handles, labels = plt.gca().get_legend_handles_labels()
+    by_label = OrderedDict(zip(labels, handles))
+    plt.legend(by_label.values(), by_label.keys(), **kwargs)
+    
+def simulate(f):
+    """Wrapped function takes original function's args and kwargs as lists and evaluates
+    all combinations. Results are stored in a DataFrame indexed by each arg/kwarg combination.
+    """
+    def wrapped_f( *args,  **kwargs):
+        all_kwargs = OrderedDict()
+        [all_kwargs.update({'arg_%d' % i: a}) for i,a in enumerate(args)]
+        all_kwargs.update(kwargs)
+        
+        # build index of conditions to evaluate
+        index_tuples = list(product(*all_kwargs.values()))
+        index = pd.MultiIndex.from_tuples(it * index_tuples, 
+                                         names=all_kwargs.keys())
+
+        # store output in DataFrame, indexed by condition
+        results = []
+        for ix in index:
+            args = ix[:len(args)]
+            kwargs = ix[len(args):]
+            kwargs_keys = all_kwargs.keys()[len(args):]
+            kwargs = {k: v for k,v in zip(kwargs_keys, kwargs)}
+            results += [f(*args, **kwargs)]
+
+        return pd.DataFrame(results, index=index)
+    return wrapped_f
