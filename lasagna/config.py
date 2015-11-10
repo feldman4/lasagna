@@ -49,7 +49,7 @@ def set_linear_model_defaults(model):
     :param model:
     :return:
     """
-    pr = cloning['probe stocks']
+    pr = cloning['probes']
     pr['oligos'] = pr['oligos'].convert_objects(convert_numeric=True).fillna(0)
     x = pr.reset_index().pivot_table(values='oligos', fill_value=0, index='name', columns='targets')
 
@@ -63,7 +63,7 @@ def set_linear_model_defaults(model):
     model.tables['B'] = B
     model.tables['C'] = (cloning['dyes'].drop('dummy', 1)
                          .astype(float))
-    model.tables['D'] = (cloning['probe stocks'].reset_index()
+    model.tables['D'] = (cloning['probes'].reset_index()
                          .pivot_table(values='dummy', index='name',
                                       columns='dye', fill_value=0))
 

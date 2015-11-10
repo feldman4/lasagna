@@ -55,6 +55,9 @@ def add_dir(path, dir_to_add):
 
 
 def read_stack(filename, master=None, memmap=False):
+    if not os.path.isfile(filename):
+        if os.path.isfile(paths.full(filename)):
+            filename = paths.full(filename)
     if master:
         TF = _load_tifffile(master)
         names = [s.pages[0].parent.filename for s in TF.series]
@@ -263,6 +266,9 @@ def sort_by_site(s):
 
 
 def get_well_site(s):
+    """Return well and site from a MicroManager MDA filename, e.g.:
+    100X_round1_1_MMStack_A1-Site_15.ome.tif => (A1, 15)
+    """
     match = re.search('_(..)-Site_([0-9]*)', s)
     if match:
         well, site = match.groups(1)

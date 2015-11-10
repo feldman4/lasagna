@@ -3,26 +3,35 @@
 
 from ij import IJ, ImagePlus, WindowManager
 import ij.io.FileSaver
+from ij.measure import Calibration
 import time, os
 from glob import glob
 
 # C
 #channel_luts = (('Grays', (400, 8000)),)
-channel_luts = (('Blue', (400, 30000)),
-                ('Green', (800, 3500)),
-                ('Red', (800, 3500)),
-                ('Magenta', (800, 3500)))
+channel_luts = (('Blue', (400, 80000)),
+                ('Green', (2000, 6000)),
+                ('Red', (800, 6000)),
+                ('Magenta', (800, 6000)))
 # channel_luts = (('Blue', (400, 60000)),
 #				('Green', (400, 1200)))
 
 channels = len(channel_luts)
 slices = 1  # Z
 frames = 1;  # T
+
 # 40X
-tiles = (5, 5)
-overlap = int(100 * (1. - 300. / 350))
+tiles, overlap = (4, 4), int(100 * (1. - 300. / 350))
+pixel_width = 0.175 * 2
+
 # 4X
 #tiles, overlap = (3, 3), int(100*(1. - 1800./3379))
+
+## 100X
+#tiles, overlap = (5, 5), int(100*(1. - 100./135))
+#pixel_width = 0.066 * 2
+
+
 print tiles, overlap
 nuclei_singleton = False
 
@@ -31,12 +40,24 @@ if False:
     home_dir = '/broad/blainey_lab/David/lasagna/20150817 6 round/data/'
     home_dir = '/Users/feldman/Downloads/20150817/stitched/'
 else:
-    home_dir = 'D:\\User Folders\\David\\lasagna\\20150817\\'
+    home_dir = 'D:\\User Folders\\David\\lasagna\\20151103_96W-G015\\'
     # home_dir = '\\\\neon-cifs\\blainey_lab\\David\\lasagna\\20150817 6 round\\analysis\\calibrated\\raw\\'
     filesep = '\\'
 
-data_dirs = ['40X_round6_4']
+data_dirs = ['40X_round1_2']
 
+cal = Calibration()
+cal.setUnit('um')
+cal.pixelWidth = pixel_width
+cal.pixelHeight = pixel_width
+
+
+rows = 'ABCDEFGH'
+columns = [str(x) for x in range(1, 13)]
+rows = 'F'
+columns = columns[:4]
+
+wells = [r + c for r in rows for c in columns]
 
 def savename(well, data_dir):
     # TODO better naming convention, use Site_0?
@@ -52,13 +73,6 @@ def stitch_cmd(grid_size, overlap, directory, file_pattern, config):
     computation_parameters=[Save computation time (but use more RAM)]
     image_output=[Fuse and display]"""
     return s % (grid_size[0], grid_size[1], overlap, directory, file_pattern, config)
-
-
-rows = 'ABCDEFGH'
-columns = '123456789'
-rows = 'A'
-
-wells = [r + c for r in rows for c in columns]
 
 for data_dir in data_dirs:
     print home_dir + data_dir + filesep + '*.tif'
@@ -87,6 +101,7 @@ for data_dir in data_dirs:
             IJ.run(color)
 
         #        ij.io.FileSaver(ip).saveAsTiff(savename(well, data_dir))
+        ip.setCalibration(cal)
         IJ.saveAs("Tiff", savename(well, data_dir))
         IJ.run("Close All")
 

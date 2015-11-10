@@ -22,9 +22,9 @@ import lasagna.utils
 
 DOWNSAMPLE = 2
 
-default_features = {'mean': lambda region: region.intensity_image.mean(),
-                    'median': lambda region: np.median(region.intensity_image),
-                    'max': lambda region: region.intensity_image.max()
+default_features = {'mean': lambda region: region.intensity_image[region.image].mean(),
+                    'median': lambda region: np.median(region.intensity_image[region.image]),
+                    'max': lambda region: region.intensity_image[region.image].max()
                     }
 
 default_nucleus_features = {
@@ -98,6 +98,7 @@ def table_from_nuclei(row, index_names, source='aligned', nuclei='nuclei', chann
         segmented = skimage.morphology.dilation(segmented, nuclei_dilation)
 
     info = []
+
     for region in regionprops(segmented, intensity_image=segmented):
         info += [{k: v(region) for k, v in nucleus_features.items()}]
 
@@ -117,6 +118,7 @@ def table_from_nuclei(row, index_names, source='aligned', nuclei='nuclei', chann
         channel_regions = regionprops(segmented, intensity_image=image)
         for name, fcn in features.items():
             df[channel, name] = [fcn(r) for r in channel_regions]
+
 
     df.index.names = index_names
     df = df.set_index(('all', 'label'), append=True)

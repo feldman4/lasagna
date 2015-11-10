@@ -6,7 +6,8 @@ import subprocess
 import sklearn.utils.linear_assignment_
 from functools import wraps
 from inspect import getargspec, isfunction
-from itertools import izip, ifilter, starmap
+from itertools import izip, ifilter, starmap, product
+from collections import OrderedDict, Counter
 
 class Memoized(object):
     """Decorator that caches a function's return value each time it is called.
@@ -473,7 +474,7 @@ def simulate(f):
         
         # build index of conditions to evaluate
         index_tuples = list(product(*all_kwargs.values()))
-        index = pd.MultiIndex.from_tuples(it * index_tuples, 
+        index = pd.MultiIndex.from_tuples(index_tuples, 
                                          names=all_kwargs.keys())
 
         # store output in DataFrame, indexed by condition
