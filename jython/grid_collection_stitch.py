@@ -9,42 +9,45 @@ from glob import glob
 
 # C
 #channel_luts = (('Grays', (400, 8000)),)
-channel_luts = (('Blue', (400, 80000)),
-                ('Green', (2000, 6000)),
-                ('Red', (800, 6000)),
-                ('Magenta', (800, 6000)))
+channel_luts = (('Blue', (400, 50000)),
+                ('Green', (2000, 20000)),
+                ('Red', (800, 20000)),
+                ('Magenta', (800, 20000)))
 # channel_luts = (('Blue', (400, 60000)),
 #				('Green', (400, 1200)))
 
 channels = len(channel_luts)
-slices = 1  # Z
+slices = 5  # Z
 frames = 1;  # T
 
-# 40X
-tiles, overlap = (4, 4), int(100 * (1. - 300. / 350))
-pixel_width = 0.175 * 2
+#### 40X
+#tiles, overlap = (3, 3), int(100 * (1. - 300. / 350))
+#pixel_width = 0.175 * 2
 
-# 4X
+### 4X
 #tiles, overlap = (3, 3), int(100*(1. - 1800./3379))
+#pixel_width = 1.64
 
 ## 100X
-#tiles, overlap = (5, 5), int(100*(1. - 100./135))
-#pixel_width = 0.066 * 2
+tiles, overlap = (5, 5), int(100*(1. - 100./135))
+pixel_width = 0.066 * 2
 
 
 print tiles, overlap
 nuclei_singleton = False
 
 if False:
+	# osx, unix
     filesep = '/'
     home_dir = '/broad/blainey_lab/David/lasagna/20150817 6 round/data/'
     home_dir = '/Users/feldman/Downloads/20150817/stitched/'
 else:
-    home_dir = 'D:\\User Folders\\David\\lasagna\\20151103_96W-G015\\'
+	# windows
+    home_dir = 'D:\\User Folders\\David\\lasagna\\20151116_96W-G019\\'
     # home_dir = '\\\\neon-cifs\\blainey_lab\\David\\lasagna\\20150817 6 round\\analysis\\calibrated\\raw\\'
     filesep = '\\'
 
-data_dirs = ['40X_round1_2']
+data_dirs = ['100X_scan_2']
 
 cal = Calibration()
 cal.setUnit('um')
@@ -54,8 +57,6 @@ cal.pixelHeight = pixel_width
 
 rows = 'ABCDEFGH'
 columns = [str(x) for x in range(1, 13)]
-rows = 'F'
-columns = columns[:4]
 
 wells = [r + c for r in rows for c in columns]
 
