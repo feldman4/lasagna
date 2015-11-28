@@ -10,26 +10,26 @@ from glob import glob
 # C
 #channel_luts = (('Grays', (400, 8000)),)
 channel_luts = (('Blue', (400, 50000)),
-                ('Green', (2000, 20000)),
-                ('Red', (800, 20000)),
-                ('Magenta', (800, 20000)))
+                ('Green', (2000, 5000)),
+                ('Red', (800, 5000)),
+                ('Magenta', (800, 5000)))
 # channel_luts = (('Blue', (400, 60000)),
 #				('Green', (400, 1200)))
 
 channels = len(channel_luts)
-slices = 5  # Z
+slices = 1  # Z
 frames = 1;  # T
 
-#### 40X
-#tiles, overlap = (3, 3), int(100 * (1. - 300. / 350))
+##### 40X
+#tiles, overlap = (5, 5), int(100 * (1. - 300. / 350))
 #pixel_width = 0.175 * 2
 
 ### 4X
 #tiles, overlap = (3, 3), int(100*(1. - 1800./3379))
 #pixel_width = 1.64
 
-## 100X
-tiles, overlap = (5, 5), int(100*(1. - 100./135))
+# 100X
+tiles, overlap = (7, 7), int(100*(1. - 100./135))
 pixel_width = 0.066 * 2
 
 
@@ -43,11 +43,11 @@ if False:
     home_dir = '/Users/feldman/Downloads/20150817/stitched/'
 else:
 	# windows
-    home_dir = 'D:\\User Folders\\David\\lasagna\\20151116_96W-G019\\'
+    home_dir = 'D:\\User Folders\\David\\lasagna\\20151122_96W-G020\\MAX\\'
     # home_dir = '\\\\neon-cifs\\blainey_lab\\David\\lasagna\\20150817 6 round\\analysis\\calibrated\\raw\\'
     filesep = '\\'
 
-data_dirs = ['100X_scan_2']
+data_dirs = [ '100X_round3_3']
 
 cal = Calibration()
 cal.setUnit('um')
@@ -59,10 +59,11 @@ rows = 'ABCDEFGH'
 columns = [str(x) for x in range(1, 13)]
 
 wells = [r + c for r in rows for c in columns]
+#wells = ['A6']
 
 def savename(well, data_dir):
     # TODO better naming convention, use Site_0?
-    return home_dir + data_dir + '_' + well + '.stitched.tif'
+    return home_dir + data_dir + '_MMStack_' + well + '.stitched.tif'
 
 
 def stitch_cmd(grid_size, overlap, directory, file_pattern, config):

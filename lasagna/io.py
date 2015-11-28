@@ -56,8 +56,8 @@ def add_dir(path, dir_to_add):
 
 def read_stack(filename, master=None, memmap=False):
     if not os.path.isfile(filename):
-        if os.path.isfile(paths.full(filename)):
-            filename = paths.full(filename)
+        if os.path.isfile(config.paths.full(filename)):
+            filename = config.paths.full(filename)
     if master:
         TF = _load_tifffile(master)
         names = [s.pages[0].parent.filename for s in TF.series]
