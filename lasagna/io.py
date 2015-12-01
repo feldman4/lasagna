@@ -1,7 +1,7 @@
 from itertools import product
 import skimage.morphology
 from lasagna import config
-from lasagna.utils import Memoized
+from lasagna.utils import Memoized, add_find
 from glob import glob
 import pandas
 import struct
@@ -443,7 +443,7 @@ class Paths(object):
                     pattern = pattern.replace('[%s]' % group, str(value))
                 entry.update({key: pattern})
 
-        self.table = lasagna.utils.add_find(pandas.DataFrame(d))
+        self.table = add_find(pandas.DataFrame(d))
 
         for k, v in table_index.items():
             self.table[k] = self.table[k].astype(v)
