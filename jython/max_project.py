@@ -6,7 +6,7 @@ from glob import glob
 
 home_dir = 'D:\\User Folders\\David\\lasagna\\20151122_96W-G020\\'
 
-sub_dirs = ['100X_round4_1']
+sub_dirs = ['60X_round4_3']
 
 
 for sub_dir in sub_dirs:

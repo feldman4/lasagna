@@ -364,6 +364,10 @@ class Paths(object):
         """Store file paths relative to lasagna_path, allowing dataset to be loaded in different
         absolute locations. Retrieve raw files, stitched files, and nuclei. Pass stitch name and
         get nuclei name. Store path to calibration information.
+
+        Path information stored in DataFrame paths.table, e.g.,
+        paths.table.find(mag='60X', round=1)
+
         :param dataset:
         :param lasagna_path:
         :return:
@@ -439,7 +443,7 @@ class Paths(object):
                     pattern = pattern.replace('[%s]' % group, str(value))
                 entry.update({key: pattern})
 
-        self.table = pandas.DataFrame(d)
+        self.table = lasagna.utils.add_find(pandas.DataFrame(d))
 
         for k, v in table_index.items():
             self.table[k] = self.table[k].astype(v)
@@ -462,19 +466,6 @@ class Paths(object):
                 if not os.path.exists(d):
                     os.makedirs(d)
                     print 'created directory', d
-
-    def table_(self, **kwargs):
-        """Convenience function to subset conditions, e.g. table_(well='A1', mag='40X', site=0).
-        :param kwargs:
-        :return:
-        """
-        index = tuple()
-        for n in self.table.index.names:
-            if n in kwargs:
-                index += (kwargs[n],)
-            else:
-                index += (slice(None),)
-        return self.table.loc[index, :]
 
     def lookup(self, column, **kwargs):
         """Convenient search.

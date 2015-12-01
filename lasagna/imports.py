@@ -6,6 +6,8 @@ import regex as re
 import lasagna.io
 import lasagna.process
 import lasagna.utils
+from lasagna.io import save_hyperstack as save
+from lasagna.io import read_stack as read
 
 import skimage
 import os

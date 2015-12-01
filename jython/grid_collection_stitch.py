@@ -28,10 +28,13 @@ frames = 1;  # T
 #tiles, overlap = (3, 3), int(100*(1. - 1800./3379))
 #pixel_width = 1.64
 
-## 100X
-tiles, overlap = (7, 7), int(100*(1. - 100./135))
-pixel_width = 0.066 * 2
+### 100X
+#tiles, overlap = (7, 7), int(100*(1. - 100./135))
+#pixel_width = 0.066 * 2
 
+## 60X
+tiles, overlap = (7, 7), int(100*(1. - 200./225.3))
+pixel_width = 0.110 * 2
 
 print tiles, overlap
 nuclei_singleton = False
@@ -47,7 +50,7 @@ else:
     # home_dir = '\\\\neon-cifs\\blainey_lab\\David\\lasagna\\20150817 6 round\\analysis\\calibrated\\raw\\'
     filesep = '\\'
 
-data_dirs = [ '100X_round4_2']
+data_dirs = [ '60X_round4_3']
 
 cal = Calibration()
 cal.setUnit('um')

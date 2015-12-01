@@ -2,6 +2,7 @@ import functools
 import numpy as np
 import pandas as pd
 import signal
+import types
 import subprocess
 import sklearn.utils.linear_assignment_
 from functools import wraps
@@ -488,3 +489,21 @@ def simulate(f):
 
         return pd.DataFrame(results, index=index)
     return wrapped_f
+
+def find(self, **kwargs):
+    """Add dictionary-style find function for DataFrame with MultiIndex.
+    df(index1='whatever', index3=['a', 'b'])
+    """
+    index = tuple()
+    for n in self.index.names:
+        if n in kwargs:
+            index += (kwargs[n],)
+        else:
+            index += (slice(None),)
+    return self.loc[index, :]
+
+def add_find(df):
+    df.find = types.MethodType(find, df)
+    return df
+
+

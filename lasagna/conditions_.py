@@ -187,6 +187,20 @@ class Experiment(object):
         table = table[(table != '').any(axis=1)]
         self.ind_vars_table = table[sorted(table.columns)]
 
+    # TODO: this
+    # def melt(self):
+    #     # export i.v. table
+    #     x = self.ind_vars_table.loc[:, 'cells':'barcodes'].copy()
+    #     def nice_tuple(z): return [', '.join(y).encode('ascii') for y in z]
+    #     x['barcodes'] = nice_tuple(x['barcodes'])
+    #     x['probes round 1'] = nice_tuple(x['probes round 1'])
+
+    #     results = []
+    #     for well, row in  exp.ind_vars_table.iterrows():
+    #     results += [model.evaluate(row['M'], row['b'])]
+    #     results = pd.concat(results)
+    #     results.index = exp.ind_vars_table.index
+
 
 
 
