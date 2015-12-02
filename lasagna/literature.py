@@ -15,6 +15,9 @@ def mitocheck(gene, screens=('Mitocheck primary screen',
     request = 'http://mitocheck.org/cgi-bin/mtc?query=%s' % gene
     x = bsurl(request)
     y = x.find(title='List all movies/images associated with this gene')
+    if y is None:
+        print 'zero or multiple entries for', gene
+        return None
     z = bsurl('http://mitocheck.org' + y['href'])
     df = pd.read_html(str(z.find('table')), header=0)[2].dropna(how='all')
     df = df[df['Source'].isin(screens)]
@@ -24,9 +27,11 @@ def mitocheck(gene, screens=('Mitocheck primary screen',
         request = 'http://mitocheck.org/cgi-bin/mtc?action=show_movie;query=%s' % movie_id 
         x = bs(urllib2.urlopen(request).read())
         df.loc[ix, 'link'] = x.find_all('a', text=u'Download this movie')[0]['href']
+        movie_id = int(movie_id)
         tmp = (df.loc[ix, 'link'].split('/')[-1]
                              .replace('.avi', '.%d.avi' % movie_id))
         df.loc[ix, 'avi'] = ''.join([c if c not in substitute else '_' for c in tmp])
+
         
     return df.drop(df.columns[0], axis=1)
 

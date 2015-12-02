@@ -235,17 +235,30 @@ class BarcodeSet(object):
         match_barcode = self.make_barcode(match_tiles)
         return match_barcode, matches
 
-    def score_files(self, files):
+    def score_files(self, files, reverse_complement=False):
+        """Apply BarcodeSet.score_seq to each item provided, which can be a sequence or a filename. 
+        rc can be a a bool or list of bools determining which sequences to reverse complement.
+        """
+        if isinstance(reverse_complement, bool):
+            reverse_complement = [reverse_complement] * len(files)
+
         parent_dir = os.path.basename(os.path.dirname(files[0]))
         reference = '>%s\n' % parent_dir
-        for f in files:
-            match_barcode, matches = self.score_seq(load_abi(f))
+        match_seqs, matches_arr = [], []
+        for f, rc in zip(files, reverse_complement):
+            seq = load_abi(f) if not rc else lasagna.design.rc(load_abi(f))
+            match_barcode, matches = self.score_seq(seq)
             print '%s: %s, %s' % (os.path.basename(f), matches.argmax(axis=0), matches.max(axis=0))
-            reference += match_barcode
+            match_seqs += [match_barcode]
+            matches_arr += [matches.argmax(axis=0)]
+        reference += ''.join(np.unique(match_seqs))
         reference_name = os.path.join(os.path.dirname(files[0]),
-                                      '%s_reference.fasta' % time.strftime('%Y%m%d'))
+                                      '%s_%s_reference.fasta' % (parent_dir, time.strftime('%Y%m%d')))
         with open(reference_name, 'w') as fh:
             fh.write(reference)
+
+        return matches_arr
+
 
 
 def load_abi(f):

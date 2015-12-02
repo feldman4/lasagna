@@ -1,5 +1,6 @@
 import lasagna.io
 import lasagna.models
+import lasagna.process
 import os
 import numpy as np
 import pandas as pd
@@ -14,7 +15,7 @@ dye_colors = {'A594': 'r', 'Atto647': 'm', 'Cy3': 'g'}
 GSPREAD_CREDENTIALS = '/broad/blainey_lab/blainey-ipython/DF/gspread-da2f80418147.json'
 
 # name of lasagna folder and sheet in Lasagna FISH
-dataset = '20151103_96W-G015'
+dataset = '20151116_96W-G019'
 
 # relative magnification, empirical
 scale_40_100 = 0.393
@@ -74,31 +75,6 @@ def align(files, save_name, n=500, trim=150):
     return data
 
 
-def align_scaled(x, y, scale, **kwargs):
-    """Align two images taken at different magnification. The input dimensions 
-    are assumed to be [channel, height, width], and the alignment is based on 
-    the first channel. The first image should contain the second image.
-    Additional kwargs are passed to lasagna.process.register_images.
-    """
-    x = x.transpose([1, 2, 0])
-    y = y.transpose([1, 2, 0])
-
-    # downsample 100X image and align to get offset  
-    y_ds = skimage.transform.rescale(y, scale, preserve_range=True)
-    _, offset = lasagna.process.register_images([x[..., 0], y_ds[..., 0]],
-                                                **kwargs)
-    ST = skimage.transform.SimilarityTransform(translation=offset[::-1])
-
-    # warp 40X image and resize to match 100X image
-    x_win = skimage.transform.warp(x, inverse_map=ST, 
-                                      output_shape=y_ds.shape[:2], 
-                                      preserve_range=True)
-    x_win = skimage.transform.resize(x_win, y.shape)
-
-    # combine images along new leading dimension
-    return np.r_['0,4', x_win, y].transpose([0,3,1,2])
-
-
 def clean_signal(im, bg_radius=160, clahe_clip=0.08, clahe_ntiles=4):
 
     selem_bg = skimage.morphology.square(bg_radius)
@@ -115,7 +91,7 @@ def clean_signal(im, bg_radius=160, clahe_clip=0.08, clahe_ntiles=4):
 
 
 def segment_cells(nuclei, mask, small_holes=100, remove_boundary_cells=True):
-
+    
     selem_3 = skimage.morphology.square(3)
 
     # voronoi

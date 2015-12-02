@@ -1,5 +1,6 @@
 import lasagna.io
 import lasagna.models
+import lasagna.process
 import os
 import numpy as np
 import pandas as pd
@@ -14,7 +15,7 @@ dye_colors = {'A594': 'r', 'Atto647': 'm', 'Cy3': 'g'}
 GSPREAD_CREDENTIALS = '/broad/blainey_lab/blainey-ipython/DF/gspread-da2f80418147.json'
 
 # name of lasagna folder and sheet in Lasagna FISH
-dataset = '20151103_96W-G015'
+dataset = '20151114_96W-G017'
 
 # relative magnification, empirical
 scale_40_100 = 0.393
@@ -80,11 +81,15 @@ def align_scaled(x, y, scale, **kwargs):
     the first channel. The first image should contain the second image.
     Additional kwargs are passed to lasagna.process.register_images.
     """
+    # TODO: MODIFY TO RETURN OVERLAPPING WINDOW ONLY
     x = x.transpose([1, 2, 0])
     y = y.transpose([1, 2, 0])
 
-    # downsample 100X image and align to get offset  
-    y_ds = skimage.transform.rescale(y, scale, preserve_range=True)
+    # downsample 100X image and align to get offset
+    if float(scale) != 1.:
+        y_ds = skimage.transform.rescale(y, scale, preserve_range=True)
+    else:
+        y_ds = y
     _, offset = lasagna.process.register_images([x[..., 0], y_ds[..., 0]],
                                                 **kwargs)
     ST = skimage.transform.SimilarityTransform(translation=offset[::-1])
@@ -171,14 +176,17 @@ def load_conditions():
     experiment.parse_ind_vars()
     experiment.parse_grids()    
 
-    experiment.ind_vars['probes round 1'] = \
-            [tuple(x.split(', ')) for x in experiment.ind_vars['probes']]
+    for rnd in '123':
+        experiment.ind_vars['probes round %s' % rnd] = \
+                [tuple(x.split(', ')) for x in experiment.ind_vars['probes']]
 
     experiment.make_ind_vars_table()
 
 
     cells = experiment.ind_vars_table['cells']
     virus = lasagna.config.cloning['cell lines'].loc[cells, 'lentivirus']
+    # TODO: map comma-separated cell lines to tuple
+    virus = virus.fillna('')
     plasmids = lasagna.config.cloning['lentivirus'].loc[virus, 'plasmid']
     plasmids = plasmids.fillna('')
     barcodes = lasagna.config.cloning['plasmids'].loc[plasmids, 'barcode']
