@@ -506,4 +506,9 @@ def add_find(df):
     df.find = types.MethodType(find, df)
     return df
 
+def nice_tuple(z):
+    """Convert iterable of iterables of strings into list of comma separated strings.
+    """
+    return [', '.join(y).encode('ascii') for y in z]
+
 

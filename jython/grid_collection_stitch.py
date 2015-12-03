@@ -20,9 +20,9 @@ channels = len(channel_luts)
 slices = 1  # Z
 frames = 1;  # T
 
-##### 40X
-#tiles, overlap = (5, 5), int(100 * (1. - 300. / 350))
-#pixel_width = 0.175 * 2
+#### 40X
+tiles, overlap = (5, 5), int(100 * (1. - 300. / 350))
+pixel_width = 0.175 * 2
 
 ### 4X
 #tiles, overlap = (3, 3), int(100*(1. - 1800./3379))
@@ -32,9 +32,9 @@ frames = 1;  # T
 #tiles, overlap = (7, 7), int(100*(1. - 100./135))
 #pixel_width = 0.066 * 2
 
-## 60X
-tiles, overlap = (7, 7), int(100*(1. - 200./225.3))
-pixel_width = 0.110 * 2
+### 60X
+#tiles, overlap = (7, 7), int(100*(1. - 200./225.3))
+#pixel_width = 0.110 * 2
 
 print tiles, overlap
 nuclei_singleton = False
@@ -46,11 +46,11 @@ if False:
     home_dir = '/Users/feldman/Downloads/20150817/stitched/'
 else:
 	# windows
-    home_dir = 'D:\\User Folders\\David\\lasagna\\20151122_96W-G020\\MAX\\'
+    home_dir = 'D:\\User Folders\\David\\lasagna\\20151122_96W-G020\\'
     # home_dir = '\\\\neon-cifs\\blainey_lab\\David\\lasagna\\20150817 6 round\\analysis\\calibrated\\raw\\'
     filesep = '\\'
 
-data_dirs = [ '60X_round4_3']
+data_dirs = ['40X_round4_1', '40X_round2_1', '40X_round2_2']
 
 cal = Calibration()
 cal.setUnit('um')
