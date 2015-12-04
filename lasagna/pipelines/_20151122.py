@@ -52,71 +52,72 @@ def setup(lasagna_path='/broad/blainey_lab/David/lasagna/'):
 
 
 
-# def load_conditions():
-#     """Load Experiment and prepare ind. var. table based on A + 0.01*B notation for probes
-#      in sheet layout.
-#     :return:
-#     """
-#     experiment = lasagna.conditions_.Experiment()
-#     experiment.sheet = lasagna.conditions_.load_sheet(dataset)
-#     experiment.parse_ind_vars()
-#     experiment.parse_grids()    
+def load_conditions():
+    """Load Experiment and prepare ind. var. table based on A + 0.01*B notation for probes
+     in sheet layout.
+    :return:
+    """
+    experiment = lasagna.conditions_.Experiment()
+    experiment.sheet = lasagna.conditions_.load_sheet(dataset)
+    experiment.parse_ind_vars()
+    experiment.parse_grids()    
 
-#     experiment.ind_vars['probes round 1'] = \
-#             [tuple(x.split(', ')) for x in experiment.ind_vars['probes']]
+    for rnd in '1234':
+        experiment.ind_vars['probes round %s' % rnd] = \
+                [tuple(x.split(', ')) for x in experiment.ind_vars['probes']]
 
-#     experiment.make_ind_vars_table()
-
-
-#     cells = experiment.ind_vars_table['cells']
-#     virus = lasagna.config.cloning['cell lines'].loc[cells, 'lentivirus']
-#     plasmids = lasagna.config.cloning['lentivirus'].loc[virus, 'plasmid']
-#     plasmids = plasmids.fillna('')
-#     barcodes = lasagna.config.cloning['plasmids'].loc[plasmids, 'barcode']
-
-#     barcodes = barcodes.fillna('')
-#     # split comma-separated list of barcodes
-#     experiment.ind_vars_table['barcodes'] = [tuple(x.split(', ')) for x in barcodes]
-
-#     lasagna.config.experiment = experiment
-#     return experiment
+    experiment.make_ind_vars_table()
 
 
-# def prepare_linear_model():
-#     """Create LinearModel, set probes used in experiment, and generate matrices.
+    cells = experiment.ind_vars_table['cells']
+    virus = lasagna.config.cloning['cell lines'].loc[cells, 'lentivirus']
+    plasmids = lasagna.config.cloning['lentivirus'].loc[virus, 'plasmid']
+    plasmids = plasmids.fillna('')
+    barcodes = lasagna.config.cloning['plasmids'].loc[plasmids, 'barcode']
 
-#     :return:
-#     """
-#     model = lasagna.models.LinearModel()
-#     # split comma-separated probes
-#     lasagna.config.set_linear_model_defaults(model)
-#     all_probes = lasagna.config.experiment.ind_vars['probes']
-#     model.indices['l'] = list(set(sum([x.split(', ') for x in all_probes], [])))
+    barcodes = barcodes.fillna('')
+    # split comma-separated list of barcodes
+    experiment.ind_vars_table['barcodes'] = [tuple(x.split(', ')) for x in barcodes]
 
-#     model.matrices_from_tables()
+    lasagna.config.experiment = experiment
+    return experiment
 
-#     ivt = lasagna.config.experiment.ind_vars_table
 
-#     model.indices['j'] = [x for x in ivt.columns
-#                           if 'round' in x]
+def prepare_linear_model():
+    """Create LinearModel, set probes used in experiment, and generate matrices.
 
-#     # reformat entries in independent vars table as matrix input to LinearModel
-#     M = {sample: pd.DataFrame([], index=model.indices['j'],
-#                               columns=model.indices['l']).fillna(0)
-#          for sample in ivt.index}
-#     b = {sample: pd.Series({x: 0 for x in model.indices['m']})
-#          for sample in ivt.index}
+    :return:
+    """
+    model = lasagna.models.LinearModel()
+    # split comma-separated probes
+    lasagna.config.set_linear_model_defaults(model)
+    all_probes = lasagna.config.experiment.ind_vars['probes']
+    model.indices['l'] = list(set(sum([x.split(', ') for x in all_probes], [])))
 
-#     for sample, row in ivt.iterrows():
-#         for rnd in model.indices['j']:
-#             M[sample].loc[rnd, list(ivt.loc[sample, rnd])] = 1
-#         if not pd.isnull(row['barcodes']):
-#             b[sample][row['barcodes']] = 1
+    model.matrices_from_tables()
 
-#     lasagna.config.experiment.ind_vars_table['M'] = [M[x] for x in ivt.index]
-#     lasagna.config.experiment.ind_vars_table['b'] = [b[x] for x in ivt.index]
+    ivt = lasagna.config.experiment.ind_vars_table
 
-#     return model
+    model.indices['j'] = [x for x in ivt.columns
+                          if 'round' in x]
+
+    # reformat entries in independent vars table as matrix input to LinearModel
+    M = {sample: pd.DataFrame([], index=model.indices['j'],
+                              columns=model.indices['l']).fillna(0)
+         for sample in ivt.index}
+    b = {sample: pd.Series({x: 0 for x in model.indices['m']})
+         for sample in ivt.index}
+
+    for sample, row in ivt.iterrows():
+        for rnd in model.indices['j']:
+            M[sample].loc[rnd, list(ivt.loc[sample, rnd])] = 1
+        if not pd.isnull(row['barcodes']):
+            b[sample][row['barcodes']] = 1
+
+    lasagna.config.experiment.ind_vars_table['M'] = [M[x] for x in ivt.index]
+    lasagna.config.experiment.ind_vars_table['b'] = [b[x] for x in ivt.index]
+
+    return model
 
 
 
