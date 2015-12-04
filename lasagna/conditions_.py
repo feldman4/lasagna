@@ -103,7 +103,9 @@ class Experiment(object):
         :return: (dict, wells): ({title: mask}, {well_name:
         :rtype : dict[str, numpy.nparray]
         """
-        xs_values = np.pad(self.sheet, ((0, 1), (0, 1)), mode='constant')
+        # some weird bug with np.pad and string dtype
+        xs_values = np.zeros(np.array(self.sheet.shape) + 1, dtype='S123')
+        xs_values[:-1, :-1] = self.sheet
 
         grids = OrderedDict()
         for candidate in zip(*np.where(xs_values == ROW_INDICATOR)):
@@ -140,7 +142,9 @@ class Experiment(object):
         """
         selem = np.array([[1, 0],
                          [1, 1]])
-        xs_values = np.pad(self.sheet, ((0, 1), (0, 1)), mode='constant')
+        # some weird bug with np.pad and string dtype
+        xs_values = np.zeros(np.array(self.sheet.shape) + 1, dtype='S123')
+        xs_values[:-1, :-1] = self.sheet
 
         mask = (xs_values[:, :2] != '').astype(int)
         mask[:, 1] *= 2
@@ -188,18 +192,29 @@ class Experiment(object):
         self.ind_vars_table = table[sorted(table.columns)]
 
 
-    def melt(self):
+    def melt(self, model):
         # export i.v. table
-        x = self.ind_vars_table.loc[:, 'cells':'barcodes'].copy()
+        # exclude single characters ('M', 'b')
+        table = self.ind_vars_table.filter(regex='..')
+        # make nice the tuples
         def nice_tuple(z): return [', '.join(y).encode('ascii') for y in z]
-        x['barcodes'] = nice_tuple(x['barcodes'])
-        x['probes round 1'] = nice_tuple(x['probes round 1'])
+        for column, series in self.ind_vars_table.iteritems():
+            if any(isinstance(value, tuple) for value in series):
+                table[column] = nice_tuple(table[column])
 
         results = []
-        for well, row in  exp.ind_vars_table.iterrows():
-        results += [model.evaluate(row['M'], row['b'])]
-        results = pd.concat(results)
-        results.index = exp.ind_vars_table.index
+        for well, row in self.ind_vars_table.iterrows():
+            results += [model.evaluate(row['M'], row['b']).stack()]
+        results = pd.concat(results, axis=1).transpose()
+        results.index = self.ind_vars_table.index
+
+        # preserve MultiIndex of results when combining
+        if isinstance(results.columns, pd.MultiIndex):
+            base = ('',) * (results.columns.nlevels - 1)
+            table.columns = pd.MultiIndex.from_tuples([base + (c,) for c in table.columns])
+
+        return pd.concat([table, results], axis=1)
+        
 
 
 
