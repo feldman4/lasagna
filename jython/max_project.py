@@ -4,10 +4,10 @@ import ij.io.FileSaver
 import time, os
 from glob import glob
 
-home_dir = 'D:\\User Folders\\David\\lasagna\\20151122_96W-G020\\'
-home_dir = '//Users//feldman//Downloads//20151122_96W-G020//data
+home_dir = 'D:\\User Folders\\David\\lasagna\\20151216_96W-G023\\'
+#home_dir = '//Users//feldman//Downloads//20151122_96W-G020//data
 
-sub_dirs = ['60X_round4_3']
+sub_dirs = ['40X_round1_1']
 
 filesep = '//'
 

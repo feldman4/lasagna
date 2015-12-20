@@ -10,19 +10,24 @@ from glob import glob
 # C
 #channel_luts = (('Grays', (400, 8000)),)
 channel_luts = (('Blue', (400, 50000)),
-                ('Green', (2000, 5000)),
-                ('Red', (800, 5000)),
-                ('Magenta', (800, 5000)))
-# channel_luts = (('Blue', (400, 60000)),
-#				('Green', (400, 1200)))
+                ('Green', (2000, 8000)),
+                ('Red', (800, 8000)),
+                ('Magenta', (800, 8000)))
+#channel_luts = (('Grays', (400, 60000)),
+#				('Blue', (400, 4000)))
+#channel_luts = (('Grays', (400, 40000)),)
 
 channels = len(channel_luts)
-slices = 1  # Z
+slices = 2  # Z
 frames = 1;  # T
 
 #### 40X
-tiles, overlap = (5, 5), int(100 * (1. - 300. / 350))
+tiles, overlap = (4, 4), int(100 * (1. - 300. / 350))
 pixel_width = 0.175 * 2
+
+##### 20X
+#tiles, overlap = (3, 3), int(100 * (1. - 500. / 750))
+#pixel_width = 0.35 * 2
 
 ### 4X
 #tiles, overlap = (3, 3), int(100*(1. - 1800./3379))
@@ -32,9 +37,9 @@ pixel_width = 0.175 * 2
 #tiles, overlap = (7, 7), int(100*(1. - 100./135))
 #pixel_width = 0.066 * 2
 
-### 60X
-#tiles, overlap = (7, 7), int(100*(1. - 200./225.3))
-#pixel_width = 0.110 * 2
+## 60X
+tiles, overlap = (3, 3), int(100*(1. - 200./225.3))
+pixel_width = 0.110 * 2
 
 print tiles, overlap
 nuclei_singleton = False
@@ -43,14 +48,14 @@ if False:
 	# osx, unix
     filesep = '/'
     home_dir = '/broad/blainey_lab/David/lasagna/20150817 6 round/data/'
-    home_dir = '/Users/feldman/Downloads/20150817/stitched/'
+    home_dir = '/Users/feldman/Downloads/20151209/'
 else:
 	# windows
-    home_dir = 'D:\\User Folders\\David\\lasagna\\20151122_96W-G020\\'
+    home_dir = 'D:\\User Folders\\David\\lasagna\\20151219_96W-G024\\'
     # home_dir = '\\\\neon-cifs\\blainey_lab\\David\\lasagna\\20150817 6 round\\analysis\\calibrated\\raw\\'
     filesep = '\\'
 
-data_dirs = ['40X_round4_1', '40X_round2_1', '40X_round2_2']
+data_dirs = ['60X_round1_2']
 
 cal = Calibration()
 cal.setUnit('um')
@@ -62,7 +67,6 @@ rows = 'ABCDEFGH'
 columns = [str(x) for x in range(1, 13)]
 
 wells = [r + c for r in rows for c in columns]
-#wells = ['A6']
 
 def savename(well, data_dir):
     # TODO better naming convention, use Site_0?

@@ -8,6 +8,7 @@ import lasagna.process
 import lasagna.utils
 from lasagna.io import save_hyperstack as save
 from lasagna.io import read_stack as read
+from natsort import natsorted
 
 import skimage
 import os

@@ -511,4 +511,22 @@ def nice_tuple(z):
     """
     return [', '.join(y).encode('ascii') for y in z]
 
+def probes_to_rounds(rounds=1):
+    def f(ind_vars):
+        for rnd in range(1, rounds + 1):
+            ind_vars['probes round %s' % rnd] = \
+                    [tuple(x.split(', ')) for x in ind_vars['probes']]
+    return f
 
+def cells_to_barcodes(ind_vars_table, cloning=None):
+    """
+    :param cloning: dict of DataFrames based on Lasagna Cloning sheets
+    """
+    cells = ind_vars_table['cells']
+    virus = cloning['cell lines'].loc[cells, 'lentivirus']
+    plasmids = cloning['lentivirus'].loc[virus, 'plasmid']
+    plasmids = plasmids.fillna('')
+    barcodes = cloning['plasmids'].loc[plasmids, 'barcode']
+    barcodes = barcodes.fillna('')
+    # split comma-separated list of barcodes
+    ind_vars_table['barcodes'] = [tuple(x.split(', ')) for x in barcodes]

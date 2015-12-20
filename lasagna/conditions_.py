@@ -1,13 +1,13 @@
+import gspread
+from oauth2client.client import SignedJwtAssertionCredentials
 import json
+import regex as re
+import numpy as np
+import pandas as pd
 from itertools import product
 from collections import defaultdict, OrderedDict
-import regex as re
 
-import gspread
-import numpy as np
-from oauth2client.client import SignedJwtAssertionCredentials
-import pandas as pd
-
+import lasagna.models
 import lasagna.config
 
 
@@ -49,7 +49,7 @@ def load_sheet(worksheet, g_file='Lasagna FISH'):
 
 
 class Experiment(object):
-    def __init__(self, worksheet=None, g_file='Lasagna FISH'):
+    def __init__(self, worksheet=None, g_file='Lasagna FISH', ind_var_transforms=()):
         """Represent independent variables and their values for each sample.
         Load spreadsheet, extract independent variable dict and sample layout.
         Optionally update independent variable dict (layout notation may not match ind. var.
@@ -80,18 +80,22 @@ class Experiment(object):
         self.flatten_layout = flatten_layout_row_col
 
         if worksheet:
-            self.load_and_go(worksheet, g_file=g_file)
+            self.load_and_go(worksheet, g_file=g_file, ind_var_transforms=ind_var_transforms)
 
-    def load_and_go(self, worksheet, g_file='Lasagna FISH'):
+    def load_and_go(self, worksheet, g_file='Lasagna FISH', ind_var_transforms=()):
         """Shortcut to load sheet, parse sheet, and make independent variable table when
-        notation is sheet is sufficient.
+        notation is sheet is sufficient. If provided, transforms are used to update the 
+        independent variable dictionary.
         :param worksheet:
         :param g_file:
+        :param ind_var_transforms:
         :return:
         """
-        load_sheet(worksheet, g_file=g_file)
+        self.sheet = load_sheet(worksheet, g_file=g_file)
         self.parse_grids()
         self.parse_ind_vars()
+        [t(self.ind_vars) for t in ind_var_transforms]
+            
         return self.make_ind_vars_table()
 
     def parse_grids(self, title_offset=(-1, 0), A_offset=(1, 0)):
@@ -368,3 +372,40 @@ def find_comparisons_second_order(cube):
 
 def set_credentials(path):
     CREDENTIALS_JSON = path
+
+
+def prepare_linear_model(experiment):
+    """Create LinearModel, set probes used in experiment, and generate matrices.
+    Requires probes as an independent variable.
+    Requires at least one probes grid named "probes round 1" or similar.
+    :return:
+    """
+    model = lasagna.models.LinearModel()
+    # split comma-separated probes
+    lasagna.config.set_linear_model_defaults(model)
+    all_probes = experiment.ind_vars['probes']
+    model.indices['l'] = list(set(sum([x.split(', ') for x in all_probes], [])))
+
+    model.matrices_from_tables()
+
+    ivt = experiment.ind_vars_table
+    model.indices['j'] = [x for x in ivt.columns
+                          if 'round' in x]
+
+    # derive matrix input to LinearModel (M and b) from table
+    M = {sample: pd.DataFrame([], index=model.indices['j'],
+                              columns=model.indices['l']).fillna(0)
+         for sample in ivt.index}
+    b = {sample: pd.Series({x: 0 for x in model.indices['m']})
+         for sample in ivt.index}
+
+    for sample, row in ivt.iterrows():
+        for rnd in model.indices['j']:
+            M[sample].loc[rnd, list(ivt.loc[sample, rnd])] = 1
+        if not pd.isnull(row['barcodes']):
+            b[sample][row['barcodes']] = 1
+
+    experiment.ind_vars_table['M'] = [M[x] for x in ivt.index]
+    experiment.ind_vars_table['b'] = [b[x] for x in ivt.index]
+
+    return model

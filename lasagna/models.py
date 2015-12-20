@@ -208,6 +208,7 @@ class LinearModel(object):
         """
         j, l, m = [self.indices[x] for x in 'jlm']
 
+        # reshape M and b to match indices, need matrices for np.einsum
         if isinstance(M, pd.DataFrame):
             M = M.loc[j, l].as_matrix()
         if isinstance(b, pd.Series):
@@ -229,6 +230,7 @@ class LinearModel(object):
 
     def matrices_from_tables(self):
         """Set LinearModel.indices and LinearModel.tables first. Index j set separately.
+        Matrices used are subsets of tables derived using indices.
         :return:
         """
         k, l, m, n = [self.indices[x] for x in 'klmn']
@@ -240,4 +242,3 @@ class LinearModel(object):
         assert(self.B.shape == (len(l), len(m)))
         assert(self.C.shape == (len(k), len(n)))
         assert(self.D.shape == (len(l), len(k)))
-
