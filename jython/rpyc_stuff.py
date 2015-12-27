@@ -1,22 +1,9 @@
 import sys
-import array
 sys.path.append('/Users/feldman/anaconda/lib/python2.7/site-packages')
 sys.path.append('C:\\Users\\Blaineylab\\Anaconda2\\lib\\site-packages')
 
 import rpyc.utils.server
-
 import threading
-if __name__ == '__main__':
-	import ij.ImagePlus
-	import ij.ImageStack
-	import ij.process.ImageProcessor
-	import ij.process.ByteProcessor
-	import ij.process.ShortProcessor
-	import ij.LookUpTable
-	from fiji.scripting import Weaver
-
-	import jarray
-	from org.python.core.util import StringUtil
 
 
 PORT = 12345
@@ -24,10 +11,19 @@ PROTOCOL_CONFIG = {"allow_all_attrs": True,
                    "allow_setattr": True,
                    "allow_pickle": True}
 
-def start_server(window):
+class Container(object):
+    pass
+
+c = Container()
+
+def start_server(head):
     class ServerService(rpyc.Service):
-        def exposed_get_window(self):
-            return window
+        def exposed_get_head(self):
+            return head
+        def exposed_add_to_syspath(self, path):
+            return sys.path.append(path)
+        def exposed_execute(self, cmd):
+        	exec cmd in globals()
     # start the rpyc server
     server = rpyc.utils.server.ThreadedServer(ServerService, port=12345, protocol_config=PROTOCOL_CONFIG)
     t = threading.Thread(target=server.start)
@@ -43,8 +39,6 @@ def start_client():
     rpyc.BgServingThread(conn)
     return conn
 
-container = []
-
-print __name__
 if __name__ == '__main__':
 	start_server(locals())
+	print 'server started'

@@ -6,6 +6,7 @@ from glob import glob
 import pandas
 import struct
 import os
+import time
 import PIL.ImageFont
 import PIL.Image
 import PIL.ImageDraw
@@ -538,9 +539,6 @@ def mark_text(arr, text, inplace=False, value=255, **kwargs):
         return np.concatenate([arr, frames], axis=-3)
     return arr
 
-def asdf():
-    return 'fuck y'
-
 
 def mark_disk(shape, features, type='box'):
     """ features contains [i, j, diameter]
@@ -601,5 +599,41 @@ def load_tile_configuration(path):
     translations = [[float(x) for x in pos[1:-1].split(',')] for pos in m]
     return translations
 
-
 GLASBEY = load_lut('glasbey')
+
+hash_cache = {}
+fiji_target = '/Users/feldman/Downloads/20151219_96W-G024/transfer/'
+j = config.j
+# decorate to store hash_cache in function
+def show_hyperstack(data, title='image', target_imp=None, check_cache=True, **kwargs):
+    """Display image in linked ImageJ instance. If target_imp is a
+    ij.ImagePlus, replaces contents; otherwise opens new ij.ImagePlus. 
+
+    Images are first exported to .tif, then loaded in ImageJ. Default behavior is to
+    check the file cache using a hash of metadata and sparsely sampled pixels, and only 
+    export if not found in cache.
+    """
+    # have we done this before?
+    skip = min(100, data.size)
+    key = hash(str(kwargs)) + \
+          hash(tuple(data.flat[::data.size / skip])) + \
+          hash(data.size)
+
+    if key in hash_cache and check_cache:
+        savename = hash_cache[key]
+    else:
+        # export .tif
+        savename = fiji_target + title + time.strftime('_%Y%m%d_%s.tif')
+        save_hyperstack(savename, data, **kwargs)
+        hash_cache[key] = savename
+    
+    imp = j.ij.IJ.openImage(savename)
+    if target_imp:
+        target_imp.setImage(imp)
+        target_imp.updateAndRepaintWindow()
+        imp.close()
+        return target_imp
+    
+    imp.show()
+    return imp
+
