@@ -15,6 +15,14 @@ Example:
 
 	# j is built from jython_import.__dict__ after importing module in jython interpreter
 
+Issues:
+- Doesn't preserve function signatures. Should be able to copy from cpython import; tried to use
+decorator module but it has difficulties with optional arguments in jython. Jython methods can be
+identified as crashing inspect.getargspec().
+
+- Requires assignment to another module (e.g., lasagna.config.j = j) for global access. Would be 
+cleaner to override attributes in the cpython module itself with corresponding jython attributes.
+
 """
 
 import functools 
