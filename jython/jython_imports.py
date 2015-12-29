@@ -1,3 +1,22 @@
+"""
+Functions written for jython interpeter in Fiji. Contains decorators to transparently
+pickle arguments in cpython and unpickle in jython (mostly to accelerate transfer of
+lists). 
+
+Example: 
+	client = rpyc_stuff.start_client()
+	import jython_imports
+	j = jython_imports.jython_import(client.root.exposed_get_head(),
+	                                 client.root.exposed_execute)
+
+	# use j.X to access packages, functions and classes of jython_import defined in jython
+	# if a new attribute Y is defined, must be explicitly accessed once as j.Y before
+	# it appears in introspection.
+
+	# j is built from jython_import.__dict__ after importing module in jython interpreter
+
+"""
+
 import functools 
 import sys
 
@@ -15,7 +34,6 @@ if sys.subversion[0] == 'Jython':
 	import array
 	import pickle
 	import functools
-
 
 
 def UnPickler(*args_to_pickle):
@@ -92,20 +110,6 @@ def overlay_contours(contours, names=None, imp=None, overlay=None):
 
 	imp.setOverlay(overlay)
 	
-def dummy(x, y):
-	x = pickle.loads(pickle.dumps(x))
-	y = pickle.loads(pickle.dumps(y))
-	return x, y
-
-
-def dummy2(x, y):
-	return list(x), list(y)
-
-def dummy3():
-	def f(x,y,*args,**kwargs):
-		return
-	return f.func_code.co_varnames
-
 
 def mouse_pressed(f):
 	"""Returns a listener that can be attached to java object with addMouseListener.
@@ -129,49 +133,6 @@ class Head(object):
 			self.__dict__.update(dict(self._bhead))
 			return self.__dict__[key]
 		raise KeyError(key)
-
-
-def extract_def(f):
-	"""Extracts source for given function (must be defined in a file). If
-	the function is named "imports", returns block of import statements only
-	(useful for hiding java imports destined for jython interpreter).
-	"""
-	decorators = []
-	# class, assumes it's defined in this file
-	name = __file__.replace('pyc', 'py')
-	with open(name, 'r') as fh:
-		txt = fh.read().split('\n')
-	if isinstance(f, type(lambda:0)):
-		# function, co_firstlineno doesn't work with decorators
-		# name = f.func_code.co_filename
-		# lineno = f.func_code.co_firstlineno
-		with open(name, 'r') as fh:
-			txt = fh.read().split('\n')
-		lineno = [line.startswith('def %s' % f.__name__) for line in txt].index(True)
-		lineno += 1
-		dummy = lineno - 2
-		while txt[dummy].startswith('@'):
-			decorators += [txt[dummy]]
-			dummy -= 1
-		decorators = decorators[::-1]
-
-	elif isinstance(f, type):
-
-		# doesn't capture decorators
-		lineno = [line.startswith('class %s' % f.__name__) for line in txt].index(True)
-		lineno += 1
-
-	out = decorators + [txt[lineno - 1]]
-	for line in txt[lineno:]:
-		if line and line[0] not in ' \t':
-			break
-		out += [line]
-	
-	if 'def imports():' in out[0]:
-		out = [line.strip() for line in out]
-		return '\n'.join(line for line in out if line.startswith('import '))
-	return '\n'.join(out) + '\n'
-
 
 
 def jython_import(head, executor):
@@ -222,5 +183,47 @@ def jython_import(head, executor):
 # 					head[key] = PrePickledDecorator(head[key], globals()[key])
 
 # 	return Head(head)
+
+
+# def extract_def(f):
+# 	"""Extracts source for given function (must be defined in a file). If
+# 	the function is named "imports", returns block of import statements only
+# 	(useful for hiding java imports destined for jython interpreter).
+# 	"""
+# 	decorators = []
+# 	# class, assumes it's defined in this file
+# 	name = __file__.replace('pyc', 'py')
+# 	with open(name, 'r') as fh:
+# 		txt = fh.read().split('\n')
+# 	if isinstance(f, type(lambda:0)):
+# 		# function, co_firstlineno doesn't work with decorators
+# 		# name = f.func_code.co_filename
+# 		# lineno = f.func_code.co_firstlineno
+# 		with open(name, 'r') as fh:
+# 			txt = fh.read().split('\n')
+# 		lineno = [line.startswith('def %s' % f.__name__) for line in txt].index(True)
+# 		lineno += 1
+# 		dummy = lineno - 2
+# 		while txt[dummy].startswith('@'):
+# 			decorators += [txt[dummy]]
+# 			dummy -= 1
+# 		decorators = decorators[::-1]
+
+# 	elif isinstance(f, type):
+
+# 		# doesn't capture decorators
+# 		lineno = [line.startswith('class %s' % f.__name__) for line in txt].index(True)
+# 		lineno += 1
+
+# 	out = decorators + [txt[lineno - 1]]
+# 	for line in txt[lineno:]:
+# 		if line and line[0] not in ' \t':
+# 			break
+# 		out += [line]
+	
+# 	if 'def imports():' in out[0]:
+# 		out = [line.strip() for line in out]
+# 		return '\n'.join(line for line in out if line.startswith('import '))
+# 	return '\n'.join(out) + '\n'
 
 
