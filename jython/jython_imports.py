@@ -1,8 +1,7 @@
 import functools 
+import sys
 
-def imports():
-	"""Dummy function, do not call!
-	"""
+if sys.subversion[0] == 'Jython':
 	import java.awt.event.MouseAdapter
 	import ij.gui.PolygonRoi
 	import ij.gui.Overlay
@@ -18,24 +17,48 @@ def imports():
 	import functools
 
 
-class Pickled(object):
-	def __init__(self, *args_to_pickle):
-		self.args_to_pickle = args_to_pickle
 
-	def __call__(self, f):
+def UnPickler(*args_to_pickle):
+	"""Jython side, unpickles specified args. Couldn't get signatures preserved with
+	jython (decorator module failed while working in cpython).
+	"""
+	def UnPickledDecorator(f):
 		argnames = f.func_code.co_varnames
 		@functools.wraps(f)
-		def pickled_f(*args, **kwargs):
+		def unpickled_f(*args, **kwargs):
 			import pickle
 			args_ = []
 			for (x, name) in zip(args, argnames):
-				if name in self.args_to_pickle:
+				if name in args_to_pickle:
 					args_ += [pickle.loads(x)]
 				else:
 					args_ += [x]
 			return f(*args_, **kwargs)
+		
+		unpickled_f._argnames = argnames
+		unpickled_f._args_to_pickle = args_to_pickle
+		return unpickled_f
 
-		return pickled_f
+	return UnPickledDecorator
+
+
+def Pickler(f):
+	"""Cpython side, pickles corresponding arguments in already-decorated function.
+	"""
+	argnames = f._argnames
+	args_to_pickle = f._args_to_pickle
+	@functools.wraps(f)
+	def pickled_f(*args, **kwargs):
+		import pickle
+		args_ = []
+		for (x, name) in zip(args, argnames):
+			if name in args_to_pickle:
+				args_ += [pickle.dumps(x)]
+			else:
+				args_ += [x]
+		return f(*args_, **kwargs)
+	
+	return pickled_f
 
 
 def show_polygon(x, y, imp=None, name=None):
@@ -53,9 +76,10 @@ def make_polygon(x, y, name=None):
 		poly.setName(name)
 	return poly
 
-@Pickled('contours')
+@UnPickler('contours')
 def overlay_contours(contours, names=None, imp=None, overlay=None):
-
+	"""overlay_contours(contours, names=None, imp=None, overlay=None)
+	"""
 	overlay = overlay or ij.gui.Overlay()
 	imp = imp or ij.IJ.getImage()
 	names = names or [None for _ in contours]
@@ -73,7 +97,7 @@ def dummy(x, y):
 	y = pickle.loads(pickle.dumps(y))
 	return x, y
 
-# @pickled('x')
+
 def dummy2(x, y):
 	return list(x), list(y)
 
@@ -113,9 +137,13 @@ def extract_def(f):
 	(useful for hiding java imports destined for jython interpreter).
 	"""
 	decorators = []
+	# class, assumes it's defined in this file
+	name = __file__.replace('pyc', 'py')
+	with open(name, 'r') as fh:
+		txt = fh.read().split('\n')
 	if isinstance(f, type(lambda:0)):
 		# function, co_firstlineno doesn't work with decorators
-		name = f.func_code.co_filename
+		# name = f.func_code.co_filename
 		# lineno = f.func_code.co_firstlineno
 		with open(name, 'r') as fh:
 			txt = fh.read().split('\n')
@@ -128,10 +156,7 @@ def extract_def(f):
 		decorators = decorators[::-1]
 
 	elif isinstance(f, type):
-		# class, assumes it's defined in this file
-		name = __file__.replace('pyc', 'py')
-		with open(name, 'r') as fh:
-			txt = fh.read().split('\n')
+
 		# doesn't capture decorators
 		lineno = [line.startswith('class %s' % f.__name__) for line in txt].index(True)
 		lineno += 1
@@ -149,33 +174,53 @@ def extract_def(f):
 
 
 
-def jython_import(head, executor, exclude=('extract_def', 'jython_import', 'PrePickled')):
-	"""Top level function. Executes imports and function definitions from this
-	module in namespace using executor function ("exec" in jython interpreter).
-	Converts head (jython globals() dict) to object for easy access.
-	Example:
-		client = rpyc_stuff.start_client()
-		import jython_imports
-		j = jython_imports.jython_import(client.root.exposed_get_head(),
-										 client.root.exposed_execute)
+def jython_import(head, executor):
+	"""Call from cpython.
 	"""
-	module = globals()
-	with open(__file__, 'r') as fh:
-		txt = fh.read()
-	keys = [key for key in module.keys() if not key.startswith('_')]
-	keys = sorted(keys, key=lambda s: txt.index(s))
+	import os
+	module_path = os.path.dirname(__file__)
+	executor('import sys\nsys.path.append("%s")' % module_path)
+	executor('import jython_imports')
+	j = Head(head['jython_imports'].__dict__)
+	# identify pickled functions and wrap with pre-pickler
+	for key, val in j.__dict__.items():
+		if isinstance(val, type(lambda:0)):
+			if '_args_to_pickle' in val.func_dict:
+				setattr(j, key, Pickler(val))
+	return j
 
-	# imports go first
-	cmd = extract_def(module['imports'])
-	executor(cmd)
 
-	for key in keys:
-		field = module[key]
-		if key[0] is not '_' and isinstance(field, (type, type(lambda:0))):
-			if key not in exclude:
-				cmd = extract_def(module[key])
-				executor(cmd)
 
-	return Head(head)
+# def jython_import(head, executor, exclude=('extract_def', 'jython_import', 'PrePickled')):
+# 	"""Top level function. Executes imports and function definitions from this
+# 	module in namespace using executor function ("exec" in jython interpreter).
+# 	Converts head (jython globals() dict) to object for easy access.
+# 	Example:
+# 		client = rpyc_stuff.start_client()
+# 		import jython_imports
+# 		j = jython_imports.jython_import(client.root.exposed_get_head(),
+# 										 client.root.exposed_execute)
+# 	"""
+# 	module = globals()
+# 	with open(__file__, 'r') as fh:
+# 		txt = fh.read()
+# 	keys = [key for key in module.keys() if not key.startswith('_')]
+# 	keys = sorted(keys, key=lambda s: txt.index(s))
+
+# 	# imports go first
+# 	cmd = extract_def(module['imports'])
+# 	executor(cmd)
+
+# 	head = dict(head)
+# 	for key in keys:
+# 		field = module[key]
+# 		if key[0] is not '_' and isinstance(field, (type, type(lambda:0))):
+# 			if key not in exclude:
+# 				cmd = extract_def(module[key])
+# 				executor(cmd)
+# 				if cmd.startswith('@SuperPickled'):
+# 					head[key] = PrePickledDecorator(head[key], globals()[key])
+
+# 	return Head(head)
 
 
