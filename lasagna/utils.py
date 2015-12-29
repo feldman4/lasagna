@@ -490,21 +490,20 @@ def simulate(f):
         return pd.DataFrame(results, index=index)
     return wrapped_f
 
-def find(self, **kwargs):
-    """Add dictionary-style find function for DataFrame with MultiIndex.
-    df(index1='whatever', index3=['a', 'b'])
-    """
-    index = tuple()
-    for n in self.index.names:
-        if n in kwargs:
-            index += (kwargs[n],)
-        else:
-            index += (slice(None),)
-    return self.loc[index, :]
 
-def add_find(df):
-    df.find = types.MethodType(find, df)
-    return df
+class DataFrameFind(pd.DataFrame):
+    def __call__(self, **kwargs):
+        """Add dictionary-style find function for DataFrame with MultiIndex.
+        df(index1='whatever', index3=['a', 'b'])
+        """
+        index = tuple()
+        for n in self.index.names:
+            if n in kwargs:
+                index += (kwargs[n],)
+            else:
+                index += (slice(None),)
+        return self.loc[index, :]
+    
 
 def nice_tuple(z):
     """Convert iterable of iterables of strings into list of comma separated strings.

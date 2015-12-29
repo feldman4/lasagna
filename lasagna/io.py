@@ -1,7 +1,7 @@
 from itertools import product
 import skimage.morphology
 from lasagna import config
-from lasagna.utils import Memoized, add_find
+import lasagna.utils
 from glob import glob
 import pandas
 import struct
@@ -73,7 +73,7 @@ def read_stack(filename, master=None, memmap=False):
 
 
 # save load time, will bring trouble if the TiffFile reference is closed
-@Memoized
+@lasagna.utils.Memoized
 def _load_tifffile(master):
     return TiffFile(master)
 
@@ -160,7 +160,7 @@ def montage(arr, shape=None):
     return M
 
 
-@Memoized
+@lasagna.utils.Memoized
 def _get_stack(name):
     data = imread(config.paths.full(name), multifile=False)
     while data.shape[0] == 1:
@@ -444,7 +444,7 @@ class Paths(object):
                     pattern = pattern.replace('[%s]' % group, str(value))
                 entry.update({key: pattern})
 
-        self.table = add_find(pandas.DataFrame(d))
+        self.table = lasagna.utils.DataFrameFind(d)
 
         for k, v in table_index.items():
             self.table[k] = self.table[k].astype(v)
@@ -603,7 +603,6 @@ GLASBEY = load_lut('glasbey')
 
 hash_cache = {}
 fiji_target = '/Users/feldman/Downloads/20151219_96W-G024/transfer/'
-j = config.j
 # decorate to store hash_cache in function
 def show_hyperstack(data, title='image', target_imp=None, check_cache=True, **kwargs):
     """Display image in linked ImageJ instance. If target_imp is a
@@ -627,13 +626,16 @@ def show_hyperstack(data, title='image', target_imp=None, check_cache=True, **kw
         save_hyperstack(savename, data, **kwargs)
         hash_cache[key] = savename
     
-    imp = j.ij.IJ.openImage(savename)
+    imp = config.j.ij.IJ.openImage(savename)
+
     if target_imp:
         target_imp.setImage(imp)
         target_imp.updateAndRepaintWindow()
+        target_imp.setTitle(title)
         imp.close()
         return target_imp
-    
+
+    imp.setTitle(title)
     imp.show()
     return imp
 

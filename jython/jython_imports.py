@@ -1,24 +1,87 @@
+import functools 
+
 def imports():
 	"""Dummy function, do not call!
 	"""
 	import java.awt.event.MouseAdapter
 	import ij.gui.PolygonRoi
+	import ij.gui.Overlay
 	import ij.ImagePlus
 	import ij.ImageStack
 	import ij.process.ImageProcessor
 	import ij.process.ByteProcessor
 	import ij.process.ShortProcessor
 	import ij.LookUpTable
+	import ij.IJ
 	import array
+	import pickle
+	import functools
 
 
-def make_polygon(x, y, imp):
-	"""Makes a polygon Roi. Faster than storing output of ij.gui.PolygonRoi in
+class Pickled(object):
+	def __init__(self, *args_to_pickle):
+		self.args_to_pickle = args_to_pickle
+
+	def __call__(self, f):
+		argnames = f.func_code.co_varnames
+		@functools.wraps(f)
+		def pickled_f(*args, **kwargs):
+			import pickle
+			args_ = []
+			for (x, name) in zip(args, argnames):
+				if name in self.args_to_pickle:
+					args_ += [pickle.loads(x)]
+				else:
+					args_ += [x]
+			return f(*args_, **kwargs)
+
+		return pickled_f
+
+
+def show_polygon(x, y, imp=None, name=None):
+	"""Displays a polygon Roi. Faster than storing output of ij.gui.PolygonRoi in
 	cpython interpreter.
 	"""
+	if imp is None:
+		imp = ij.IJ.getImage()
+	imp.setRoi(make_polygon(x,y))
+
+def make_polygon(x, y, name=None):
 	x, y = list(x), list(y)
 	poly = ij.gui.PolygonRoi(x, y, len(x), ij.gui.Roi.POLYGON)
-	imp.setRoi(poly)
+	if name:
+		poly.setName(name)
+	return poly
+
+@Pickled('contours')
+def overlay_contours(contours, names=None, imp=None, overlay=None):
+
+	overlay = overlay or ij.gui.Overlay()
+	imp = imp or ij.IJ.getImage()
+	names = names or [None for _ in contours]
+
+	for (y, x), name in zip(contours, names):
+		poly = make_polygon(x, y)
+		if name:
+			poly.setName(name)
+		overlay.add(poly)
+
+	imp.setOverlay(overlay)
+	
+def dummy(x, y):
+	x = pickle.loads(pickle.dumps(x))
+	y = pickle.loads(pickle.dumps(y))
+	return x, y
+
+# @pickled('x')
+def dummy2(x, y):
+	return list(x), list(y)
+
+def dummy3():
+	def f(x,y,*args,**kwargs):
+		return
+	return f.func_code.co_varnames
+
 
 def mouse_pressed(f):
 	"""Returns a listener that can be attached to java object with addMouseListener.
@@ -49,11 +112,31 @@ def extract_def(f):
 	the function is named "imports", returns block of import statements only
 	(useful for hiding java imports destined for jython interpreter).
 	"""
-	name = f.func_code.co_filename
-	lineno = f.func_code.co_firstlineno
-	with open(name, 'r') as fh:
-		txt = fh.read().split('\n')
-	out = [txt[lineno - 1]]
+	decorators = []
+	if isinstance(f, type(lambda:0)):
+		# function, co_firstlineno doesn't work with decorators
+		name = f.func_code.co_filename
+		# lineno = f.func_code.co_firstlineno
+		with open(name, 'r') as fh:
+			txt = fh.read().split('\n')
+		lineno = [line.startswith('def %s' % f.__name__) for line in txt].index(True)
+		lineno += 1
+		dummy = lineno - 2
+		while txt[dummy].startswith('@'):
+			decorators += [txt[dummy]]
+			dummy -= 1
+		decorators = decorators[::-1]
+
+	elif isinstance(f, type):
+		# class, assumes it's defined in this file
+		name = __file__.replace('pyc', 'py')
+		with open(name, 'r') as fh:
+			txt = fh.read().split('\n')
+		# doesn't capture decorators
+		lineno = [line.startswith('class %s' % f.__name__) for line in txt].index(True)
+		lineno += 1
+
+	out = decorators + [txt[lineno - 1]]
 	for line in txt[lineno:]:
 		if line and line[0] not in ' \t':
 			break
@@ -65,7 +148,8 @@ def extract_def(f):
 	return '\n'.join(out) + '\n'
 
 
-def jython_import(head, executor, exclude=('extract_def', 'jython_import')):
+
+def jython_import(head, executor, exclude=('extract_def', 'jython_import', 'PrePickled')):
 	"""Top level function. Executes imports and function definitions from this
 	module in namespace using executor function ("exec" in jython interpreter).
 	Converts head (jython globals() dict) to object for easy access.
@@ -76,14 +160,22 @@ def jython_import(head, executor, exclude=('extract_def', 'jython_import')):
 										 client.root.exposed_execute)
 	"""
 	module = globals()
-	for key in module:
+	with open(__file__, 'r') as fh:
+		txt = fh.read()
+	keys = [key for key in module.keys() if not key.startswith('_')]
+	keys = sorted(keys, key=lambda s: txt.index(s))
+
+	# imports go first
+	cmd = extract_def(module['imports'])
+	executor(cmd)
+
+	for key in keys:
 		field = module[key]
-		if key[0] is not '_' and isinstance(field, type(lambda:0)):
+		if key[0] is not '_' and isinstance(field, (type, type(lambda:0))):
 			if key not in exclude:
 				cmd = extract_def(module[key])
 				executor(cmd)
-	# h = Head()
-	# [h.__setattr__(key, head[key]) for key in head]
+
 	return Head(head)
 
 

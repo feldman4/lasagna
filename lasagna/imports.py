@@ -8,6 +8,7 @@ import lasagna.process
 import lasagna.utils
 from lasagna.io import save_hyperstack as save
 from lasagna.io import read_stack as read
+from lasagna.io import show_hyperstack as show
 from natsort import natsorted
 
 import skimage
@@ -17,3 +18,4 @@ from itertools import product
 from glob import glob
 
 from scipy.ndimage.interpolation import zoom
+import scipy.ndimage as ndi

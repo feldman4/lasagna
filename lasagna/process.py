@@ -36,14 +36,39 @@ default_nucleus_features = {
 }
 
 
-def binary_contours(img):
+def binary_contours(img, fix=True):
     """Find contours of binary image
     :param img:
     :return: list of nx2 arrays of [x, y] points along contour of each image.
     """
     contours = skimage.measure.find_contours(np.pad(img, 1, mode='constant'),
                                              level=0.5)
-    return [contour - 1 for contour in contours]
+    contours = [contour - 1 for contour in contours]
+    if fix:
+        return [fixed_contour(c) for c in contours]
+    return contours
+
+
+def fixed_contour(contour):
+    """Fix contour generated from binary mask to exactly match outline. Probably won't
+        work well for weirdly shaped masks containing [[1, 0], [0, 1]]
+    """
+    # fix corners (rounding error)
+    c = contour.astype(int)
+    d = np.diff(c, axis=0)
+    corners_top = (d == [-1, 1]).all(axis=1)
+    corners_bottom = (d == [1, -1]).all(axis=1)
+    c[np.where(corners_top)] -= [1, 0]
+    c[np.where(corners_bottom)] -= [0, 1]
+    # remove any duplicate points
+    c = c[:-1][d.any(axis=1)]
+
+    # remove redundant points
+    d = np.diff(c, axis=0).clip(min=-1, max=1)
+    cut = (d == np.roll(d, 1, axis=0)).all(axis=1)
+    c = c[:-1][~cut]
+    
+    return c
 
 
 def pad(array, pad_width, mode=None, **kwargs):
