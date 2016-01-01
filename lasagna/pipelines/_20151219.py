@@ -5,7 +5,6 @@ import os
 import numpy as np
 import pandas as pd
 import skimage.transform
-import skfmm
 import skimage
 import scipy.stats
 
@@ -22,11 +21,10 @@ pipeline = None
 tile_configuration = 'calibration/TileConfiguration.registered.txt'
 channels = 'DAPI', 'Cy3', 'A594', 'Atto647'
 luts = lasagna.io.BLUE, lasagna.io.GREEN, lasagna.io.RED, lasagna.io.MAGENTA
-
-display_ranges = ((500, 80000),
-                  (2000, 6000),
-                  (800, 3500),
-                  (800, 3500))
+display_ranges = ((500, 45000),
+                    (1400, 5600),
+                    (800, 5000),
+                    (800, 5000))
 
 
 def setup(lasagna_path='/broad/blainey_lab/David/lasagna/'):
@@ -44,7 +42,7 @@ def setup(lasagna_path='/broad/blainey_lab/David/lasagna/'):
     # lasagna.config.calibration_short = c
     global tile_configuration
     tile_configuration = lasagna.config.paths.full(tile_configuration)
-
+    return lasagna.config.paths
 
 
 def align(files, save_name, n=500, trim=150):
