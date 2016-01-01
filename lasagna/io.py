@@ -604,7 +604,7 @@ GLASBEY = load_lut('glasbey')
 hash_cache = {}
 fiji_target = '/Users/feldman/Downloads/20151219_96W-G024/transfer/'
 # decorate to store hash_cache in function
-def show_hyperstack(data, title='image', target_imp=None, check_cache=True, **kwargs):
+def show_hyperstack(data, title='image', imp=None, check_cache=True, **kwargs):
     """Display image in linked ImageJ instance. If target_imp is a
     ij.ImagePlus, replaces contents; otherwise opens new ij.ImagePlus. 
 
@@ -626,16 +626,34 @@ def show_hyperstack(data, title='image', target_imp=None, check_cache=True, **kw
         save_hyperstack(savename, data, **kwargs)
         hash_cache[key] = savename
     
-    imp = config.j.ij.IJ.openImage(savename)
+    new_imp = config.j.ij.IJ.openImage(savename)
 
-    if target_imp:
-        target_imp.setImage(imp)
-        target_imp.updateAndRepaintWindow()
-        target_imp.setTitle(title)
-        imp.close()
-        return target_imp
+    if imp:
+        # rather than convert from grayscale to composite, just replace
+        if new_imp.getDisplayMode() != imp.getDisplayMode():
 
-    imp.setTitle(title)
-    imp.show()
-    return imp
+            # move the old listeners over
+            new_imp.show()
+
+            new_canvas = new_imp.getWindow().getCanvas()
+            [new_canvas.removeKeyListener(x) for x in new_canvas.getKeyListeners()]
+
+            listeners = imp.getWindow().getCanvas().getKeyListeners()
+            [new_canvas.addKeyListener(x) for x in listeners]
+
+            imp.close()
+                
+        else:
+            imp.setImage(new_imp)
+            imp.updateAndRepaintWindow()
+            imp.setTitle(title)
+            new_imp.close()
+            return imp
+
+    new_imp.setTitle(title)
+    new_imp.show()
+    return new_imp
+
+
+
 

@@ -8,7 +8,7 @@ import skimage
 from skimage.feature import register_translation
 import numpy as np
 import pandas as pd
-from skimage.filter import gaussian_filter, threshold_adaptive
+from skimage.filters import gaussian_filter, threshold_adaptive
 from skimage.morphology import disk, watershed, opening
 from skimage.util import img_as_uint
 import skimage.measure
@@ -575,7 +575,7 @@ def replace_minimum(img):
     :return:
     """
     selem = np.array([[1, 1, 1], [1, 0, 1], [1, 1, 1]])
-    mi = skimage.filter.rank.minimum(img, selem)
+    mi = skimage.filters.rank.minimum(img, selem)
     img_ = img.copy()
     img_[img_ < mi] = mi[img_ < mi]
     return img_

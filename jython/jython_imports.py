@@ -30,6 +30,8 @@ import sys
 
 if sys.subversion[0] == 'Jython':
 	import java.awt.event.MouseAdapter
+	import java.awt.event.KeyAdapter
+	import java.awt.Color
 	import ij.gui.PolygonRoi
 	import ij.gui.Overlay
 	import ij.ImagePlus
@@ -71,6 +73,7 @@ def UnPickler(*args_to_pickle):
 def Pickler(f):
 	"""Cpython side, pickles corresponding arguments in already-decorated function.
 	"""
+	import numpy as np
 	argnames = f._argnames
 	args_to_pickle = f._args_to_pickle
 	@functools.wraps(f)
@@ -79,6 +82,9 @@ def Pickler(f):
 		args_ = []
 		for (x, name) in zip(args, argnames):
 			if name in args_to_pickle:
+				# no numpy on the jython side
+				if isinstance(x, np.ndarray):
+					x = x.tolist()
 				args_ += [pickle.dumps(x)]
 			else:
 				args_ += [x]
@@ -117,6 +123,12 @@ def overlay_contours(contours, names=None, imp=None, overlay=None):
 		overlay.add(poly)
 
 	imp.setOverlay(overlay)
+
+@UnPickler('rois')
+def set_overlay_contours_color(rois, imp, color):
+	overlay = imp.getOverlay()
+	for i in rois:
+		overlay.get(int(i)).setStrokeColor(color)
 	
 
 def mouse_pressed(f):
@@ -128,6 +140,20 @@ def mouse_pressed(f):
 	listener = ML()
 	listener.mousePressed = f
 	return listener
+
+def add_key_typed(f, imp, re_add=True):
+	class KL(java.awt.event.KeyAdapter):
+		def keyTyped(self, event):
+			pass
+	listener = KL()
+	listener.keyTyped = f
+
+	canvas = imp.getWindow().getCanvas()
+	kls = canvas.getKeyListeners()
+	[canvas.removeKeyListener(x) for x in kls]
+	canvas.addKeyListener(listener)
+	if re_add:
+		[canvas.addKeyListener(x) for x in kls]
 
 
 class Head(object):
