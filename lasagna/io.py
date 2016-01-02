@@ -648,10 +648,12 @@ def show_hyperstack(data, title='image', imp=None, check_cache=True, **kwargs):
             imp.updateAndRepaintWindow()
             imp.setTitle(title)
             new_imp.close()
+            config.last_imp = imp
             return imp
 
     new_imp.setTitle(title)
     new_imp.show()
+    config.last_imp = imp
     return new_imp
 
 
