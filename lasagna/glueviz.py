@@ -20,8 +20,7 @@ class FijiViewer(object):
 
 		self.imp = lasagna.io.show_hyperstack(np.zeros((100,100)), title='glue')
 
-		# make a key listener for selection events
-		j.add_key_typed(make_selection_listener(key='`'), self.imp)
+		
 		self.displayed_file = None
 		
 	@staticmethod
@@ -36,15 +35,19 @@ class FijiViewer(object):
 		self.contours = np.array([x + y[:2] for x,y in zip(contours.id._unhashable, bounds)])
 
 		self.files = source.categories[source.astype(int)]
+		self.source_id = source.id
 
 		if self.imp.getOverlay():
 			self.imp.getOverlay().setStrokeColor(j.java.awt.Color.GRAY)
 
+		# make a key listener for selection events
+		j.add_key_typed(j.make_selection_listener(update_selection, self, 
+			lasagna.config.queue_appender, key='`'), self.imp)
+
 	@staticmethod
 	def plot_subset(self, axes, source, y, contours, context, style):
 		j = lasagna.config.j
-
-		overlay = self.imp.getOverlay()
+		# lasagna.config.style += [style]
 		# decide on a file
 		if not source.size:
 			# reset overlay
@@ -54,8 +57,8 @@ class FijiViewer(object):
 		else:
 
 			# take first selected file, only update display if changed
-			to_show = source.astype(int)[0]
-			file_to_show = source.categories[to_show]
+			self.source_val = source.astype(int)[0]
+			file_to_show = source.categories[self.source_val]
 
 			att_index = np.where(self.files == file_to_show)
 			if file_to_show != self.displayed_file:
@@ -68,20 +71,17 @@ class FijiViewer(object):
 				# overlay all contours for the new file
 				all_contours = self.contours[att_index]
 				packed = [(1 + contour).T.tolist() for contour in all_contours]
-				j.overlay_contours(packed)
+				j.overlay_contours(packed, imp=self.imp)
 				self.imp.getOverlay().setStrokeColor(default_color())
+				# lasagna.config.j.ij.IJ.log('changed to %s' % file_to_show)
 
+			# lasagna.config.j.ij.IJ.log('displayed %s' % str(style.parent))
 			overlay = self.imp.getOverlay()
 			color = j.java.awt.Color.decode(style.color)
 			# only show contours that apply to this file
 			rois = np.where(np.in1d(att_index, contours))[0]
 			lasagna.config.selection = np.intersect1d(contours, att_index)
-			lasagna.config.self_contours = self.contours
-			lasagna.config.a = att_index
-			lasagna.config.b = contours
-			lasagna.config.imp = self.imp
-			# lasagna.config.selection2 = np.where(np.in1d(np.array(self.contours[att_index]), np.array(contours)))[0]
-			# j.set_overlay_contours_color(np.intersect1d(contours, att_index), self.imp, color)
+
 			j.set_overlay_contours_color(rois, self.imp, color)
 			self.imp.updateAndDraw()
 
@@ -92,13 +92,16 @@ class FijiViewer(object):
 				artist = axes.scatter(source, y, s=100, c=style.color, marker='.', alpha=0.5)
 				rois = np.intersect1d(contours, att_index)
 				rois = np.where(np.in1d(att_index, contours))[0]
-				def do_first(g, imp=self.imp, rois=rois):
+				def do_first(g, imp=self.imp, rois=rois, style=style):
 					def wrapped(*args, **kwargs):
 						# if overlay is gone (new file loaded), skip
 						if imp.getOverlay():
 							lasagna.config.rois = rois
 							j.set_overlay_contours_color(rois, 
 														 imp, default_color())
+							# lasagna.config.j.ij.IJ.log('removed %s rois' % str(style.parent))
+						
+							# lasagna.config.j.ij.IJ.log('skipped removing %s rois' % str(style.parent))
 						return g(*args, **kwargs)
 					return wrapped
 				artist.remove = do_first(artist.remove)
@@ -117,7 +120,7 @@ class FijiViewer(object):
 		# update selection, bypassing callback
 
 
-def update_selection(selection):
+def update_selection(selection, viewer):
 	"""Assumes first dataset contains 'x' and 'y' components.
 	Selection consists of (xmin, xmax, ymin, ymax)
 	"""
@@ -126,8 +129,11 @@ def update_selection(selection):
 	roi = glue.core.roi.RectangularROI(xmin=xmin, xmax=xmax, ymin=ymin, ymax=ymax)
 	xatt = lasagna.config.app.data_collection[0].data.find_component_id('x')
 	yatt = lasagna.config.app.data_collection[0].data.find_component_id('y')
-	subset_state = glue.core.subset.RoiSubsetState(xatt=xatt , yatt=yatt, roi=roi)
-	
+	xy_state = glue.core.subset.RoiSubsetState(xatt=xatt , yatt=yatt, roi=roi)
+	file_state = glue.core.subset.CategorySubsetState(viewer.source_id, viewer.source_val)
+	# selection only applies to data in displayed file
+	subset_state = glue.core.subset.AndState(xy_state, file_state)
+
 	data_collection = lasagna.config.app.data_collection
 
 	# if no subset groups selected, make a new one
@@ -144,7 +150,7 @@ def update_selection(selection):
 		edit_mode.update(data_collection, subset_state)
 
 
-def make_selection_listener(key='u'):
+def make_selection_listener(viewer, key='u'):
 	def selection_listener(event):
 		if event.getKeyChar().lower() == key:
 			imp = event.getSource().getImage()
@@ -154,7 +160,7 @@ def make_selection_listener(key='u'):
 					rect = roi.getBounds()
 					selection = (rect.getMinX(), rect.getMaxX(), 
 								 rect.getMinY(), rect.getMaxY())
-					update_selection(selection)
+					update_selection(selection, viewer)
 	return selection_listener
 
 	

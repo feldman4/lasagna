@@ -4,6 +4,8 @@ import pandas as pd
 import signal
 import types
 import subprocess
+import Queue
+import threading
 import sklearn.utils.linear_assignment_
 from functools import wraps
 from inspect import getargspec, isfunction
@@ -529,3 +531,34 @@ def cells_to_barcodes(ind_vars_table, cloning=None):
     barcodes = barcodes.fillna('')
     # split comma-separated list of barcodes
     ind_vars_table['barcodes'] = [tuple(x.split(', ')) for x in barcodes]
+
+
+
+def launch_queue(queue):
+
+    def evaluate(q):
+        """Call functions in queue (doesn't return results).
+        Entries in queue are formatted as (func, (args, kwargs)).
+        Example:
+            def f(x):
+                x[0] += 1
+            y = [0]
+            q += [[f, ([y], {})]]
+        """
+        import time
+        while True:
+            time.sleep(0.1)
+            if len(q):
+                if q is None:
+                    break
+                else:
+                    f, (args, kwargs) = q.pop()
+                    f(*args, **kwargs)
+
+    t = threading.Thread(target=evaluate, args=(queue,))
+    t.daemon = True
+    t.start()
+    return t
+                    
+                
+

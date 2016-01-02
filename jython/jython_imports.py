@@ -128,7 +128,9 @@ def overlay_contours(contours, names=None, imp=None, overlay=None):
 def set_overlay_contours_color(rois, imp, color):
 	overlay = imp.getOverlay()
 	for i in rois:
-		overlay.get(int(i)).setStrokeColor(color)
+		roi = overlay.get(int(i))
+		if roi:
+			roi.setStrokeColor(color)
 	
 
 def mouse_pressed(f):
@@ -184,6 +186,21 @@ def jython_import(head, executor):
 				setattr(j, key, Pickler(val))
 	return j
 
+
+def make_selection_listener(update_selection, viewer, queue_append, key='u'):
+	def selection_listener(event):
+		if event.getKeyChar().lower() == key:
+			imp = event.getSource().getImage()
+			roi = imp.getRoi()
+			if roi:
+				if roi.getTypeAsString() == 'Rectangle':
+					rect = roi.getBounds()
+					selection = (rect.getMinX(), rect.getMaxX(), 
+								 rect.getMinY(), rect.getMaxY())
+
+					# add to lasagna.config.queue
+					queue_append([update_selection, ([selection, viewer], {})])
+	return selection_listener
 
 
 # def jython_import(head, executor, exclude=('extract_def', 'jython_import', 'PrePickled')):

@@ -1,6 +1,7 @@
 import os
 import pandas as pd
 import lasagna.conditions_
+import lasagna.utils
 
 up = os.path.dirname
 home = up(__file__)
@@ -18,6 +19,16 @@ visitor_font = os.path.join(fonts, 'visitor1.ttf')
 credentials = os.path.join(home, 'resources', 'gspread-da2f80418147.json')
 
 cloning = None
+
+
+def get_appender(queue):
+    def appender(arg):
+        queue.append(arg)
+    return appender
+    
+queue = []
+lasagna.utils.launch_queue(queue)
+queue_appender = get_appender(queue)
 
 
 def load_sheets():
