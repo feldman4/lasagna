@@ -11,7 +11,7 @@ if True:
     # osx, unix
     filesep = '/'
     home_dir = '/broad/blainey_lab/David/lasagna/20150817 6 round/data/'
-    home_dir = '/Users/feldman/Downloads/20151219_96W-G024/data/'
+    home_dir = '/Users/feldman/Downloads/20151219_96W-G024/data/tmp/'
 else:
     # windows
     home_dir = 'D:\\User Folders\\David\\lasagna\\20151219_96W-G024\\'
@@ -58,17 +58,16 @@ nuclei_singleton = False
 use_template = True
 template = None
 
-data_dirs = ['40X_round2_1']
+data_dirs = ['40X_round2_1', '40X_round3_1']
 
 # usually xyzct, except on bad days when it's xyczt(default)
 order = 'xyzct'
-order = 'xyczt(default)'
+#order = 'xyczt(default)'
 
 rows = 'ABCDEFGH'
 columns = [str(x) for x in range(1, 13)]
 
 wells = [r + c for r in rows for c in columns]
-wells = ['A6']
 
 
 cal = Calibration()

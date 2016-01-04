@@ -559,6 +559,16 @@ def launch_queue(queue):
     t.daemon = True
     t.start()
     return t
-                    
+            
+
+def start_client():
+    """Start rpyc client connected to jython instance.
+    """
+    from lasagna.rpyc_utils import start_client
+    client = start_client()
+    import lasagna.jython_imports
+    j = lasagna.jython_imports.jython_import(client.root.exposed_get_head(),
+                                     client.root.exposed_execute)
+    return j        
                 
 

@@ -20,6 +20,11 @@ credentials = os.path.join(home, 'resources', 'gspread-da2f80418147.json')
 
 cloning = None
 
+# relative magnification, empirical
+magnification = {'100X': 0.066,
+                  '40X': 0.168,
+                  }
+
 
 def get_appender(queue):
     def appender(arg):

@@ -36,14 +36,21 @@ default_nucleus_features = {
 }
 
 
-def binary_contours(img, fix=True):
-    """Find contours of binary image
+def binary_contours(img, fix=True, labeled=False):
+    """Find contours of binary image, or labeled if flag set. For labeled regions,
+    returns contour of largest area only.
     :param img:
     :return: list of nx2 arrays of [x, y] points along contour of each image.
     """
-    contours = skimage.measure.find_contours(np.pad(img, 1, mode='constant'),
-                                             level=0.5)
-    contours = [contour - 1 for contour in contours]
+    if labeled:
+        regions = skimage.measure.regionprops(img)
+        contours = [sorted(skimage.measure.find_contours(np.pad(r.image, 1, mode='constant'), 0.5), 
+                key=lambda x: len(x))[-1] for r in regions]
+        contours = [contour + [r.bbox[:2]] for contour,r in zip(contours, regions)]
+    else:
+        contours = skimage.measure.find_contours(np.pad(img, 1, mode='constant'),
+                                                 level=0.5)
+        contours = [contour - 1 for contour in contours]
     if fix:
         return [fixed_contour(c) for c in contours]
     return contours
@@ -248,15 +255,74 @@ def get_nuclei(img, opening_radius=6, block_size=80, threshold_offset=0):
     return img_as_uint(nuclei)
 
 
+def get_nuclei2(dapi, radius=10, area=(40,300), um_per_px=None):
+    """Could downsample to consistent pixel size (40X?)
+    """
+    um_per_px = um_per_px or lasagna.config.magnification['40X'] * 2
+    smooth = 1.35 / um_per_px # gaussian smoothing in watershed
+    radius = radius / um_per_px
+    area=(40,250)
+    area = np.array(area)/(um_per_px**2)
+
+    mask = _binarize(dapi, radius, area[0])
+    labeled = skimage.measure.label(mask, background=0) + 1
+    labeled = filter_by_region(labeled, lambda r: r.mean_intensity, intensity=dapi)
+
+    # should only fill holes below minimum cell area
+    nuclei = apply_watershed(ndimage.binary_fill_holes(labeled > 0), smooth=smooth)
+
+    return filter_by_region(nuclei, lambda r: area[0] < r.area < area[1])
+
+
+def _binarize(dapi, radius, min_size):
+    """Apply local mean threshold to find cell outlines. Filter out 
+    background shapes. Otsu threshold on list of region mean intensities will remove a few
+    dark cells. Could use shape to improve the filtering.
+    """
+    dapi = skimage.img_as_ubyte(dapi)
+    # slower than optimized disk in imagej, (scipy uniform) square is fast but crappy
+    meanered = skimage.filters.rank.mean(dapi, selem=disk(radius))
+    mask = dapi > meanered
+    mask = skimage.morphology.remove_small_objects(mask, min_size=100)
+
+    return mask
+
+
+def filter_by_region(labeled, key, intensity=None, threshold=None):
+    """Apply a filter to labeled image. The key function a single region as input and
+    returns a score. Regions are filtered out by score using Otsu's threshold or the
+    provided threshold function. If scores are boolean, scores are used as a mask and 
+    threshold is disregarded. 
+    """
+    labeled = labeled.copy()
+    threshold = threshold or skimage.filters.threshold_otsu
+
+    if intensity is None:
+        regions = skimage.measure.regionprops(labeled)
+    else:
+        regions = skimage.measure.regionprops(labeled, intensity_image=intensity)
+    scores = np.array([key(r) for r in regions])
+
+    if all([s in (True, False) for s in scores]):
+        cut = [r.label for r, s in zip(regions, scores) if not s]
+        print cut
+    else:
+        th = threshold(scores)
+        cut = [r.label for r in regions if r.mean_intensity<th]
+
+    labeled.flat[np.in1d(labeled.flat[:], cut)] = 0
+    return labeled
+
+
 def fill_holes(img):
     labels = skimage.measure.label(img)
     background_label = np.bincount(labels.flatten()).argmax()
     return labels != background_label
 
 
-def apply_watershed(img):
+def apply_watershed(img, smooth=4):
     distance = ndimage.distance_transform_edt(img)
-    distance = gaussian_filter(distance, 4)
+    distance = gaussian_filter(distance, smooth)
     local_maxi = peak_local_max(distance, indices=False, footprint=np.ones((3, 3)))
     markers = ndimage.label(local_maxi)[0]
     return watershed(-distance, markers, mask=img).astype(np.uint16)
@@ -311,46 +377,52 @@ spectral_luts = {'empty': io.GRAY,
 
 
 class Calibration(object):
-    def __init__(self, full_path, dead_pixels_file='dead_pixels.tif'):
+    def __init__(self, path, dead_pixels_file='dead_pixels.tif', illumination_correction=True):
         """Load calibration info from .json file. Looks for dead pixels file in same (calibration)
         folder by default.
-        :param full_path:
+        :param path: path to calibration folder. json file must have same name, e.g., .../20150101/ and .../20150101.json
+        :param dead_pixels_file: 2D grayscale image of dead pixels
         :return:
         """
         self.files = {}
-        self.full_path = full_path
-        self.name = os.path.basename(full_path)
+        if os.path.isabs(path):
+            self.path = path
+        else:
+            self.path = lasagna.config.paths.full(path)
+
+        self.dead_pixels_file = lasagna.config.paths.full(dead_pixels_file)
+        self.name = os.path.basename(path)
         self.background = None
         self.calibration, self.calibration_norm, self.calibration_med = [pd.DataFrame() for _ in range(3)]
         self.illumination, self.illumination_mean = pd.Series(), pd.Series()
         self.dead_pixels, self.dead_pixels_pts = None, None
-        self.dead_pixels_std_threshold = 5
-
-        with open(full_path + '.json', 'r') as fh:
-            self.info = json.load(fh)
-        print 'loading calibration\nchannels:', self.info['channels'], \
-            '\ndyes:', list(set(self.info['wells'].values()))
-        self.magnification = io.get_magnification(os.path.basename(full_path))
-
-        self.dead_pixels_file = os.path.join(os.path.dirname(full_path), dead_pixels_file)
 
         self.update_dead_pixels()
-        self.update_files()
-        self.update_illumination()
+        if illumination_correction:
+            with open(self.path + '.json', 'r') as fh:
+                self.info = json.load(fh)
+            print 'loading calibration\nchannels:', self.info['channels'], \
+            '\ndyes:', list(set(self.info['wells'].values()))
+            self.update_files()
+            self.update_illumination()
 
-    def update_dead_pixels(self, std_threshold=5):
-        self.dead_pixels_std_threshold = std_threshold
+    def update_dead_pixels(self, null_pixels=10):
+        """Pick a threshold so # of background pixels above threshold is about `null_pixels`.
+        """
         self.dead_pixels = io.read_stack(self.dead_pixels_file)
-        threshold = self.dead_pixels.std() * std_threshold + np.median(self.dead_pixels)
-        self.dead_pixels_pts = np.where(self.dead_pixels > threshold)
+        sigma_factor = np.log(self.dead_pixels.size/null_pixels)
+        self.dead_pixels_std = (self.dead_pixels[self.dead_pixels < self.dead_pixels.mean()]).std()
+        # empirical adjustment
+        self.dead_pixels_threshold = 2.5 * sigma_factor * self.dead_pixels_std + self.dead_pixels.mean()
+        self.dead_pixels_pts = np.where(self.dead_pixels > self.dead_pixels_threshold)
 
     def update_files(self):
         self.files = defaultdict(list)
-        for f in os.walk(self.full_path).next()[2]:
+        for f in os.walk(self.path).next()[2]:
             if '.tif' in f:
                 well, site = io.get_well_site(f)
                 channel = self.info['wells'][well]
-                self.files[channel] += [os.path.join(self.full_path, f)]
+                self.files[channel] += [os.path.join(self.path, f)]
 
     def update_background(self):
         self.background = np.median([io.read_stack(f) for f in self.files['empty']], axis=0)
@@ -360,9 +432,9 @@ class Calibration(object):
         :param frame:
         :return:
         """
-        tmp = np.pad(frame, ((0, 1), (0, 1)), mode='constant', constant_values=(np.nan,)).copy()
+        tmp = np.pad(frame.copy(), ((0, 1), (0, 1)), mode='constant', constant_values=(np.nan,)).copy()
         ii, jj = self.dead_pixels_pts
-        tmp[ii, jj] = np.nanmean([tmp[ii - 1, jj], tmp[ii + 1, jj], tmp[ii, jj - 1], tmp[ii, jj + 1]])
+        tmp[ii, jj] = np.nanmean([tmp[ii - 1, jj], tmp[ii + 1, jj], tmp[ii, jj - 1], tmp[ii, jj + 1]], axis=0)
 
         return tmp[:-1, :-1]
 
@@ -399,7 +471,7 @@ class Calibration(object):
         # dump illumination stack
         stack = np.array([self.illumination_mean] + list(self.illumination))
         luts = [io.GRAY] + [spectral_luts[dye] for dye in self.calibration.columns if dye != 'empty']
-        save_name = os.path.join(os.path.dirname(self.full_path), 'illumination_correction_%s.tif' % self.name)
+        save_name = os.path.join(os.path.dirname(self.path), 'illumination_correction_%s.tif' % self.name)
         io.save_hyperstack(save_name, 10000 * stack, luts=luts)
 
     def fix_illumination(self, frame, channel=None):
@@ -425,11 +497,11 @@ class Calibration(object):
     def plot_dead_pixels(self):
         from matplotlib import pyplot as plt
 
-        m, std = self.dead_pixels.mean(), int(self.dead_pixels.std())
+        m, std = self.dead_pixels.mean(), self.dead_pixels_std
         fig, ax = plt.subplots(figsize=(10, 5))
         ax.hist((self.dead_pixels.flatten() - m) / std, log=True, bins=range(24))
         ax.hold('on')
-        ax.plot([self.dead_pixels_std_threshold] * 2, [0, 1e8], color='red')
+        ax.plot([(self.dead_pixels_threshold - m) / std]*2, [0, 1e8], color='red')
         ax.set_title('dead pixel distribution')
         ax.set_xlabel('standardized intensity')
         ax.set_ylabel('counts')
@@ -460,6 +532,7 @@ class Calibration(object):
 
     def plot_illumination(self):
         from matplotlib import pyplot as plt
+
         df = self.calibration.drop('empty', axis=1)
         fig, axs = plt.subplots(int(np.ceil(df.shape[1] / 2.)), 2, figsize=(12, 12))
         for ax, color in zip(axs.flatten(), df.columns):

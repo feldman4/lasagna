@@ -10,6 +10,7 @@ from lasagna.io import save_hyperstack as save
 from lasagna.io import read_stack as read
 from lasagna.io import show_hyperstack as show
 import lasagna.config as config
+from lasagna.utils import start_client
 from natsort import natsorted
 
 import skimage
@@ -20,3 +21,4 @@ from glob import glob
 
 from scipy.ndimage.interpolation import zoom
 import scipy.ndimage as ndi
+

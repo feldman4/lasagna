@@ -180,6 +180,8 @@ def save_hyperstack(name, data, autocast=True, resolution=None,
         name += '.tif'
     if data.ndim == 2:
         data = data[np.newaxis, :, :]
+    if not os.path.isabs(name):
+        name = config.paths.full(name)
 
     nchannels = data.shape[-3]
     if resolution is None:
@@ -386,10 +388,13 @@ class Paths(object):
         self.update_calibration()
 
     def full(self, *args):
-        """Prepend dataset location, multiple arguments are joined.
+        """Prepend dataset location, multiple arguments are joined. If given an absolute
+        path, just return it..
         :param args:
         :return:
         """
+        if args and os.path.isabs(args[0]):
+            return args[0]
         return os.path.join(self.lasagna_path, self.dataset, *args)
 
     def export(self, *args):
@@ -616,7 +621,7 @@ def show_hyperstack(data, title='image', imp=None, check_cache=True, **kwargs):
     skip = min(100, data.size)
     key = hash(str(kwargs)) + \
           hash(tuple(data.flat[::data.size / skip])) + \
-          hash(data.size)
+          hash(data.shape)
 
     if key in hash_cache and check_cache:
         savename = hash_cache[key]
