@@ -9,23 +9,15 @@ import skimage
 import scipy.stats
 
 
-dye_colors = {'A594': 'r', 'Atto647': 'm', 'Cy3': 'g'}
-
 # name of lasagna folder and sheet in Lasagna FISH
 dataset = '20151219_96W-G024'
-
-# relative magnification, empirical
-scale_40_100 = 0.393
-
-pipeline = None
-tile_configuration = 'calibration/TileConfiguration.registered.txt'
+dead_pixels_file = 'calibration/dead_pixels_20151219_MAX.tif'
 channels = 'DAPI', 'Cy3', 'A594', 'Atto647'
 luts = lasagna.io.BLUE, lasagna.io.GREEN, lasagna.io.RED, lasagna.io.MAGENTA
 display_ranges = ((500, 45000),
                     (1400, 5600),
                     (800, 5000),
                     (800, 5000))
-
 
 def setup(lasagna_path='/broad/blainey_lab/David/lasagna/'):
     """Construct Paths and Calibration objects for dataset. Copy a smaller version of Calibration object
@@ -34,14 +26,12 @@ def setup(lasagna_path='/broad/blainey_lab/David/lasagna/'):
     """
     lasagna.config.paths = lasagna.io.Paths(dataset, lasagna_path=lasagna_path)
     
-    config_path = lasagna.config.paths.full(lasagna.config.paths.calibrations[0])
-    # lasagna.config.calibration = lasagna.process.Calibration(config_path,
-    #                                                          dead_pixels_file='dead_pixels_empirical.tif')
+    config_path = lasagna.config.paths.calibrations[0]
+    lasagna.config.calibration = lasagna.process.Calibration(config_path, 
+                                    dead_pixels_file=dead_pixels_file, illumination_correction=False)
     # c = copy.deepcopy(lasagna.config.calibration)
     # c.calibration = None
     # lasagna.config.calibration_short = c
-    global tile_configuration
-    tile_configuration = lasagna.config.paths.full(tile_configuration)
     return lasagna.config.paths
 
 
@@ -55,10 +45,10 @@ def align(files, save_name, n=500, trim=150):
     :return:
     """
     import os  # mysteriously not imported by dview.execute
-    if not os.path.isfile(save_name):
+    if not os.path.isabs(save_name):
         save_name = lasagna.config.paths.full(save_name)
 
-    data = [lasagna.io.read_stack(lasagna.config.paths.full(f)) for f in files]
+    data = [lasagna.io.read_stack(f) for f in files]
     data = lasagna.io.compose_stacks(data)
 
     offsets, transforms = lasagna.process.get_corner_offsets(data[:, 0], n=n)
