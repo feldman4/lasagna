@@ -15,7 +15,7 @@ dead_pixels_file = 'calibration/dead_pixels_20151219_MAX.tif'
 channels = 'DAPI', 'Cy3', 'A594', 'Atto647'
 luts = lasagna.io.BLUE, lasagna.io.GREEN, lasagna.io.RED, lasagna.io.MAGENTA
 display_ranges = ((500, 45000),
-                    (1400, 5600),
+                    (1400, 5000),
                     (800, 5000),
                     (800, 5000))
 
@@ -50,6 +50,7 @@ def align(files, save_name, n=500, trim=150):
 
     data = [lasagna.io.read_stack(f) for f in files]
     data = lasagna.io.compose_stacks(data)
+    data = data.max(axis=1)
 
     offsets, transforms = lasagna.process.get_corner_offsets(data[:, 0], n=n)
     for i, transform in zip(range(data.shape[0]), transforms):
@@ -57,7 +58,7 @@ def align(files, save_name, n=500, trim=150):
             data[i, j] = skimage.transform.warp(data[i, j], transform.inverse, preserve_range=True)
 
     data = data[:, :, trim:-trim, trim:-trim]
-    lasagna.io.save_hyperstack(save_name, data)
+    lasagna.io.save_hyperstack(save_name, data, luts=luts, display_ranges=display_ranges)
     return data
 
 

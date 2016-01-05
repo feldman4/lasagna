@@ -305,7 +305,6 @@ def filter_by_region(labeled, key, intensity=None, threshold=None):
 
     if all([s in (True, False) for s in scores]):
         cut = [r.label for r, s in zip(regions, scores) if not s]
-        print cut
     else:
         th = threshold(scores)
         cut = [r.label for r in regions if r.mean_intensity<th]

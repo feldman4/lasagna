@@ -56,9 +56,8 @@ def add_dir(path, dir_to_add):
 
 
 def read_stack(filename, master=None, memmap=False):
-    if not os.path.isfile(filename):
-        if os.path.isfile(config.paths.full(filename)):
-            filename = config.paths.full(filename)
+    if config.paths:
+        filename = config.paths.full(filename)
     if master:
         TF = _load_tifffile(master)
         names = [s.pages[0].parent.filename for s in TF.series]
@@ -350,9 +349,9 @@ default_file_groups = 'data', 'set', '', 'mag', 'round', 'file', 'file_well_site
 default_path_formula = {'raw': '[data]/[set]/[file]',
                         'calibrated': '[data]/[set]/[file_well_site].calibrated.tif',
                         'stitched': '[data]/[set]/[file_well].stitched.tif',
-                        'aligned': '[data]/aligned/[set]/[well].aligned.tif',
-                        'aligned_FFT': '[data]/aligned/[set]/[well].aligned.FFT.tif',
-                        'nuclei': '[data]/aligned/[set]/[well].aligned.nuclei.tif',
+                        'aligned': '[data]/aligned/[mag]/[well].aligned.tif',
+                        'aligned_FFT': '[data]/aligned/[mag]/[well].aligned.FFT.tif',
+                        'nuclei': '[data]/aligned/[mag]/[well].aligned.nuclei.tif',
                         }
 default_table_index = {'mag': str,
                        'round': float,

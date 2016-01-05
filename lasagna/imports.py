@@ -1,6 +1,7 @@
 # common imports for interactive work
 import numpy as np
 import pandas as pd
+from pandas import IndexSlice as pdx
 import regex as re
 # import matplotlib.pyplot as plt
 import lasagna.io
