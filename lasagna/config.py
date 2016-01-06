@@ -32,7 +32,7 @@ def get_appender(queue):
     return appender
     
 queue = []
-lasagna.utils.launch_queue(queue)
+thread = lasagna.utils.launch_queue(queue)
 queue_appender = get_appender(queue)
 
 

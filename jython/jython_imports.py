@@ -33,6 +33,7 @@ if sys.subversion[0] == 'Jython':
 	import java.awt.event.KeyAdapter
 	import java.awt.Color
 	import ij.gui.PolygonRoi
+	import ij.gui.TextRoi
 	import ij.gui.Overlay
 	import ij.ImagePlus
 	import ij.ImageStack

@@ -11,6 +11,7 @@ import PIL.ImageFont
 import PIL.Image
 import PIL.ImageDraw
 import numpy as np
+from numpy.lib.stride_tricks import as_strided
 import regex as re
 import StringIO, pickle, zlib
 from skimage.external.tifffile import TiffFile, imsave, imread
@@ -86,10 +87,10 @@ def get_row_stack(row, full=False, nuclei=False, apply_offset=False, pad=(0, 0))
     :param pad: (height, width), adds to both sides
     :return:
     """
-    file_name = row[('all', 'file')]
+    filename = row[('all', 'file')]
     if nuclei:
-        file_name = config.paths.lookup('nuclei', stitch=row[('all', 'file')])
-    I = _get_stack(file_name)
+        filename = config.paths.lookup('nuclei', stitch=row[('all', 'file')])
+    I = _get_stack(filename)
     if full is False:
         I = I[b_idx(row, padding=(pad, I.shape))]
     if apply_offset:
@@ -296,14 +297,14 @@ def get_magnification(s):
         return match.groups(1)[0]
 
 
-def b_idx(row, padding=None):
+def b_idx(row, bounds=None, padding=None):
     """For a given DataFrame row, get slice index to cell in original data. Assumes bounds constrain
     trailing two dimensions, keeps remainder [..., height, width].
     :param row:
     :return:
     """
-
-    bounds = row[('all', 'bounds')]
+    if bounds is None:
+        bounds = row[('all', 'bounds')]
     if padding:
         pad, shape = padding
         bounds = bounds[0] - pad[0], bounds[1] - pad[1], bounds[2] + pad[0], bounds[3] + pad[1]
@@ -661,5 +662,29 @@ def show_hyperstack(data, title='image', imp=None, check_cache=True, **kwargs):
     return new_imp
 
 
+@lasagna.utils.Memoized
+def get_mapped_tif(f):
+    TF = TiffFile(paths.full(f))
+    # check the offsets
+    offsets = []
+    for i in range(len(TF.pages) - 1):
+        offset, shape = TF.pages[i].is_contiguous
+        offsets += [TF.pages[i+1].is_contiguous[0] - (offset + shape)]
+    # doesn't work unless all IFD headers are the same size
+    assert all(np.array(offsets)==offsets[0])
+    stride_offset = offsets[0]
+    # adjust strides to account for offset
+    shape = [x for x in TF.series[0].shape if x != 1]
+    strides = np.r_[np.cumprod(shape[::-1])[::-1][1:], [1]] * 2
+    strides[:-2] += np.r_[[1], np.cumprod(shape[-3:0:-1])][::-1] * stride_offset
+    strides
+    # make the initial memmap
+    fh = TF.filehandle
+    offset = TF.pages[0].is_contiguous[0]
+    mm = np.memmap(fh, dtype=np.uint16, mode='r',
+                                    offset=offset,
+                                    shape=np.prod(shape), order='C')
+    # update the memmap with adjusted strides
+    return as_strided(mm, shape=shape, strides=strides)
 
 
