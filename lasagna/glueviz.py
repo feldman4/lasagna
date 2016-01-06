@@ -47,64 +47,60 @@ class FijiViewer(object):
 	@staticmethod
 	def plot_subset(self, axes, source, y, contours, context, style):
 		j = lasagna.config.j
-		# lasagna.config.style += [style]
+		lasagna.config.self = self
+
 		# decide on a file
-		if not source.size:
-			# reset overlay
-			# self.imp.setOverlay(j.ij.gui.Overlay())
-			pass
+		if not source.size:	
+			return
 		
+		# take first selected file, only update display if changed
+		self.source_val = source.astype(int)[0]
+		file_to_show = source.categories[self.source_val]
+
+		att_index = np.where(self.files == file_to_show)
+		if file_to_show != self.displayed_file:
+			data = lasagna.io.read_stack(file_to_show)
+			self.imp = lasagna.io.show_hyperstack(data, imp=self.imp, 
+								luts=luts, display_ranges=display_ranges)
+
+			self.displayed_file = file_to_show
+
+			# overlay all contours for the new file
+			all_contours = self.contours[att_index]
+			packed = [(1 + contour).T.tolist() for contour in all_contours]
+			j.overlay_contours(packed, imp=self.imp)
+			self.imp.getOverlay().setStrokeColor(default_color())
+			# lasagna.config.j.ij.IJ.log('changed to %s' % file_to_show)
+
+		# lasagna.config.j.ij.IJ.log('displayed %s' % str(style.parent))
+		overlay = self.imp.getOverlay()
+		color = j.java.awt.Color.decode(style.color)
+		# only show contours that apply to this file
+		rois = np.where(np.in1d(att_index, contours))[0]
+		lasagna.config.selection = np.intersect1d(contours, att_index)
+
+		j.set_overlay_contours_color(rois, self.imp, color)
+		self.imp.updateAndDraw()
+
+		# reset contour when mpl artist removed
+		if not y.size:
+			artist = axes.scatter([1], [1])
+			# lasagna.config.j.ij.IJ.log('y was empty %s' % style.parent.label)
 		else:
-
-			# take first selected file, only update display if changed
-			self.source_val = source.astype(int)[0]
-			file_to_show = source.categories[self.source_val]
-
-			att_index = np.where(self.files == file_to_show)
-			if file_to_show != self.displayed_file:
-				data = lasagna.io.read_stack(file_to_show)
-				self.imp = lasagna.io.show_hyperstack(data, imp=self.imp, 
-									luts=luts, display_ranges=display_ranges)
-
-				self.displayed_file = file_to_show
-	
-				# overlay all contours for the new file
-				all_contours = self.contours[att_index]
-				packed = [(1 + contour).T.tolist() for contour in all_contours]
-				j.overlay_contours(packed, imp=self.imp)
-				self.imp.getOverlay().setStrokeColor(default_color())
-				# lasagna.config.j.ij.IJ.log('changed to %s' % file_to_show)
-
-			# lasagna.config.j.ij.IJ.log('displayed %s' % str(style.parent))
-			overlay = self.imp.getOverlay()
-			color = j.java.awt.Color.decode(style.color)
-			# only show contours that apply to this file
-			rois = np.where(np.in1d(att_index, contours))[0]
-			lasagna.config.selection = np.intersect1d(contours, att_index)
-
-			j.set_overlay_contours_color(rois, self.imp, color)
-			self.imp.updateAndDraw()
-
-			# reset contour when mpl artist removed
-			if not y.size:
-				artist = axes.scatter([], [])
-			else:
-				artist = axes.scatter(source, y, s=100, c=style.color, marker='.', alpha=0.5)
-				rois = np.intersect1d(contours, att_index)
-				rois = np.where(np.in1d(att_index, contours))[0]
-				def do_first(g, imp=self.imp, rois=rois, style=style):
-					def wrapped(*args, **kwargs):
-						# if overlay is gone (new file loaded), skip
-						if imp.getOverlay():
-							lasagna.config.rois = rois
-							j.set_overlay_contours_color(rois, 
-														 imp, default_color())
-							# lasagna.config.j.ij.IJ.log('removed %s rois' % str(style.parent))
-						
-							# lasagna.config.j.ij.IJ.log('skipped removing %s rois' % str(style.parent))
-						return g(*args, **kwargs)
-					return wrapped
-				artist.remove = do_first(artist.remove)
+			artist = axes.scatter(source, y, s=100, c=style.color, marker='.', alpha=0.5)
+		rois = np.intersect1d(contours, att_index)
+		rois = np.where(np.in1d(att_index, contours))[0]
+		def do_first(g, imp=self.imp, rois=rois, style=style):
+			def wrapped(*args, **kwargs):
+				# if overlay is gone (new file loaded), skip
+				if imp.getOverlay():
+					lasagna.config.rois = rois
+					j.set_overlay_contours_color(rois, 
+												 imp, default_color())
+					# lasagna.config.j.ij.IJ.log('removed %d rois from %s' % (len(rois), style.parent.label))
+				return g(*args, **kwargs)
+			return wrapped
+		artist.remove = do_first(artist.remove)
 
 
 	@staticmethod
@@ -165,6 +161,35 @@ def make_selection_listener(viewer, key='u'):
 
 	
 				
+# lasagna.config.style = style
+# print "---%s---" % style.parent.label
+# for ca in lasagna.config.self.widget.layers:
+	
+# 	print "%s: enabled (%s) visible (%s)" % (ca.layer.label, ca.enabled, ca.visible)
 
+
+# artists = self.widget.layers
+# layers = [a.layer for a in artists]
+# # determine if this is the first layer
+# # layer currently being plotted is not visible
+# active_artists = [] # subsets, excluding currently plotted one
+# for i, a in enumerate(artists):
+# 	if a.enabled and a.visible and not isinstance(a.layer, glue.core.data.Data):
+# 		active_artists += [a]
+# print active_artists
+
+# lasagna.config.d[style.parent.label] = active_artists
+# # TODO fix the index checking
+# lasagna.config.d1[style.parent.label] = layers
+# lasagna.config.d2[style.parent.label] = style.parent
+# current_artist_position = layers.index(style.parent)
+# if all(layers.index(style.parent) < layers.index(a.layer) for a in active_artists):
+# 	lasagna.config.reset += [style.parent]
+# 	# reset overlay
+# 	overlay = self.imp.getOverlay()
+# 	if overlay:
+# 		overlay.setStrokeColor(default_color())
+# 	print 'reset on %s' % style.parent
+# # lasagna.config.style += [style]
 
 
