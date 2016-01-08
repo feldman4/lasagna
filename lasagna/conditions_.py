@@ -147,7 +147,8 @@ class Experiment(object):
         selem = np.array([[1, 0],
                          [1, 1]])
         # some weird bug with np.pad and string dtype
-        xs_values = np.zeros(np.array(self.sheet.shape) + 1, dtype='S123')
+        s_type = 'S%d' % (max([len(x) for y in self.sheet for x in y]) + 10)
+        xs_values = np.zeros(np.array(self.sheet.shape) + 1, dtype=s_type)
         xs_values[:-1, :-1] = self.sheet
 
         mask = (xs_values[:, :2] != '').astype(int)

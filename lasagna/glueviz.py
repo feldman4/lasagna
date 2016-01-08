@@ -18,13 +18,11 @@ class FijiViewer(object):
 	def setup(self, axes):
 		j = lasagna.config.j
 
-		self.imp = lasagna.io.show_hyperstack(np.zeros((100,100)), title='glue')
-
-		
+		self.imp = lasagna.io.show_hyperstack(np.zeros((100,100)), title='viewer')
 		self.displayed_file = None
 		
 	@staticmethod
-	def plot_data(self, axes, source, y, contours, bounds, context):
+	def plot_data(self, axes, source, y, contours, bounds):
 		j = lasagna.config.j
 
 		if y.size:
@@ -45,7 +43,7 @@ class FijiViewer(object):
 			lasagna.config.queue_appender, key='`'), self.imp)
 
 	@staticmethod
-	def plot_subset(self, axes, source, y, contours, context, style):
+	def plot_subset(self, axes, source, y, contours, style):
 		j = lasagna.config.j
 		lasagna.config.self = self
 
@@ -116,6 +114,97 @@ class FijiViewer(object):
 		# update selection, bypassing callback
 
 
+class FijiGridViewer(object):
+
+	@staticmethod
+	def setup(self, axes):
+		"""Set up ImagePlus.
+		"""
+		j = lasagna.config.j
+
+		self.imp = lasagna.io.show_hyperstack(np.zeros((100,100)), title='grid viewer')
+
+	@staticmethod
+	def plot_data(self, axes):
+		"""Add any callbacks. Opportunity to store attributes of full data, as opposed to 
+		subsets.
+		"""
+		axes.invert_yaxis()
+		pass
+		
+
+	@staticmethod
+	def plot_subset(self, axes, Fiji, show_nuclei, source, contours, bounds, sort_by, padding, style):
+		"""Show a grid of cells, when called by the first visible layer.
+		"""
+		j = lasagna.config.j
+
+		lasagna.config.artists = self.widget.layers
+		artists = self.widget.layers
+		layers = [a.layer for a in artists]
+		active_artists = [a for a in artists if a.enabled and a.visible]
+		active_layers = [a.layer for a in active_artists]
+		lasagna.config.this_layer = this_layer = style.parent
+
+		# 1. we are redrawing the first visible layer only
+		# 2. redrawing all, this is the first visible layer (supposedly)
+		try:
+			j.ij.IJ.log('artists: %s' % artists)
+		except TypeError:
+			pass
+		if active_artists:
+			flag1 = this_layer == active_layers[0]
+			flag2 = layers.index(this_layer) < min(layers.index(x) for x in active_layers)
+			j.ij.IJ.log('flag1: %s flag2: %s' % (flag1, flag2))
+			flag3 = False
+		else:
+			flag3 = True
+			j.ij.IJ.log('flag3: %s' % flag3)
+		# j.ij.IJ.log('this artist: %s' % (this_artist))
+		j.ij.IJ.log("---%s---" % style.parent.label)
+		for ca in self.widget.layers:
+			j.ij.IJ.log("%s: enabled (%s) visible (%s)" % (ca.layer.label, ca.enabled, ca.visible))
+
+		if flag3 or flag2 or flag1:
+			lasagna.config.sort_by = sort_by
+			# pick coordinates
+			index = np.argsort(sort_by)
+			width = np.ceil(np.sqrt(len(index)))
+			x = np.arange(len(index)) % width
+			y = (np.arange(len(index)) / width).astype(int)
+			axes.scatter(x, y, c=style.color)
+			axes.axis('tight')
+
+			if Fiji:
+				files = source.categories[source.astype(int)][index]
+				bounds = bounds.categories[bounds.astype(int)][index]
+				lasagna.config.bounds = bounds
+				data = grid_view(files, bounds, padding=padding)
+				shape = data.shape
+				data = lasagna.io.montage(data)
+				self.imp = lasagna.io.show_hyperstack(data, imp=self.imp, 
+									luts=luts, display_ranges=display_ranges)
+
+				if show_nuclei:
+					# offset contours to match grid spacing
+					offsets = (np.array([y, x]).T * shape[-2:]) + padding
+					# need to apply subset to unhashable, then sort order
+					c = contours.id._unhashable[contours.astype(int)][index]
+					contours_offset = np.array([x + y[:2] for x,y in zip(c, offsets)])
+					packed = [(1 + contour).T.tolist() for contour in contours_offset]
+
+					j.overlay_contours(packed, imp=self.imp)
+					self.imp.getOverlay().setStrokeColor(default_color())
+				else:
+					self.imp.setOverlay(j.ij.gui.Overlay())
+
+
+	def make_selector(self, roi, sort_by):
+		# transform subsets on grid into constraints on sort variable by mapping xy
+		# to range of 
+		pass
+
+
 def update_selection(selection, viewer):
 	"""Assumes first dataset contains 'x' and 'y' components.
 	Selection consists of (xmin, xmax, ymin, ymax)
@@ -159,7 +248,16 @@ def make_selection_listener(viewer, key='u'):
 					update_selection(selection, viewer)
 	return selection_listener
 
-	
+def grid_view(files, bounds, padding=40):
+    from lasagna.io import b_idx, compose_stacks, get_mapped_tif
+    
+    arr = []
+    for filename, bounds_ in zip(files, bounds):
+        I = get_mapped_tif(filename)
+        I_cell = I[b_idx(None, bounds=bounds_, padding=((padding,padding), I.shape))]
+        arr.append(I_cell.copy())
+
+    return compose_stacks(arr)
 				
 # lasagna.config.style = style
 # print "---%s---" % style.parent.label

@@ -664,14 +664,15 @@ def show_hyperstack(data, title='image', imp=None, check_cache=True, **kwargs):
 
 @lasagna.utils.Memoized
 def get_mapped_tif(f):
-    TF = TiffFile(paths.full(f))
+    TF = TiffFile(lasagna.config.paths.full(f))
     # check the offsets
     offsets = []
     for i in range(len(TF.pages) - 1):
         offset, shape = TF.pages[i].is_contiguous
         offsets += [TF.pages[i+1].is_contiguous[0] - (offset + shape)]
     # doesn't work unless all IFD headers are the same size
-    assert all(np.array(offsets)==offsets[0])
+    if not all(np.array(offsets)==offsets[0]):
+        raise IOError('attempted to memmap unequal offsets in:\n%s' % paths.full(f))
     stride_offset = offsets[0]
     # adjust strides to account for offset
     shape = [x for x in TF.series[0].shape if x != 1]
@@ -686,5 +687,4 @@ def get_mapped_tif(f):
                                     shape=np.prod(shape), order='C')
     # update the memmap with adjusted strides
     return as_strided(mm, shape=shape, strides=strides)
-
 
