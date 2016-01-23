@@ -12,6 +12,21 @@ default_color = lambda: lasagna.config.j.java.awt.Color.GRAY
 
 fiji_label = 1
 
+default_name_map = (
+					(('all','bounds', 1.), 'bounds'),
+					(('all', 'file', 1.), 'file'),
+					(('all', 'contour', 1.), 'contour'),
+					(('well', '', ''),  'well'),
+					(('row', '', ''), 'row'),
+					(('column', '', ''), 'column'),
+					(('all', 'x', 1.), 'x'),
+					(('all', 'y', 1.), 'y'),
+					(('barcode x', '', ''), 'barcode x'),
+					(('barcode y', '', ''), 'barcode y'),
+					(('positive', '', ''), 'positive'),
+					(('signal', '', ''), 'signal'),
+					)
+
 class FijiViewer(object):
 
 	@staticmethod
@@ -129,51 +144,35 @@ class FijiGridViewer(object):
 		"""Add any callbacks. Opportunity to store attributes of full data, as opposed to 
 		subsets.
 		"""
-		axes.invert_yaxis()
 		pass
 		
 
 	@staticmethod
-	def plot_subset(self, axes, Fiji, show_nuclei, source, contours, bounds, sort_by, padding, style):
+	def plot_subset(self, axes, Fiji, show_nuclei, source, contours, bounds, sort_by, padding, limit, style):
 		"""Show a grid of cells, when called by the first visible layer.
 		"""
 		j = lasagna.config.j
 
-		lasagna.config.artists = self.widget.layers
-		artists = self.widget.layers
-		layers = [a.layer for a in artists]
-		active_artists = [a for a in artists if a.enabled and a.visible]
-		active_layers = [a.layer for a in active_artists]
-		lasagna.config.this_layer = this_layer = style.parent
+		artists = lasagna.config.artists = self.widget.layers
+		this_layer = lasagna.config.this_layer = style.parent
+		
+		if check_artist(artists, this_layer):
 
-		# 1. we are redrawing the first visible layer only
-		# 2. redrawing all, this is the first visible layer (supposedly)
-		try:
-			j.ij.IJ.log('artists: %s' % artists)
-		except TypeError:
-			pass
-		if active_artists:
-			flag1 = this_layer == active_layers[0]
-			flag2 = layers.index(this_layer) < min(layers.index(x) for x in active_layers)
-			j.ij.IJ.log('flag1: %s flag2: %s' % (flag1, flag2))
-			flag3 = False
-		else:
-			flag3 = True
-			j.ij.IJ.log('flag3: %s' % flag3)
-		# j.ij.IJ.log('this artist: %s' % (this_artist))
-		j.ij.IJ.log("---%s---" % style.parent.label)
-		for ca in self.widget.layers:
-			j.ij.IJ.log("%s: enabled (%s) visible (%s)" % (ca.layer.label, ca.enabled, ca.visible))
-
-		if flag3 or flag2 or flag1:
 			lasagna.config.sort_by = sort_by
 			# pick coordinates
 			index = np.argsort(sort_by)
+			# limit the total # of cells displayed
+			_, keep = np.unique(np.linspace(0, limit - 1, len(index)).astype(int), return_index=True)
+			lasagna.config.index = index.copy()
+			lasagna.config.keep = keep
+			index = index[keep]
 			width = np.ceil(np.sqrt(len(index)))
 			x = np.arange(len(index)) % width
 			y = (np.arange(len(index)) / width).astype(int)
 			axes.scatter(x, y, c=style.color)
-			axes.axis('tight')
+			if len(x) > 0:
+				axes.set_xlim(min(x) - 0.5, max(x) + 0.5)
+				axes.set_ylim(max(y) + 0.5, min(y) - 0.5)
 
 			if Fiji:
 				files = source.categories[source.astype(int)][index]
@@ -249,16 +248,90 @@ def make_selection_listener(viewer, key='u'):
 	return selection_listener
 
 def grid_view(files, bounds, padding=40):
-    from lasagna.io import b_idx, compose_stacks, get_mapped_tif
-    
-    arr = []
-    for filename, bounds_ in zip(files, bounds):
-        I = get_mapped_tif(filename)
-        I_cell = I[b_idx(None, bounds=bounds_, padding=((padding,padding), I.shape))]
-        arr.append(I_cell.copy())
+	from lasagna.io import b_idx, compose_stacks, get_mapped_tif
+	
+	arr = []
+	for filename, bounds_ in zip(files, bounds):
+		I = get_mapped_tif(filename)
+		I_cell = I[b_idx(None, bounds=bounds_, padding=((padding,padding), I.shape))]
+		arr.append(I_cell.copy())
 
-    return compose_stacks(arr)
+	return compose_stacks(arr)
 				
+
+def pandas_to_glue(df, label='data', name_map=default_name_map):
+	"""Convert dataframe to glue.core.Data. Glue categorical variables require hashing,
+	store array of unhashable components in ComponentID._unhashable. Override column names
+	in name_map with dictionary values.
+
+	"""
+	name_map = dict(name_map)
+	data = glue.core.Data(label=label)
+	for c in df.columns:
+		if c in name_map:
+			c_name = name_map[c]
+		else:
+			c_name = str(c)
+		try:
+			data.add_component(df[c], c_name)
+		except TypeError:
+			cc = glue.core.data.CategoricalComponent(range(len(df[c])))
+			c_id = glue.core.ComponentID(c_name)
+			c_id._unhashable = df[c]
+			data.add_component(cc, c_id)
+	return data
+
+def map_barcode(digits, k, spacer=0.5):
+	flag = False
+	if len(digits) % 2:
+		digits = list(digits) + [0]
+		flag = True
+	
+	scale = 1. / k
+	x, y = 0., 0.
+	for x_, y_ in zip(digits[::2], digits[1::2]):
+		x += x_ * scale
+		y += y_ * scale
+		scale /= k + spacer
+		
+	if flag:
+		y /= k
+	return x, y
+
+
+def check_artist(artists, this_layer):
+	"""Try to figure out whether this is the first visible, enabled layer, based on 
+	status of artists/layers during custom viewer callback
+	"""
+		
+	layers = [a.layer for a in artists]
+	active_artists = [a for a in artists if a.enabled and a.visible]
+	active_layers = [a.layer for a in active_artists]
+
+	# 1. we are redrawing the first visible layer only
+	# 2. redrawing all, this is the first visible layer (supposedly)
+	# try:
+	# 	j.ij.IJ.log('artists: %s' % artists)
+	# except TypeError:
+	# 	pass
+	if active_artists:
+		flag1 = this_layer == active_layers[0]
+		flag2 = layers.index(this_layer) < min(layers.index(x) for x in active_layers)
+		# j.ij.IJ.log('flag1: %s flag2: %s' % (flag1, flag2))
+		flag3 = False
+	else:
+		flag3 = True
+		# j.ij.IJ.log('flag3: %s' % flag3)
+	# j.ij.IJ.log('this artist: %s' % (this_artist))
+	# j.ij.IJ.log("---%s---" % style.parent.label)
+	# for ca in self.widget.layers:
+	# 	j.ij.IJ.log("%s: enabled (%s) visible (%s)" % (ca.layer.label, ca.enabled, ca.visible))
+
+	return flag3 or flag2 or flag1
+
+
+
+
 # lasagna.config.style = style
 # print "---%s---" % style.parent.label
 # for ca in lasagna.config.self.widget.layers:

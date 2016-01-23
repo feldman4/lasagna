@@ -2,13 +2,16 @@ import os
 import pandas as pd
 import lasagna.conditions_
 import lasagna.utils
+import lasagna.io
 
 up = os.path.dirname
 home = up(__file__)
 paths = None
 calibration = None
 calibration_short = None
-
+# so calls to lasagna.config.paths.full resolve
+paths = type('', (), {})()
+paths.full = lambda s: s
 experiment = None
 
 fonts = os.path.join(home, 'resources', 'fonts')

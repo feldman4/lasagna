@@ -16,7 +16,7 @@ class Container(object):
 
 c = Container()
 
-def start_server(head):
+def start_server(head, port=PORT):
     class ServerService(rpyc.Service):
         def exposed_get_head(self):
             return head
@@ -25,17 +25,17 @@ def start_server(head):
         def exposed_execute(self, cmd):
         	exec cmd in globals()
     # start the rpyc server
-    server = rpyc.utils.server.ThreadedServer(ServerService, port=12345, protocol_config=PROTOCOL_CONFIG)
+    server = rpyc.utils.server.ThreadedServer(ServerService, port=port, protocol_config=PROTOCOL_CONFIG)
     t = threading.Thread(target=server.start)
     t.daemon = True
     t.start()
 
 
-def start_client():
+def start_client(port=PORT):
     class ServerService(rpyc.Service):
         pass
 
-    conn = rpyc.connect("localhost", 12345, service=ServerService, config=PROTOCOL_CONFIG)
+    conn = rpyc.connect("localhost", port, service=ServerService, config=PROTOCOL_CONFIG)
     rpyc.BgServingThread(conn)
     return conn
 

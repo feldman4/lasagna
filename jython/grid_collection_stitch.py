@@ -29,12 +29,12 @@ channel_luts = (('Blue', (400, 50000)),
 #channel_luts = (('Grays', (400, 40000)),)
 
 channels = len(channel_luts)
-slices = 2  # Z
+slices = 1;  # Z
 frames = 1;  # T
 
-#### 40X
-tiles, overlap = (4, 4), int(100 * (1. - 300. / 350))
-pixel_width = 0.175 * 2
+##### 40X
+#tiles, overlap = (4, 4), int(100 * (1. - 300. / 350))
+#pixel_width = 0.175 * 2
 
 ##### 20X
 #tiles, overlap = (3, 3), int(100 * (1. - 500. / 750))
@@ -48,17 +48,34 @@ pixel_width = 0.175 * 2
 #tiles, overlap = (7, 7), int(100*(1. - 100./135))
 #pixel_width = 0.066 * 2
 
-### 60X
-#tiles, overlap = (3, 3), int(100*(1. - 200./225.3))
-#pixel_width = 0.110 * 2
+## 60X
+tiles, overlap = (3, 3), int(100*(1. - 200./225.3))
+pixel_width = 0.110
 
 print tiles, overlap
 nuclei_singleton = False
 
-use_template = True
-template = None
+def make_template(well, data_dir):
+    template_path = os.path.join(home_dir, data_dir, 
+    'TileConfiguration_%s_%s.registered.txt' % (data_dir, well))
+    fh = open(template_path, 'r')
+    template = fh.read()
+    fh.close()
+    def f(new_well, new_data_dir):
+    	"""Make template file and return path to it.
+    	"""
+        txt = template.replace(well, new_well).replace(data_dir, new_data_dir)
+        txt_path = template_path.replace(well, new_well).replace(data_dir, new_data_dir)
+        fh = open(txt_path, 'w')
+        fh.write(txt)
+        fh.close()
+        return txt_path
+    return f
 
-data_dirs = ['40X_round2_1', '40X_round3_1']
+use_template = True
+template = make_template('D1', '60X_round1_3')
+
+data_dirs = ['60X_round2_4',]
 
 # usually xyzct, except on bad days when it's xyczt(default)
 order = 'xyzct'
@@ -83,20 +100,6 @@ def savename(well, data_dir):
 def tile_config_name(well, data_dir):
     return 
 
-def make_template(well, data_dir):
-    template_path = os.path.join(home_dir, data_dir, 
-    'TileConfiguration_%s_%s.registered.txt' % (data_dir, well))
-    fh = open(template_path, 'r')
-    template = fh.read()
-    fh.close()
-    def f(new_well, new_data_dir):
-        txt = template.replace(well, new_well).replace(data_dir, new_data_dir)
-        txt_path = template_path.replace(well, new_well).replace(data_dir, new_data_dir)
-        fh = open(txt_path, 'w')
-        fh.write(txt)
-        fh.close()
-        return txt_path
-    return f
 
 def stitch_cmd(grid_size, overlap, directory, file_pattern, config):
     s = """type=[Grid: row-by-row] order=[Right & Down                ]
@@ -155,6 +158,6 @@ for data_dir in data_dirs:
         IJ.run("Close All")
 
         if use_template is True:
-            template = make_template(well ,data_dir)
+            template = make_template(well, data_dir)
 
 print 'completed without error'

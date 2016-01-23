@@ -450,17 +450,19 @@ class Paths(object):
                 entry.update({key: pattern})
 
         self.table = lasagna.utils.DataFrameFind(d)
+        # skip if empty
+        if d:
+            for k, v in table_index.items():
+                self.table[k] = self.table[k].astype(v)
 
-        for k, v in table_index.items():
-            self.table[k] = self.table[k].astype(v)
-
-        self.table.set_index(table_index.keys(), inplace=True)
-        self.table.sortlevel(inplace=True)
+            self.table.set_index(table_index.keys(), inplace=True)
+            self.table.sortlevel(inplace=True)
 
     def update_calibration(self):
         calibration_dir = self.full(self.dirs['calibration'])
-        _, calibrations, _ = os.walk(calibration_dir).next()
-        self.calibrations = [os.path.join(self.dirs['calibration'], c) for c in calibrations]
+        if os.path.isdir(calibration_dir):
+            _, calibrations, _ = os.walk(calibration_dir).next()
+            self.calibrations = [os.path.join(self.dirs['calibration'], c) for c in calibrations]
 
     def make_dirs(self, files):
         """Create sub-directories for files in column, if they don't exist.
@@ -653,12 +655,10 @@ def show_hyperstack(data, title='image', imp=None, check_cache=True, **kwargs):
             imp.updateAndRepaintWindow()
             imp.setTitle(title)
             new_imp.close()
-            config.last_imp = imp
             return imp
 
     new_imp.setTitle(title)
     new_imp.show()
-    config.last_imp = imp
     return new_imp
 
 
