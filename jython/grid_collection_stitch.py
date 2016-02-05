@@ -7,25 +7,25 @@ from ij.measure import Calibration
 import time, os
 from glob import glob
 
-if True:
+if False:
     # osx, unix
     filesep = '/'
     home_dir = '/broad/blainey_lab/David/lasagna/20150817 6 round/data/'
-    home_dir = '/Users/feldman/Downloads/20151219_96W-G024/data/tmp/'
+    home_dir = '/Users/feldman/Downloads/20160130_GFP_spinfection/'
 else:
     # windows
-    home_dir = 'D:\\User Folders\\David\\lasagna\\20151219_96W-G024\\'
+    home_dir = 'D:\\User Folders\\David\\lasagna\\20160130_GFP_spinfection\\'
     # home_dir = '\\\\neon-cifs\\blainey_lab\\David\\lasagna\\20150817 6 round\\analysis\\calibrated\\raw\\'
     filesep = '\\'
 
 # C
-#channel_luts = (('Grays', (400, 8000)),)
-channel_luts = (('Blue', (400, 50000)),
-                ('Green', (2000, 8000)),
-                ('Red', (800, 8000)),
-                ('Magenta', (800, 8000)))
-#channel_luts = (('Grays', (400, 60000)),
-#               ('Blue', (400, 4000)))
+##channel_luts = (('Grays', (400, 8000)),)
+#channel_luts = (('Blue', (400, 50000)),
+#                ('Green', (2000, 8000)),
+#                ('Red', (800, 8000)),
+#                ('Magenta', (800, 8000)))
+channel_luts = (('Grays', (400, 40000)),
+               ('Blue', (800, 8000)))
 #channel_luts = (('Grays', (400, 40000)),)
 
 channels = len(channel_luts)
@@ -37,8 +37,8 @@ frames = 1;  # T
 #pixel_width = 0.175 * 2
 
 ##### 20X
-#tiles, overlap = (3, 3), int(100 * (1. - 500. / 750))
-#pixel_width = 0.35 * 2
+tiles, overlap = (3, 3), int(100 * (1. - 600. / 675))
+pixel_width = 0.35 * 2
 
 ### 4X
 #tiles, overlap = (3, 3), int(100*(1. - 1800./3379))
@@ -72,10 +72,11 @@ def make_template(well, data_dir):
         return txt_path
     return f
 
-use_template = True
-template = make_template('D1', '60X_round1_3')
+use_template = False
+#template = make_template('D1', '60X_round1_3')
+template = None
 
-data_dirs = ['60X_round2_4',]
+data_dirs = ['20X_3x3_2',]
 
 # usually xyzct, except on bad days when it's xyczt(default)
 order = 'xyzct'
@@ -85,7 +86,6 @@ rows = 'ABCDEFGH'
 columns = [str(x) for x in range(1, 13)]
 
 wells = [r + c for r in rows for c in columns]
-
 
 cal = Calibration()
 cal.setUnit('um')
