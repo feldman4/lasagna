@@ -6,7 +6,6 @@ import types
 import subprocess
 import Queue
 import threading
-import sklearn.utils.linear_assignment_
 from functools import wraps
 from inspect import getargspec, isfunction
 from itertools import izip, ifilter, starmap, product
@@ -104,6 +103,25 @@ class Filter2D(object):
             x = [float(width) / i for i in range(1, width + 1)]
             pyramid[width] = np.interp(x, range(1, len(real_filter) + 1), real_filter)
         return pyramid
+
+
+
+def regionprops(*args, **kwargs):
+    """Supplement skimage.measure.regionprops with additional field containing full intensity image in
+    bounding box (useful for filtering).
+    :param args:
+    :param kwargs:
+    :return:
+    """
+    import skimage.measure
+
+    regions = skimage.measure.regionprops(*args, **kwargs)
+    if 'intensity_image' in kwargs:
+        intensity_image = kwargs['intensity_image']
+        for region in regions:
+            b = region.bbox
+            region.intensity_image_full = intensity_image[b[0]:b[2], b[1]:b[3]]
+    return regions
 
 
 def mad(arr, axis=None, keepdims=True):
@@ -369,7 +387,9 @@ def linear_assignment(df):
     """Wrapper of sklearn linear assignment algorithm for DataFrame cost matrix. Returns
     DataFrame with columns for matched labels. Minimizes cost.
     """
-    x = sklearn.utils.linear_assignment_.linear_assignment(df.as_matrix())
+    from sklearn.utils.linear_assignment_ import linear_assignment
+
+    x = linear_assignment(df.as_matrix())
     y = zip(df.index[x[:, 0]], df.columns[x[:, 1]])
     df_out = pd.DataFrame(y, columns=[df.index.name, df.columns.name])
     return df_out
@@ -559,7 +579,7 @@ def launch_queue(queue):
     t.daemon = True
     t.start()
     return t
-            
+
 
 def start_client():
     """Start rpyc client connected to jython instance.

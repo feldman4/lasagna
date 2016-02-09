@@ -12,6 +12,7 @@ default_color = lambda: lasagna.config.j.java.awt.Color.GRAY
 
 fiji_label = 1
 
+# used by pandas_to_glue for consistent naming
 default_name_map = (
 					(('all','bounds', 1.), 'bounds'),
 					(('all', 'file', 1.), 'file'),

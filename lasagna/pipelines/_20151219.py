@@ -14,10 +14,22 @@ dataset = '20151219_96W-G024'
 dead_pixels_file = 'calibration/dead_pixels_20151219_MAX.tif'
 channels = 'DAPI', 'Cy3', 'A594', 'Atto647'
 luts = lasagna.io.BLUE, lasagna.io.GREEN, lasagna.io.RED, lasagna.io.MAGENTA
+tile_configuration = None
 display_ranges = ((500, 45000),
                     (1400, 5000),
                     (800, 5000),
                     (800, 5000))
+
+#  glueviz
+name_map = {('all','bounds',1.): 'bounds',
+            ('all', 'file', 1.): 'file',
+            ('all', 'contour',1.):'contour',
+            ('well', '', ''): 'well',
+            ('row', '', ''): 'row',
+            ('column', '', ''): 'column',
+            ('all', 'x', 1.): 'x',
+            ('all', 'y', 1.): 'y'}
+
 
 def setup(lasagna_path='/broad/blainey_lab/David/lasagna/'):
     """Construct Paths and Calibration objects for dataset. Copy a smaller version of Calibration object
@@ -35,7 +47,7 @@ def setup(lasagna_path='/broad/blainey_lab/David/lasagna/'):
     return lasagna.config.paths
 
 
-def align(files, save_name, n=500, trim=150):
+def align(files, save_name, n=500, trim=150, max=True):
     """Align data using first channel (DAPI). Register corners using FFT, build similarity transform,
     warp, and trim edges.
     :param files: files to align
@@ -50,7 +62,8 @@ def align(files, save_name, n=500, trim=150):
 
     data = [lasagna.io.read_stack(f) for f in files]
     data = lasagna.io.compose_stacks(data)
-    data = data.max(axis=1)
+    if max:
+        data = data.max(axis=1)
 
     offsets, transforms = lasagna.process.get_corner_offsets(data[:, 0], n=n)
     for i, transform in zip(range(data.shape[0]), transforms):
@@ -107,13 +120,13 @@ def clean_signal(im, bg_radius=160, clahe_clip=0.08, clahe_ntiles=4):
 
 
 def segment_cells(nuclei, mask, small_holes=100, remove_boundary_cells=True):
-
+    import skfmm
     selem_3 = skimage.morphology.square(3)
 
     # voronoi
     phi = (nuclei>0) - 0.5
     speed = np.ones(phi.shape)
-    time = skfmm.travel_time(phi, speed)
+    time = skfmm.travel_time(phi, speed).astype(np.uint16)
     time[nuclei>0] = 0
 
     w = skimage.morphology.watershed(time, nuclei)
@@ -128,7 +141,7 @@ def segment_cells(nuclei, mask, small_holes=100, remove_boundary_cells=True):
     w = skimage.morphology.closing(w)
 
     # only take biggest component for each cell
-    relabeled = skimage.measure.label(w)
+    relabeled = skimage.measure.label(w, background=0) + 1
     relabeled[w==0] = 0
     regions = skimage.measure.regionprops(relabeled, 
                                           intensity_image=nuclei)
@@ -136,7 +149,7 @@ def segment_cells(nuclei, mask, small_holes=100, remove_boundary_cells=True):
     relabeled.flat[np.in1d(relabeled, np.unique(cut))] = 0
 
     # fill small holes
-    holes = skimage.measure.label(relabeled==0)
+    holes = skimage.measure.label(relabeled==0, background=0) + 1
     regions = skimage.measure.regionprops(holes,
                 intensity_image=skimage.morphology.dilation(relabeled))
 
@@ -163,24 +176,34 @@ def load_conditions():
     experiment.parse_ind_vars()
     experiment.parse_grids()    
 
+    # make each round of probes its own variable, described by tuple of probes 
     for rnd in '123':
         experiment.ind_vars['probes round %s' % rnd] = \
                 [tuple(x.split(', ')) for x in experiment.ind_vars['probes']]
 
+    experiment.ind_vars['cells'] = \
+                [tuple(x.split(', ')) for x in experiment.ind_vars['cells']]
+
     experiment.make_ind_vars_table()
 
+    not_found = {}
+    for ix, cells in experiment.ind_vars_table['cells'].iteritems():
+    
+        virus = lasagna.config.cloning['cell lines'].loc[cells, 'lentivirus']
+        # TODO: map comma-separated cell lines to tuple
+        try:
+            virus = virus.fillna('')
+            plasmids = lasagna.config.cloning['lentivirus'].loc[virus, 'plasmid']
+            plasmids = plasmids.fillna('')
+            barcodes = lasagna.config.cloning['plasmids'].loc[plasmids, 'barcode']
+            barcodes = barcodes.fillna('')
+            # split comma-separated list of barcodes
+            experiment.ind_vars_table.loc[ix, 'barcodes'] = tuple(barcodes)
+        except KeyError:
+            not_found[cells] = None
+            experiment.ind_vars_table.loc[ix, 'barcodes'] = tuple()
 
-    cells = experiment.ind_vars_table['cells']
-    virus = lasagna.config.cloning['cell lines'].loc[cells, 'lentivirus']
-    # TODO: map comma-separated cell lines to tuple
-    virus = virus.fillna('')
-    plasmids = lasagna.config.cloning['lentivirus'].loc[virus, 'plasmid']
-    plasmids = plasmids.fillna('')
-    barcodes = lasagna.config.cloning['plasmids'].loc[plasmids, 'barcode']
-
-    barcodes = barcodes.fillna('')
-    # split comma-separated list of barcodes
-    experiment.ind_vars_table['barcodes'] = [tuple(x.split(', ')) for x in barcodes]
+    print 'no barcodes found for cells: %s' % '\n'.join(','.join(x) for x in not_found)
 
     lasagna.config.experiment = experiment
     return experiment
@@ -195,7 +218,7 @@ def prepare_linear_model():
     # split comma-separated probes
     lasagna.config.set_linear_model_defaults(model)
     all_probes = lasagna.config.experiment.ind_vars['probes']
-    model.indices['l'] = list(set(sum([x.split(', ') for x in all_probes], [])))
+    model.indices['l'] = sorted(set(sum([x.split(', ') for x in all_probes], [])))
 
     model.matrices_from_tables()
 
@@ -215,7 +238,7 @@ def prepare_linear_model():
         for rnd in model.indices['j']:
             M[sample].loc[rnd, list(ivt.loc[sample, rnd])] = 1
         if not pd.isnull(row['barcodes']):
-            b[sample][row['barcodes']] = 1
+            b[sample][list(row['barcodes'])] = 1
 
     lasagna.config.experiment.ind_vars_table['M'] = [M[x] for x in ivt.index]
     lasagna.config.experiment.ind_vars_table['b'] = [b[x] for x in ivt.index]
@@ -224,5 +247,35 @@ def prepare_linear_model():
 
 
 
+def stitch(df, translations=None, clip=True):
+    """Stitches images with alpha blending, provided Paths DataFrame with tile filenames in column
+    'calibrated' and TileConfiguration.registered.txt file (from GridCollection stitching) with location
+    stored in pipeline.tile_configuration. Alternately, provide list of translations (xy).
+    :param df: has 'calibrated' and 'stitched' columns
+    :param translations: list of [x,y] offsets of tiles
+    :return:
+    """
+
+    if translations is None:
+        translations = lasagna.io.load_tile_configuration(tile_configuration)
+    if isinstance(translations, str):
+        translations = lasagna.io.load_tile_configuration(translations)
+
+    # kluge for 5x5 vs 3x3 grids present in some data
+    grid_size = int(np.sqrt(len(df['calibrated']))) * np.array([1, 1])
+
+    save_name = lasagna.config.paths.full(df['stitched'][0])
+    print save_name
+    files = np.array([f for f in df['calibrated']]).reshape(grid_size)
+    data = np.array([[lasagna.io.read_stack(lasagna.config.paths.full(x)) for x in y] for y in files])
+    print data.shape
+    arr = []
+    for channel in range(data.shape[2]):
+        arr += [lasagna.process.alpha_blend(data[:, :, channel].reshape(-1, *data.shape[-2:]),
+                                            translations, edge=0.48,
+                                            edge_width=0.01,
+                                            clip=clip)]
+
+    lasagna.io.save_hyperstack(save_name, np.array(arr), display_ranges=display_ranges, luts=luts)
 
 

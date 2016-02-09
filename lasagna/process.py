@@ -1,5 +1,5 @@
 import json
-import uuid
+import random
 import os
 from collections import defaultdict
 
@@ -28,11 +28,12 @@ default_features = {'mean': lambda region: region.intensity_image[region.image].
                     }
 
 default_nucleus_features = {
-    'area': lambda region: region.area,
+    'area':     lambda region: region.area,
     'centroid': lambda region: region.centroid,
-    'bounds': lambda region: region.bbox,
-    'label': lambda region: np.median(region.intensity_image[region.intensity_image > 0]),
-    'mask': lambda region: io.compress_obj(region.image)
+    'bounds':   lambda region: region.bbox,
+    'label':    lambda region: np.median(region.intensity_image[region.intensity_image > 0]),
+    'mask':     lambda region: Mask(region.image),
+    'hash':     lambda region: hex(random.getrandbits(128))
 }
 
 
@@ -84,22 +85,6 @@ def pad(array, pad_width, mode=None, **kwargs):
             s = [slice(-1 * pad_width, pad_width)] * array.ndim
             return array[s]
     return np.pad(array, pad_width, mode=mode, **kwargs)
-
-
-def regionprops(*args, **kwargs):
-    """Supplement skimage.measure.regionprops with additional field containing full intensity image in
-    bounding box (useful for filtering).
-    :param args:
-    :param kwargs:
-    :return:
-    """
-    regions = skimage.measure.regionprops(*args, **kwargs)
-    if 'intensity_image' in kwargs:
-        intensity_image = kwargs['intensity_image']
-        for region in regions:
-            b = region.bbox
-            region.intensity_image_full = intensity_image[b[0]:b[2], b[1]:b[3]]
-    return regions
 
 
 def table_from_nuclei(row, index_names, source='aligned', nuclei='nuclei', channels=None,
@@ -255,23 +240,26 @@ def get_nuclei(img, opening_radius=6, block_size=80, threshold_offset=0):
     return img_as_uint(nuclei)
 
 
-def get_nuclei2(dapi, radius=10, area=(40,300), um_per_px=None):
+def get_nuclei2(dapi, radius=10, area=(40,300), um_per_px=None, 
+                score=lambda r: r.mean_intensity,
+                threshold=skimage.filters.threshold_otsu):
     """Could downsample to consistent pixel size (40X?)
     """
+
     um_per_px = um_per_px or lasagna.config.magnification['40X'] * 2
     smooth = 1.35 / um_per_px # gaussian smoothing in watershed
     radius = radius / um_per_px
-    area=(40,250)
+
     area = np.array(area)/(um_per_px**2)
 
     mask = _binarize(dapi, radius, area[0])
     labeled = skimage.measure.label(mask, background=0) + 1
-    labeled = filter_by_region(labeled, lambda r: r.mean_intensity, intensity=dapi)
+    labeled = filter_by_region(labeled, score, threshold, intensity=dapi)
 
     # should only fill holes below minimum cell area
     nuclei = apply_watershed(ndimage.binary_fill_holes(labeled > 0), smooth=smooth)
 
-    return filter_by_region(nuclei, lambda r: area[0] < r.area < area[1])
+    return filter_by_region(nuclei, lambda r: area[0] < r.area < area[1], threshold)
 
 
 def _binarize(dapi, radius, min_size):
@@ -288,20 +276,19 @@ def _binarize(dapi, radius, min_size):
     return mask
 
 
-def filter_by_region(labeled, key, intensity=None, threshold=None):
-    """Apply a filter to labeled image. The key function a single region as input and
-    returns a score. Regions are filtered out by score using Otsu's threshold or the
+def filter_by_region(labeled, score, threshold, intensity=None):
+    """Apply a filter to labeled image. The key function takes a single region as input and
+    returns a score. Regions are filtered out by score using the
     provided threshold function. If scores are boolean, scores are used as a mask and 
     threshold is disregarded. 
     """
     labeled = labeled.copy()
-    threshold = threshold or skimage.filters.threshold_otsu
 
     if intensity is None:
         regions = skimage.measure.regionprops(labeled)
     else:
         regions = skimage.measure.regionprops(labeled, intensity_image=intensity)
-    scores = np.array([key(r) for r in regions])
+    scores = np.array([score(r) for r in regions])
 
     if all([s in (True, False) for s in scores]):
         cut = [r.label for r, s in zip(regions, scores) if not s]
@@ -651,6 +638,15 @@ def replace_minimum(img):
     img_ = img.copy()
     img_[img_ < mi] = mi[img_ < mi]
     return img_
+
+
+class Mask(object):
+    def __init__(self, mask):
+        """Hack to avoid slow printing of DataFrame containing boolean np.ndarray.
+        """
+        self.mask = mask
+    def __repr__(self):
+        return str(self.mask.shape) + ' mask'
 
 
 # find offsets using 4 corners
