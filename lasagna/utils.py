@@ -590,5 +590,10 @@ def start_client():
     j = lasagna.jython_imports.jython_import(client.root.exposed_get_head(),
                                      client.root.exposed_execute)
     return j        
-                
+              
+def pack_contours(contours):
+    """Pack contours into lists that can be sent to jython overlay_contours
+    """
+    packed = [(1 + c).T.tolist() for c in contours]
+    return packed
 

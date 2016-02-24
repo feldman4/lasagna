@@ -47,7 +47,7 @@ def setup(lasagna_path='/broad/blainey_lab/David/lasagna/'):
     return lasagna.config.paths
 
 
-def align(files, save_name, n=500, trim=150, max=True):
+def align(files, save_name, n=500, trim=150, take_max=True):
     """Align data using first channel (DAPI). Register corners using FFT, build similarity transform,
     warp, and trim edges.
     :param files: files to align
@@ -62,7 +62,7 @@ def align(files, save_name, n=500, trim=150, max=True):
 
     data = [lasagna.io.read_stack(f) for f in files]
     data = lasagna.io.compose_stacks(data)
-    if max:
+    if take_max:
         data = data.max(axis=1)
 
     offsets, transforms = lasagna.process.get_corner_offsets(data[:, 0], n=n)
@@ -132,7 +132,7 @@ def segment_cells(nuclei, mask, small_holes=100, remove_boundary_cells=True):
     w = skimage.morphology.watershed(time, nuclei)
 
     if remove_boundary_cells:
-        cut = np.r_[w[0,:], w[-1,:], w[:,0], w[:,-1]]
+        cut = w[0,:], w[-1,:], w[:,0], w[:,-1]
         w.flat[np.in1d(w, np.unique(cut))] = 0
         w = skimage.measure.label(w)
 
@@ -158,10 +158,7 @@ def segment_cells(nuclei, mask, small_holes=100, remove_boundary_cells=True):
             vals = reg.intensity_image[reg.intensity_image>0]
             relabeled[holes == reg.label] = scipy.stats.mode(vals)[0][0]
 
-    select = 2. * (relabeled != skimage.morphology.erosion(relabeled,
-                                                      selem=selem_3))
-
-    return relabeled, select
+    return relabeled
 
 
 

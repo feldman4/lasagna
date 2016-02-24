@@ -268,10 +268,10 @@ def _binarize(dapi, radius, min_size):
     dark cells. Could use shape to improve the filtering.
     """
     dapi = skimage.img_as_ubyte(dapi)
-    # slower than optimized disk in imagej, (scipy uniform) square is fast but crappy
+    # slower than optimized disk in imagej, scipy.ndimage.uniform_filter with square is fast but crappy
     meanered = skimage.filters.rank.mean(dapi, selem=disk(radius))
     mask = dapi > meanered
-    mask = skimage.morphology.remove_small_objects(mask, min_size=100)
+    mask = skimage.morphology.remove_small_objects(mask, min_size=min_size)
 
     return mask
 
