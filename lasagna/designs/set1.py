@@ -6,47 +6,47 @@ from itertools import cycle, product
 import Bio.SeqIO.AbiIO
 from collections import defaultdict
 
-# bottom strand
-spacer = 'TT'
-home = '/broad/blainey_lab/David/lasagna/probes/stellaris/set0/'
 
-files = {'reference_probes': home + 'reference_probes.csv',
-         'reference_probes_uncut': home + 'reference_probes_uncut.csv',
-         'probes': home + '20150923_822_probes_ordered.csv',
-         'probes_export': home + '20150923_probes_export.csv',
-         'tiles_export': home + '20150923_tiles_export.csv',
-         'barcodes_export': home + '20150923_barcodes.fasta',
-         'reference_export': home + '20150923_reference_export.csv',
-         'recombination_primers': home + '20150923_recombination_primers.csv',
-         'BTI_order': home + 'BTI_Oligo_Order-Columns_20151007.csv'}
+home = '/broad/blainey_lab/David/lasagna/probes/stellaris/set1'
+date = time.strftime('%Y%m%d')
+barcode_set_name = os.path.basename(__file__).split('.')[0]
 
-EcoRI = 'GAATTC'
+files = {'reference_probes': '%s/reference_probes.csv' % home,
+         'reference_probes_uncut': '%s/reference_probes_uncut.csv' % home,
+         'probes': '%s/stellaris_probes.csv' % home,
+         'probes_export': '%s/%s_probes_export.csv' % (home, date),
+         'tiles_export': '%s/%s_tiles_export.csv' % (home, date),
+         'barcodes_export': '%s/%s_barcodes.fasta' % (home, date),
+         'reference_export': '%s/%s_reference_export.csv' % (home, date),
+         'recombination_primers': '%s/%s_recombination_primers.csv' % (home, date),
+         'BTI_order': '%s/BTI_Oligo_Order-Columns_20151007.csv' % home}
+
+# common sequences
 LHS, RHS = 'ctcagaACCGGT', rc('ctcagaGGTACC')  # contain AgeI, KpnI sites
+spacer = 'TT'
+BsmBI_overhangs = 'ctcg', 'gcct', 'ggtg', 'tcgc', 'cgcc'
+BsmBI_site = 'gacgatcCGTCTCc'
 
+# for export to benchling
+benchling_headers = ['name', 'sequence', 'type', 'color']
 colors = ('#F58A5E', '#FAAC61', '#FFEF86', '#F8D3A9', '#B1FF67', '#75C6A9', '#B7E6D7',
           '#85DAE9', '#84B0DC', '#9EAFD2', '#C7B0E3', '#FF9CCD', '#D6B295', '#D59687',
           '#B4ABAC', '#C6C9D1')
 
-BsmBI_overhangs = 'ctcg', 'gcct', 'ggtg', 'tcgc', 'cgcc'
-BsmBI_site = 'gacgatcCGTCTCc'
-
-benchling_headers = ['name', 'sequence', 'type', 'color']
-
+# formulas for naming sequences
 naming = {'reference': lambda x: 'ref%02d' % x,
-          'tiles': lambda x: 'set0_t%02d' % x,
-          'barcodes': lambda x: ('set0_' + '-'.join(['t%02d'] * len(x))) % tuple(x)
+          'tiles': lambda x: 'set1_t%02d' % x,
+          'barcodes': lambda x: ('set1_' + '-'.join(['t%02d'] * len(x))) % tuple(x)
           }
 
 
-def load_set0_probes():
-    reference_probes = open(files['reference_probes']).read().splitlines()
-    probes = open(files['probes']).read().splitlines()
-    probes = [p.split(',')[1] for p in probes]
-    probes = [p for p in probes if p not in reference_probes]
+def load_probes():
+    reference_probes = pd.read_csv(files['reference_probes'], header=None)
+    reference_probes = list(reference_probes[1])
+    probes = pd.read_csv(files['probes'], header=None)
+    probes = [p for p in probes[1] if p not in reference_probes]
     print 'loaded %d probes, %d reference probes' % (len(probes), len(reference_probes))
     return probes, reference_probes
-
-
 
 
 def cloning_primers(barcode_set, UMI=0):
@@ -54,10 +54,10 @@ def cloning_primers(barcode_set, UMI=0):
     refs = refs.loc[barcode_set.ref_order, 'sequence']
     primers = {}
     internal_refs = refs[1:-1]
-    for i, ((name, seq), sense) in enumerate(zip(internal_refs.iteritems(), 
+    for i, ((name, seq), sense) in enumerate(zip(internal_refs.iteritems(),
                                                  cycle(['REV', 'FWD']))):
-        
-        
+
+
         priming = seq if sense is 'REV' else rc(seq)
         overhang = barcode_set.overhangs[int(i/2)].upper()
         overhang = overhang if sense is 'FWD' else rc(overhang)
@@ -67,10 +67,18 @@ def cloning_primers(barcode_set, UMI=0):
 
 class BarcodeSet(object):
     def __init__(self, probes, reference_probes, num_barcodes,
-                 tiles_per_barcode, tile_size, name='set0', overhangs=BsmBI_overhangs):
+                 tiles_per_barcode, probes_per_tile, name=barcode_set_name, 
+                 overhangs=BsmBI_overhangs):
         """Describe set of barcodes assembled from probes and reference probes. Tiles correspond to probe
         sets, and are recombined to create barcodes. Cloning uses directional overhangs between tiles.
         Reference probes at the boundaries of tiles are used for cloning, FISH quality control, and RT-qPCR.
+           
+        Exported fasta files contain barcodes in sense orientation (top strand).
+        Probes are taken literally from input and used in anti-sense orientation (bottom strand).
+
+        5' --------------------------- 3'
+        3' --------------------------- 5'
+                    3' <----- 5' FISH probe
 
         Sanger sequencing can be matched to barcodes using the score_seqs method.
 
@@ -78,12 +86,12 @@ class BarcodeSet(object):
         :param reference_probes: conserved sequence at tile edges, typically need 2 * N
         :param num_barcodes: M barcodes to generate
         :param tiles_per_barcode: N tiles per barcode, typically between 3 and 6
-        :param tile_size: P probes per tile, typically between 8 and 16
+        :param probes_per_tile: P probes per tile, typically between 8 and 16
         :param name:
         :param overhangs: used for directional cloning, typically 4 bp, 50% GC, and non-palindromic
         :return:
         """
-        self.tile_size = tile_size
+        self.probes_per_tile = probes_per_tile
         self.tiles_per_barcode = tiles_per_barcode
         self.num_barcodes = num_barcodes
         self.overhangs = overhangs
@@ -97,13 +105,17 @@ class BarcodeSet(object):
         self.make_reference(reference_probes)
         self.make_tiles()
 
-        self.ref_order = ['ref00', 'ref02', 'ref03', 'ref04', 'ref05', 'ref01']
+        self.ref_order = ['ref00', 'ref02', 'ref03', 'ref04', 'ref05', 'ref01'] + \
+                         ['ref06', 'ref07', 'ref08', 'ref09', 'ref10', 'ref11']
 
         self.load_order(files['BTI_order'])
 
         self.make_barcodes()
 
     def load_order(self, filepath):
+        """Load oligo order spreadsheet and define tile for each oligo. Use 
+        before calling save_probe_layout.
+        """
         self.ordered = pd.read_csv(filepath)
 
         probes2tiles=defaultdict(str)
@@ -114,7 +126,7 @@ class BarcodeSet(object):
 
     def save_probe_layout(self, dirpath=None):
         """Save probe and tile layouts on ordered plate to .xls, located in dirpath
-        (defaults to set0.home).
+        (defaults to set1.home).
         """
         dirpath = dirpath or home
         print dirpath
@@ -125,15 +137,18 @@ class BarcodeSet(object):
                                    aggfunc=lambda x: x)
             plates_by_tile[plate] = df.pivot_table(values='tile', index='Row', columns='Column', 
                                    aggfunc=lambda x: x)
-        with pd.ExcelWriter(dirpath + 'plates_by_probe.xls') as writer:
+        with pd.ExcelWriter('%s/plates_by_probe.xls' % dirpath) as writer:
             for name, plate in plates_by_probe.items():
                 plate.to_excel(writer, sheet_name=name)
             
-        with pd.ExcelWriter(dirpath + 'plates_by_tile.xls') as writer:
+        with pd.ExcelWriter('%s/plates_by_tile.xls' % dirpath) as writer:
             for name, plate in plates_by_tile.items():
                 plate.to_excel(writer, sheet_name=name)
 
-
+    def save_primers(self):
+        primers = cloning_primers(self)
+        savename = files['recombination_primers']
+        pd.Series(primers).to_csv(savename, header=None)
 
     def make_probes(self, probes):
         """Turn iterable of probe sequences into named entries in table, benchling format. Color
@@ -142,8 +157,8 @@ class BarcodeSet(object):
         :return:
         """
         self.probes = pd.DataFrame({'sequence': probes})
-        self.probes['name'] = ['set0_%03.d' % i for i, _ in enumerate(probes)]
-        self.probes['color'] = [colors[(i / self.tile_size) % len(colors)]
+        self.probes['name'] = ['set1_%03.d' % i for i, _ in enumerate(probes)]
+        self.probes['color'] = [colors[(i / self.probes_per_tile) % len(colors)]
                                 for i, _ in enumerate(probes)]
         self.probes['type'] = 'stellaris (sense)'
         self.probes = self.probes[benchling_headers]
@@ -159,13 +174,13 @@ class BarcodeSet(object):
         self.refs = self.refs[benchling_headers]
 
     def make_tiles(self):
-        """Use current values in tiles_per_barcode, num_barcodes, and tile_size fields to make
+        """Use current values in tiles_per_barcode, num_barcodes, and probes_per_tile fields to make
         a numpy.ndarray of tile sequences, and a table in benchling format. Color tiles by position
         in barcode.
         :return:
         """
-        index = np.arange(self.tiles_per_barcode * self.num_barcodes * self.tile_size)
-        index = index.reshape(-1, self.tile_size)
+        index = np.arange(self.tiles_per_barcode * self.num_barcodes * self.probes_per_tile)
+        index = index.reshape(-1, self.probes_per_tile)
 
         probes = np.array(self.probes['sequence'])[index]
         tiles = [spacer.join(x) for x in probes]
@@ -182,7 +197,7 @@ class BarcodeSet(object):
         self.tiles['probes'] = [tuple(row) for row in np.array(self.probes['name'])[index]]
 
 
-    def make_barcode(self, tiles, refs=None, overhangs=None, code='<rstsrorstsrorstsr>'):
+    def make_barcode(self, tiles, refs=None, overhangs=None, code=('<' + 'rstsro'*5 + 'rstsr>')):
         """Make a single barcode from given tiles according to code. Tokens are:
         r = ref
         t = tile

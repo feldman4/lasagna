@@ -14,7 +14,8 @@ if False:
     home_dir = '/Users/feldman/Downloads/20160130_GFP_spinfection/'
 else:
     # windows
-    home_dir = 'D:\\User Folders\\David\\lasagna\\20160130_GFP_spinfection\\'
+    home_dir = 'D:\\User Folders\\David\\lasagna\\20160219_96W-G026\\'
+#    home_dir = 'D:\\User Folders\\David\\lasagna\\RAJ\\20160120\\wells\\'
     # home_dir = '\\\\neon-cifs\\blainey_lab\\David\\lasagna\\20150817 6 round\\analysis\\calibrated\\raw\\'
     filesep = '\\'
 
@@ -24,21 +25,25 @@ else:
 #                ('Green', (2000, 8000)),
 #                ('Red', (800, 8000)),
 #                ('Magenta', (800, 8000)))
-channel_luts = (('Grays', (400, 40000)),
-               ('Blue', (800, 8000)))
+channel_luts = (('Blue', (400, 40000)),
+                ('Green', (400, 6000)),
+                ('Red', (400, 4000)),
+                ('Magenta', (400, 4000)))
+#channel_luts = (('Grays', (400, 40000)),
+#               ('Blue', (800, 8000)))
 #channel_luts = (('Grays', (400, 40000)),)
 
 channels = len(channel_luts)
 slices = 1;  # Z
 frames = 1;  # T
 
-##### 40X
-#tiles, overlap = (4, 4), int(100 * (1. - 300. / 350))
-#pixel_width = 0.175 * 2
+#### 40X
+tiles, overlap = (4, 4), int(100 * (1. - 300. / 350))
+pixel_width = 0.175 * 2
 
-##### 20X
-tiles, overlap = (3, 3), int(100 * (1. - 600. / 675))
-pixel_width = 0.35 * 2
+###### 20X
+#tiles, overlap = (3, 3), int(100 * (1. - 600. / 675))
+#pixel_width = 0.35 * 2
 
 ### 4X
 #tiles, overlap = (3, 3), int(100*(1. - 1800./3379))
@@ -48,9 +53,10 @@ pixel_width = 0.35 * 2
 #tiles, overlap = (7, 7), int(100*(1. - 100./135))
 #pixel_width = 0.066 * 2
 
-## 60X
-tiles, overlap = (3, 3), int(100*(1. - 200./225.3))
-pixel_width = 0.110
+### 60X
+#tiles, overlap = (7, 7), int(100*(1. - 200./225.3))
+#overlap = 10
+#pixel_width = 0.110
 
 print tiles, overlap
 nuclei_singleton = False
@@ -72,11 +78,14 @@ def make_template(well, data_dir):
         return txt_path
     return f
 
+# uses tile offsets from a template file. default behavior is to generate the template from
+# first well stitched. to use a specific file as template, stitch it separately and 
+# call template=make_template(well, data_dir) here.
 use_template = False
-#template = make_template('D1', '60X_round1_3')
+#template = make_template('A1', '20160120BarcodeHyb1forward_Scan002')
 template = None
 
-data_dirs = ['20X_3x3_2',]
+data_dirs = ['40X_round1_1']
 
 # usually xyzct, except on bad days when it's xyczt(default)
 order = 'xyzct'
@@ -100,6 +109,10 @@ def savename(well, data_dir):
 def tile_config_name(well, data_dir):
     return 
 
+def macro_dir(s):
+	"""Wrap directory string so ImageJ macro accepts it as parameter.
+	"""
+	return '[%s]' % (s.replace('\\', '\\\\'))
 
 def stitch_cmd(grid_size, overlap, directory, file_pattern, config):
     s = """type=[Grid: row-by-row] order=[Right & Down                ]
@@ -113,12 +126,12 @@ def stitch_cmd(grid_size, overlap, directory, file_pattern, config):
 
 def stitch_from_file_cmd(layout_file_path):
     s = """type=[Positions from file] order=[Defined by TileConfiguration] 
-    directory=%s layout_file=%s fusion_method=[Linear Blending] 
+    directory=[%s]" layout_file=[%s] fusion_method=[Linear Blending] 
     regression_threshold=0.30 max/avg_displacement_threshold=2.50 
     absolute_displacement_threshold=3.50  
     computation_parameters=[Save computation time (but use more RAM)] 
     image_output=[Fuse and display]"""
-    return s % (os.path.dirname(layout_file_path), os.path.basename(layout_file_path))
+    return s % (os.path.dirname(layout_file_path) + '\\', os.path.basename(layout_file_path))
         
 ### MAIN LOOP ###
 
