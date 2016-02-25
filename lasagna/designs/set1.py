@@ -19,7 +19,8 @@ files = {'reference_probes': '%s/reference_probes.csv' % home,
          'barcodes_export': '%s/%s_barcodes.fasta' % (home, date),
          'reference_export': '%s/%s_reference_export.csv' % (home, date),
          'recombination_primers': '%s/%s_recombination_primers.csv' % (home, date),
-         'BTI_order': '%s/BTI_Oligo_Order-Columns_20151007.csv' % home}
+         'BTI_order': '%s/BTI_Oligo_Order-Columns_20151007.csv' % home,
+         'blacklist_probes': '%s/blacklist_probes.csv' % home}
 
 # common sequences
 LHS, RHS = 'ctcagaACCGGT', rc('ctcagaGGTACC')  # contain AgeI, KpnI sites
@@ -41,11 +42,22 @@ naming = {'reference': lambda x: 'ref%02d' % x,
 
 
 def load_probes():
-    reference_probes = pd.read_csv(files['reference_probes'], header=None)
-    reference_probes = list(reference_probes[1])
-    probes = pd.read_csv(files['probes'], header=None)
-    probes = [p for p in probes[1] if p not in reference_probes]
-    print 'loaded %d probes, %d reference probes' % (len(probes), len(reference_probes))
+    """Load probes from csv file with column of names and column of 
+    probe sequences. Blacklisted probes and reference probes are removed
+    from the list of all probes. All probes and reference probes are returned.
+    """
+    def load_sequences(s):
+        df = pd.read_csv(s, header=None)
+        df.columns = 'name', 'sequence'
+        return df
+    reference_probes = load_sequences(files['reference_probes'])
+    probes = load_sequences(files['probes'])
+    blacklist_probes = load_sequences(files['blacklist_probes'])
+    cut = pd.concat([reference_probes, blacklist_probes])
+    cut = probes['sequence'].isin(cut['sequence'])
+    probes = probes[~cut]
+    print 'loaded %d probes, %d reference probes, %d blacklisted probes' % \
+      (probes.shape[0], reference_probes.shape[0], blacklist_probes.shape[0])
     return probes, reference_probes
 
 
@@ -156,10 +168,12 @@ class BarcodeSet(object):
         :param probes:
         :return:
         """
-        self.probes = pd.DataFrame({'sequence': probes})
-        self.probes['name'] = ['set1_%03.d' % i for i, _ in enumerate(probes)]
+        self.probes = probes
+        if not isinstance(probes, pd.DataFrame):
+            self.probes = pd.DataFrame({'sequence': probes})
+            self.probes['name'] = ['set1_%03.d' % i for i, _ in enumerate(probes)]
         self.probes['color'] = [colors[(i / self.probes_per_tile) % len(colors)]
-                                for i, _ in enumerate(probes)]
+                                for i in range(probes.shape[0])]
         self.probes['type'] = 'stellaris (sense)'
         self.probes = self.probes[benchling_headers]
 

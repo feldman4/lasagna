@@ -12,6 +12,7 @@ import numpy as np
 import pandas as pd
 from pandas import IndexSlice as pdx
 import skimage
+import scipy.stats
 np.mode = scipy.stats.mode
 
 # import scipy.ndimage as ndi
