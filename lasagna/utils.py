@@ -370,7 +370,7 @@ def print_table(df):
     return lambda: HTML(htm)
 
 
-def call(arg, stdin, shell=True):
+def call(arg, stdin='', shell=True):
     """Call process with stdin provided (equivalent to cat), return stdout.
     :param arg:
     :param stdin:

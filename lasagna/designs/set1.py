@@ -40,6 +40,10 @@ naming = {'reference': lambda x: 'ref%02d' % x,
           'barcodes': lambda x: ('set1_' + '-'.join(['t%02d'] * len(x))) % tuple(x)
           }
 
+# a bit weird, too late to undo
+ref_order = ['ref00', 'ref02', 'ref03', 'ref04', 'ref05', 'ref01'] + \
+            ['ref06', 'ref07', 'ref08', 'ref09', 'ref10', 'ref11']
+
 
 def load_probes():
     """Load probes from csv file with column of names and column of 
@@ -61,11 +65,13 @@ def load_probes():
     return probes, reference_probes
 
 
-def cloning_primers(barcode_set, UMI=0):
+def cloning_primers(barcode_set, UMI=0, inner=True):
     refs = barcode_set.refs.set_index('name')
     refs = refs.loc[barcode_set.ref_order, 'sequence']
     primers = {}
+    if inner
     internal_refs = refs[1:-1]
+    naming = '%s_%s' if UMI ==0 else '%s_N' + str(UMI) + '_%s'
     for i, ((name, seq), sense) in enumerate(zip(internal_refs.iteritems(),
                                                  cycle(['REV', 'FWD']))):
 
@@ -73,7 +79,7 @@ def cloning_primers(barcode_set, UMI=0):
         priming = seq if sense is 'REV' else rc(seq)
         overhang = barcode_set.overhangs[int(i/2)].upper()
         overhang = overhang if sense is 'FWD' else rc(overhang)
-        primers['%s_%s' % (name, sense)] = BsmBI_site + overhang + 'N'*UMI + priming
+        primers[naming % (name, sense)] = BsmBI_site + overhang + 'N'*UMI + priming
     return primers
 
 
@@ -117,8 +123,7 @@ class BarcodeSet(object):
         self.make_reference(reference_probes)
         self.make_tiles()
 
-        self.ref_order = ['ref00', 'ref02', 'ref03', 'ref04', 'ref05', 'ref01'] + \
-                         ['ref06', 'ref07', 'ref08', 'ref09', 'ref10', 'ref11']
+        self.ref_order = ref_order 
 
         self.load_order(files['BTI_order'])
 
@@ -157,8 +162,8 @@ class BarcodeSet(object):
             for name, plate in plates_by_tile.items():
                 plate.to_excel(writer, sheet_name=name)
 
-    def save_primers(self):
-        primers = cloning_primers(self)
+    def save_primers(self, UMI=0):
+        primers = cloning_primers(self, UMI=UMI)
         savename = files['recombination_primers']
         pd.Series(primers).to_csv(savename, header=None)
 
