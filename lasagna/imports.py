@@ -24,7 +24,7 @@ import lasagna.process
 import lasagna.utils
 from lasagna.io import save_hyperstack as save
 from lasagna.io import read_stack as read
-from lasagna.io import show_hyperstack as show
+from lasagna.io import show_stack as show
 import lasagna.config as config
 from lasagna.utils import start_client
 

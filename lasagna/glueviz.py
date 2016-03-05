@@ -34,7 +34,7 @@ class FijiViewer(object):
 	def setup(self, axes):
 		j = lasagna.config.j
 
-		self.imp = lasagna.io.show_hyperstack(np.zeros((100,100)), title='viewer')
+		self.imp = lasagna.io.show_stack(np.zeros((100,100)), title='viewer')
 		self.displayed_file = None
 		
 	@staticmethod
@@ -74,7 +74,7 @@ class FijiViewer(object):
 		att_index = np.where(self.files == file_to_show)
 		if file_to_show != self.displayed_file:
 			data = lasagna.io.read_stack(file_to_show)
-			self.imp = lasagna.io.show_hyperstack(data, imp=self.imp, 
+			self.imp = lasagna.io.show_stack(data, imp=self.imp, 
 								luts=luts, display_ranges=display_ranges)
 
 			self.displayed_file = file_to_show
@@ -138,7 +138,7 @@ class FijiGridViewer(object):
 		"""
 		j = lasagna.config.j
 
-		self.imp = lasagna.io.show_hyperstack(np.zeros((100,100)), title='grid viewer')
+		self.imp = lasagna.io.show_stack(np.zeros((100,100)), title='grid viewer')
 
 	@staticmethod
 	def plot_data(self, axes):
@@ -182,7 +182,7 @@ class FijiGridViewer(object):
 				data = grid_view(files, bounds, padding=padding)
 				shape = data.shape
 				data = lasagna.io.montage(data)
-				self.imp = lasagna.io.show_hyperstack(data, imp=self.imp, 
+				self.imp = lasagna.io.show_stack(data, imp=self.imp, 
 									luts=luts, display_ranges=display_ranges)
 
 				if show_nuclei:
@@ -249,15 +249,15 @@ def make_selection_listener(viewer, key='u'):
 	return selection_listener
 
 def grid_view(files, bounds, padding=40):
-	from lasagna.io import b_idx, compose_stacks, get_mapped_tif
+	from lasagna.io import b_idx, pile, read_stack
 	
 	arr = []
 	for filename, bounds_ in zip(files, bounds):
-		I = get_mapped_tif(filename)
+		I = read_stack(filename, memmap=True)
 		I_cell = I[b_idx(None, bounds=bounds_, padding=((padding,padding), I.shape))]
 		arr.append(I_cell.copy())
 
-	return compose_stacks(arr)
+	return pile(arr)
 				
 
 def pandas_to_glue(df, label='data', name_map=default_name_map):

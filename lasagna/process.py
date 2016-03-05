@@ -406,7 +406,7 @@ class Calibration(object):
         self.files = defaultdict(list)
         for f in os.walk(self.path).next()[2]:
             if '.tif' in f:
-                well, site = io.get_well_site(f)
+                _, _, well, site = io.parse_MM(f)
                 channel = self.info['wells'][well]
                 self.files[channel] += [os.path.join(self.path, f)]
 
@@ -458,7 +458,7 @@ class Calibration(object):
         stack = np.array([self.illumination_mean] + list(self.illumination))
         luts = [io.GRAY] + [spectral_luts[dye] for dye in self.calibration.columns if dye != 'empty']
         save_name = os.path.join(os.path.dirname(self.path), 'illumination_correction_%s.tif' % self.name)
-        io.save_hyperstack(save_name, 10000 * stack, luts=luts)
+        io.save_stack(save_name, 10000 * stack, luts=luts)
 
     def fix_illumination(self, frame, channel=None):
         """Apply background subtraction and illumination correction. If no channel is provided and input
@@ -561,7 +561,7 @@ def stitch_grid(arr, overlap, upsample=1):
     return np.array([offsets[cols:], offsets[:cols]])
 
 
-def alpha_blend(arr, positions, clip=True, edge=0.95, edge_width=0.02):
+def alpha_blend(arr, positions, clip=True, edge=0.95, edge_width=0.02, subpixel=False):
     """Blend array of images, translating image coordinates according to offset matrix.
     :param arr:
     :param grid:
@@ -570,7 +570,7 @@ def alpha_blend(arr, positions, clip=True, edge=0.95, edge_width=0.02):
     """
 
     def make_alpha(s, edge=0.95, edge_width=0.02):
-        """Unity in center, drop-off near edge
+        """Unity in center, drops off near edge
         :param s: shape
         :param edge: mid-point of drop-off
         :param edge_width: width of drop-off in exponential
@@ -583,7 +583,7 @@ def alpha_blend(arr, positions, clip=True, edge=0.95, edge_width=0.02):
                              y[None, ...] - s[1] / 2])
         R = np.max(np.abs(xy), axis=0)
 
-        return sigmoid(-(R - s[0] * edge) / (s[0] * edge_width))
+        return sigmoid(-(R - s[0] * edge/2) / (s[0] * edge_width))
 
     positions = np.array(positions)
     # determine output shape, offset positions as necessary
@@ -597,19 +597,26 @@ def alpha_blend(arr, positions, clip=True, edge=0.95, edge_width=0.02):
     # store summed data and alpha layer in trailing channel dimension
     output = np.zeros(np.r_[[2], output_shape], dtype=float)
     reshape = lambda x: x.reshape(-1, *x.shape[1:])
-    for image, xy in zip(reshape(arr), reshape(positions)):
-        ST = skimage.transform.SimilarityTransform(translation=xy)
-        # to_warp = np.r_['2,3,0', image, alpha]
-        tmp = np.array([skimage.transform.warp(image, inverse_map=ST.inverse,
-                                               output_shape=output_shape,
-                                               preserve_range=True, mode='reflect'),
-                        skimage.transform.warp(alpha, inverse_map=ST.inverse,
-                                               output_shape=output_shape,
-                                               preserve_range=True, mode='constant')])
-        tmp[0, :, :] *= tmp[1, :, :]
-        output += tmp
 
-    output_alpha = output[1, :, :]
+    for image, xy in zip(reshape(arr), reshape(positions)):
+        if subpixel is False:
+            j, i = xy
+            
+            output[0, i:i+image.shape[0], j:j+image.shape[1]] += image * alpha
+            output[1, i:i+image.shape[0], j:j+image.shape[1]] += alpha
+        else:
+            ST = skimage.transform.SimilarityTransform(translation=xy)
+
+            tmp = np.array([skimage.transform.warp(image, inverse_map=ST.inverse,
+                                                   output_shape=output_shape,
+                                                   preserve_range=True, mode='reflect'),
+                            skimage.transform.warp(alpha, inverse_map=ST.inverse,
+                                                   output_shape=output_shape,
+                                                   preserve_range=True, mode='constant')])
+            tmp[0, :, :] *= tmp[1, :, :]
+            output += tmp
+
+
     output = (output[0, :, :] / output[1, :, :])
 
     if clip:

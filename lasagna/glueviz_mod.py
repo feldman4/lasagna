@@ -18,7 +18,7 @@ class FijiViewer(object):
 	def setup(self, axes):
 		j = lasagna.config.j
 
-		self.imp = lasagna.io.show_hyperstack(np.zeros((100,100)), title='glue')
+		self.imp = lasagna.io.show_stack(np.zeros((100,100)), title='glue')
 
 		self.displayed_file = None
 		
@@ -58,7 +58,7 @@ class FijiViewer(object):
 			att_index = np.where(self.files == file_to_show)
 			if file_to_show != self.displayed_file:
 				data = lasagna.io.read_stack(file_to_show)
-				self.imp = lasagna.io.show_hyperstack(data, imp=self.imp, 
+				self.imp = lasagna.io.show_stack(data, imp=self.imp, 
 									luts=luts, display_ranges=display_ranges)
 
 				self.displayed_file = file_to_show

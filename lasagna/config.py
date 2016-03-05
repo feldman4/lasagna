@@ -4,8 +4,7 @@ import lasagna.conditions_
 import lasagna.utils
 import lasagna.io
 
-up = os.path.dirname
-home = up(__file__)
+home = os.path.dirname(__file__)
 paths = None
 calibration = None
 calibration_short = None
@@ -13,6 +12,8 @@ calibration_short = None
 paths = type('', (), {})()
 paths.full = lambda s: s
 experiment = None
+
+fiji_target = '/Users/feldman/Downloads/20151219_96W-G024/transfer/'
 
 fonts = os.path.join(home, 'resources', 'fonts')
 luts = os.path.join(home, 'resources', 'luts')

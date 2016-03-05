@@ -21,11 +21,13 @@ imagej_description = ''.join(['ImageJ=1.49v\nimages=%d\nchannels=%d\nslices=%d',
                               '\nunit=\\u00B5m\nspacing=8.0\nloop=false\n',
                               'min=764.0\nmax=38220.0\n'])
 
-UM_PER_PX = {'40X': 0.44,
-             '20X': 0.22}
+UM_PER_PX = {'10X' : 0.66,
+             '20X' : 0.33,
+             '40X' : 0.175,
+             '60X' : 0.11,
+             '100X': 0.066}
 
 BINNING = 2
-OBJECTIVE = '40X'
 
 RED = tuple(range(256) + [0] * 512)
 GREEN = tuple([0] * 256 + range(256) + [0] * 256)
@@ -56,35 +58,16 @@ def add_dir(path, dir_to_add):
     return '/'.join(x[:-1] + [dir_to_add] + [x[-1]])
 
 
-def read_stack(filename, master=None, memmap=False):
-    if config.paths:
-        filename = config.paths.full(filename)
-    if master:
-        TF = _load_tifffile(master)
-        names = [s.pages[0].parent.filename for s in TF.series]
-        index = names.index(filename.split('/')[-1])
-        page = TF.series[index].pages[0]
-        data = TF.asarray(series=index, memmap=memmap)
-    else:
-        data = imread(filename, multifile=False, memmap=memmap)
-    while data.shape[0] == 1:
-        data = np.squeeze(data, axis=(0,))
-    return data
 
 
-# save load time, will bring trouble if the TiffFile reference is closed
-@lasagna.utils.Memoized
-def _load_tifffile(master):
-    return TiffFile(master)
 
-
-def get_row_stack(row, full=False, nuclei=False, apply_offset=False, pad=(0, 0)):
+def get_row_stack(row, full=False, nuclei=False, apply_offset=False, pad=0):
     """For a given DataFrame row, get image data for full frame or cell extents only.
     :param row:
     :param full:
     :param nuclei:
     :param apply_offset:
-    :param pad: (height, width), adds to both sides
+    :param pad: constant, included on both sides
     :return:
     """
     filename = row[('all', 'file')]
@@ -92,11 +75,11 @@ def get_row_stack(row, full=False, nuclei=False, apply_offset=False, pad=(0, 0))
         filename = config.paths.lookup('nuclei', stitch=row[('all', 'file')])
     I = _get_stack(filename)
     if full is False:
-        I = I[b_idx(row, padding=(pad, I.shape))]
+        I = subimage(I, row[('all', 'bounds')], pad=pad)
     if apply_offset:
         offsets = np.array(I.shape) * 0
         offsets[-2:] = 1 * row['offset x'], 1 * row['offset y']
-        I = offset_stack(I, offsets)
+        I = offset(I, offsets)
 
     return I
 
@@ -114,19 +97,19 @@ def compose_rows(df, load_function=lambda x: get_row_stack(x)):
         z = load_function(row).copy()
         arr_.append(z)
 
-    return compose_stacks(arr_)
+    return pile(arr_)
 
 
-def compose_stacks(arr_):
+def pile(arr):
     """Concatenate stacks of same dimensionality along leading dimension. Values are
     filled from top left of matrix. Fills background with zero.
-    :param arr_:
+    :param arr:
     :return:
     """
-    shape = [max(s) for s in zip(*[x.shape for x in arr_])]
+    shape = [max(s) for s in zip(*[x.shape for x in arr])]
     # strange numpy limitations
     arr_out = []
-    for x in arr_:
+    for x in arr:
         y = np.zeros(shape, x.dtype)
         slicer = [slice(None, s) for s in x.shape]
         y[slicer] = x
@@ -168,37 +151,56 @@ def _get_stack(name):
     return data
 
 
+
 # TODO fix extension of luts and display_ranges when not provided
-def save_hyperstack(name, data, autocast=True, resolution=None,
-                    luts=None, display_ranges=None, compress=0,
-                    auto_make_dir=True):
-    """input ND array dimensions as ([time], [z slice], channel, y, x)
+def save_stack(name, data, luts=None, display_ranges=None, 
+               resolution=1., compress=0):
+    """
+    :param data: numpy array with 5, 4, 3, or 2 dimensions [TxZxCxYxX]. float64 
+        is automatically converted to float32 for ImageJ compatibility
+    :type data: array[...xYxX](bool | uint8 | uint16 | float32 | float64)
+
+    :param resolution: resolution in microns per pixel
+
+
+
+    input ND array dimensions as ([time], [z slice], channel, y, x)
     leading dimensions beyond 5 could be wrapped into time, not implemented
     if no lut provided, use default and pad extra channels with GRAY
     """
-    if name[-4:] != '.tif':
+    
+    if name.split('.')[-1] != 'tif':
         name += '.tif'
+    name = os.path.abspath(name)
+
     if data.ndim == 2:
-        data = data[np.newaxis, :, :]
-    if not os.path.isabs(name):
-        name = config.paths.full(name)
+        data = data[None]
+
+    if data.dtype == np.float64:
+        data = data.astype(np.float32)
+
+    if data.dtype == np.bool:
+        data = 255 * data.astype(np.uint8)
 
     nchannels = data.shape[-3]
-    if resolution is None:
-        resolution = (1. / (UM_PER_PX[OBJECTIVE] * BINNING),) * 2
+
+    if isinstance(resolution, str):
+        resolution = UM_PER_PX[resolution] * BINNING
+    resolution = (1./resolution,)*2
+    resolution[0]
+
     if luts is None:
-        luts = [x for x, _ in zip(DEFAULT_LUTS + (GRAY,) * nchannels, range(nchannels))]
+        luts = DEFAULT_LUTS + (GRAY,) * nchannels
+
     if display_ranges is None:
         display_ranges = tuple([(x.min(), x.max())
                                 for x in np.rollaxis(data, -3)])
 
-    if len(luts) != len(display_ranges) or len(luts) != data.shape[-3]:
-        raise ValueError('lookup table, display ranges, and data shape must match')
-
-    # convert to uint16
-    tmp = data.copy()
-    if autocast:
-        tmp = tmp.astype(np.uint16)
+    try:
+        luts = luts[:nchannels]
+        display_ranges = display_ranges[:nchannels]
+    except IndexError:
+        raise IndexError('Must provide at least %d luts and display ranges' % nchannels)
 
     # metadata encoding LUTs and display ranges
     # see http://rsb.info.nih.gov/ij/developer/source/ij/io/TiffEncoder.java.html
@@ -206,11 +208,10 @@ def save_hyperstack(name, data, autocast=True, resolution=None,
     tag_50838 = ij_tag_50838(nchannels)
     tag_50839 = ij_tag_50839(luts, display_ranges)
 
-    if os.path.dirname(name):
-        if auto_make_dir and not os.path.isdir(os.path.dirname(name)):
-            os.makedirs(os.path.dirname(name))
+    if not os.path.isdir(os.path.dirname(name)):
+        os.makedirs(os.path.dirname(name))
 
-    imsave(name, tmp, photometric='minisblack',
+    imsave(name, data, photometric='minisblack',
            description=description, resolution=resolution, compress=compress,
            extratags=[(50838, 'I', len(tag_50838), tag_50838, True),
                       (50839, 'B', len(tag_50839), tag_50839, True),
@@ -263,56 +264,44 @@ def ij_tag_50839(luts, display_ranges):
     return tag + tuple(sum([list(x) for x in luts], []))
 
 
-# helper functions for loading
-def sort_by_site(s):
-    return ''.join(get_well_site(s)[::-1])
-
-
-def get_well_site(s):
-    """Return well and site from a MicroManager MDA filename, e.g.:
-    100X_round1_1_MMStack_A1-Site_15.ome.tif => (A1, 15)
+def parse_MM(s):
+    """Parses Micro-Manager MDA filename.
+    100X_round1_1_MMStack_A1-Site_15.ome.tif => ('100X', 1,  'A1', 15)
+    100X_scan_1_MMStack_A1-Site_15.ome.tif => ('100X', None, 'A1', 15)
     """
-    match = re.search('_(..)-Site_([0-9]*)', s)
-    if match:
-        well, site = match.groups(1)
-        return well, int(site)
-    match = re.search('([A-H][0-9]*)_', s)
-    if match:
-        well = match.groups(1)
-        return well[0], 0
-    print s
-    raise NameError('FuckYouError')
+    pat = '.*?([0-9]*X).*?([a-zA-Z]+([0-9])*).*_MMStack_(.*)-Site_([0-9]*).*'
+    m = re.match(pat, s)
+    try:
+        mag, _, rnd, well, site = m.groups()
+        if rnd:
+            rnd = int(rnd)
+        return mag, rnd, well, int(site)
+    except TypeError:
+        raise ValueError('Filename %s does not match MM pattern' % s)
+    
 
 
-def get_round(s):
-    match = re.search('round([0-9]*)', s)
-    if match:
-        return int(match.groups(1)[0])
-    return 0
+def subimage(stack, bbox, pad=None, mode='constant', **np_pad_kwargs):
+    """Index rectangular region from [...xYxX] stack with optional constant-width padding.
+    Boundary is supplied as (min_row, min_col, max_row, max_col).
+    If boundary lies outside stack, raises error.
+    If padded rectangle extends outside stack, fills with fill_value.
 
-
-def get_magnification(s):
-    match = re.search('([0-9]+X)', s)
-    if match:
-        return match.groups(1)[0]
-
-
-def b_idx(row, bounds=None, padding=None):
-    """For a given DataFrame row, get slice index to cell in original data. Assumes bounds constrain
-    trailing two dimensions, keeps remainder [..., height, width].
-    :param row:
     :return:
-    """
-    if bounds is None:
-        bounds = row[('all', 'bounds')]
-    if padding:
-        pad, shape = padding
-        bounds = bounds[0] - pad[0], bounds[1] - pad[1], bounds[2] + pad[0], bounds[3] + pad[1]
-        bounds = max(bounds[0], 0), max(bounds[1], 0), min(bounds[2], shape[-2]), min(bounds[3], shape[-1])
-    return Ellipsis, slice(bounds[0], bounds[2]), slice(bounds[1], bounds[3])
+    """ 
+
+    if pad:
+        bbox = (bbox[0], bbox[1], 
+                  bbox[2] + 2*pad, bbox[3] + 2*pad)
+        pad_width = [(0,0) for _ in stack.shape]
+        pad_width[-2:] = [(pad,pad), (pad, pad)]
+        stack = np.pad(stack, pad_width, mode=mode, **np_pad_kwargs)
+    print bbox
+    return stack[..., bbox[0]:bbox[2], bbox[1]:bbox[3]]
 
 
-def offset_stack(stack, offsets):
+
+def offset(stack, offsets):
     """Applies offset to stack, fills with zero.
     :param stack: N-dim array
     :param offsets: list of N offsets
@@ -586,7 +575,7 @@ def decompress_obj(string):
     return pickle.load(StringIO.StringIO(zlib.decompress(string)))
 
 
-def load_lut(name):
+def read_lut(name):
     file_name = os.path.join(config.luts, name + '.txt')
     with open(file_name, 'r') as fh:
         lines = fh.readlines()
@@ -594,7 +583,7 @@ def load_lut(name):
     return [int(y) for x in zip(*values) for y in x]
 
 
-def load_tile_configuration(path):
+def read_registered(path):
     """Reads output of Fiji Grid/Collection stitching (TileConfiguration.registered.txt),
     returns list of tile coordinates.
     :param path:
@@ -606,14 +595,13 @@ def load_tile_configuration(path):
     translations = [[float(x) for x in pos[1:-1].split(',')] for pos in m]
     return translations
 
-GLASBEY = load_lut('glasbey')
+GLASBEY = read_lut('glasbey')
 
 hash_cache = {}
-fiji_target = '/Users/feldman/Downloads/20151219_96W-G024/transfer/'
 # decorate to store hash_cache in function
-def show_hyperstack(data, title='image', imp=None, check_cache=True, **kwargs):
-    """Display image in linked ImageJ instance. If target_imp is a
-    ij.ImagePlus, replaces contents; otherwise opens new ij.ImagePlus. 
+def show_IJ(data, title='image', imp=None, check_cache=True, **kwargs):
+    """Display image in linked ImageJ instance. If imp is provided,
+    replaces contents; otherwise opens new ij.ImagePlus. 
 
     Images are first exported to .tif, then loaded in ImageJ. Default behavior is to
     check the file cache using a hash of metadata and sparsely sampled pixels, and only 
@@ -629,8 +617,8 @@ def show_hyperstack(data, title='image', imp=None, check_cache=True, **kwargs):
         savename = hash_cache[key]
     else:
         # export .tif
-        savename = fiji_target + title + time.strftime('_%Y%m%d_%s.tif')
-        save_hyperstack(savename, data, **kwargs)
+        savename = config.fiji_target + title + time.strftime('_%Y%m%d_%s.tif')
+        save_stack(savename, data, **kwargs)
         hash_cache[key] = savename
     
     new_imp = config.j.ij.IJ.openImage(savename)
@@ -662,9 +650,27 @@ def show_hyperstack(data, title='image', imp=None, check_cache=True, **kwargs):
     return new_imp
 
 
+def read_stack(filename, memmap=False):
+    """Read a .tif file into a numpy array, with optional memory mapping.
+    """
+    if memmap:
+        data = _get_mapped_tif(filename)
+    else:
+        # os.stat detects if file has been updated
+        data = _imread(filename, hash(os.stat(filename)))
+        while data.shape[0] == 1:
+            data = np.squeeze(data, axis=(0,))
+    return data
+
 @lasagna.utils.Memoized
-def get_mapped_tif(f):
-    TF = TiffFile(lasagna.config.paths.full(f))
+def _imread(filename, dummy):
+    """Call TiffFile imread. Dummy arg to separately memoize calls.
+    """
+    return imread(filename, multifile=False)
+
+@lasagna.utils.Memoized
+def _get_mapped_tif(filename):
+    TF = TiffFile(filename)
     # check the offsets
     offsets = []
     for i in range(len(TF.pages) - 1):
@@ -678,11 +684,15 @@ def get_mapped_tif(f):
     shape = [x for x in TF.series[0].shape if x != 1]
     strides = np.r_[np.cumprod(shape[::-1])[::-1][1:], [1]] * 2
     strides[:-2] += np.r_[[1], np.cumprod(shape[-3:0:-1])][::-1] * stride_offset
-    strides
+
     # make the initial memmap
     fh = TF.filehandle
     offset = TF.pages[0].is_contiguous[0]
-    mm = np.memmap(fh, dtype=np.uint16, mode='r',
+    
+    # RHEL and osx are little-endian, ImageJ defaults to big-endian
+    dtype = np.dtype(TF.byteorder + 'u2')
+
+    mm = np.memmap(fh, dtype=dtype, mode='r',
                                     offset=offset,
                                     shape=np.prod(shape), order='C')
     # update the memmap with adjusted strides
