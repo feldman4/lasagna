@@ -10,6 +10,7 @@ from lasagna.io import read_registered
 from lasagna.process import feature_table
 from lasagna.process import build_feature_table
 from lasagna.process import alpha_blend
+from lasagna.process import find_nuclei
 from nose.tools import assert_raises
 
 import numpy as np
@@ -29,10 +30,10 @@ tmp = (home(str(i)) for i in range(1000))
 
 def test_read_stack():
 	data = read_stack(nuclei)
-	assert hash_np(data) == -856296963688120929
+	assert hash_np(data) == 1935452079199968973
 
 	data = read_stack(nuclei_compressed)
-	assert hash_np(data) == -856296963688120929
+	assert hash_np(data) == 1935452079199968973
 
 	data = read_stack(stack)
 	assert data.shape == (3, 4, 511, 626)
@@ -142,10 +143,10 @@ def test_feature_table():
 	data = read_stack(stack)
 	mask = read_stack(nuclei)
 
-	results = feature_table(data[0][0], mask, features)
-	
-	results_ = pd.read_pickle(os.path.join(home, 'feature_table.pkl'))
-	assert (results == results_).all().all()
+	df = feature_table(data[0][0], mask, features)
+
+	df_ = pd.read_pickle(home('feature_table.pkl'))
+	assert (df == df_).all().all()
   
 
 def test_build_feature_table():
@@ -180,4 +181,14 @@ def test_alpha_blend():
 	average_diff = np.abs(fused.astype(float) - fused_.astype(float)).sum() / fused.size
 
 	assert average_diff < 1.
+
+def test_find_nuclei():
+	data = read_stack(home('stack.tif'))
+	mask = find_nuclei(data[0][0], um_per_px=0.35)
+	
+	mask_ = read_stack(home('nuclei.tif'))
+	
+	assert (mask == mask_).all()
+
+
 

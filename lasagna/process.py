@@ -201,27 +201,14 @@ class Sample(object):
         return new_img
 
 
-def get_nuclei(img, opening_radius=6, block_size=80, threshold_offset=0):
-    s = Sample(DOWNSAMPLE)
-    binary = threshold_adaptive(s.downsample(img), int(block_size / s.rate), offset=threshold_offset)
-    filled = fill_holes(binary)
-    opened = opening(filled, selem=disk(opening_radius / s.rate))
-    nuclei = apply_watershed(opened)
-    nuclei = s.upsample(nuclei)
-    return img_as_uint(nuclei)
-
-
-def get_nuclei2(dapi, radius=10, area=(40,300), um_per_px=None, 
+@lasagna.utils.sample()
+def find_nuclei(dapi, radius=15, area_min=50, area_max=500, um_per_px=1., 
                 score=lambda r: r.mean_intensity,
                 threshold=skimage.filters.threshold_otsu):
     """Could downsample to consistent pixel size (40X?)
     """
-
-    um_per_px = um_per_px or lasagna.config.magnification['40X'] * 2
-    smooth = 1.35 / um_per_px # gaussian smoothing in watershed
-    radius = radius / um_per_px
-
-    area = np.array(area)/(um_per_px**2)
+    area = area_min, area_max
+    smooth = 1.35 # gaussian smoothing in watershed
 
     mask = _binarize(dapi, radius, area[0])
     labeled = skimage.measure.label(mask, background=0) + 1
@@ -562,14 +549,13 @@ def alpha_blend(arr, positions, clip=True, edge=0.95, edge_width=0.02, subpixel=
         positions = np.array(positions)
     else:
         positions = np.round(positions)
+
     positions -= positions.min(axis=0)
     shapes = [a.shape for a in arr]
     output_shape = np.ceil((shapes + positions[:,::-1]).max(axis=0))
 
-    # store summed data and alpha layer in trailing channel dimension
+    # sum data and alpha layer separately, divide data by alpha
     output = np.zeros([2] + list(output_shape), dtype=float)
-    reshape = lambda x: x.reshape(-1, *x.shape[1:])
-    
     for image, xy in zip(arr, positions):
         alpha = 100 * make_alpha(image.shape, edge=edge, edge_width=edge_width)
         if subpixel is False:

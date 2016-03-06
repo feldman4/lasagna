@@ -606,3 +606,75 @@ def pack_contours(contours):
     packed = [(1 + c).T.tolist() for c in contours]
     return packed
 
+
+
+def sample(line=tuple(), plane=tuple(), scale='um_per_px'):
+    import skimage.transform
+    """Wrap image processing functions.
+    
+    **USUALLY UNNECESSARY TO SCALE KWARG FUNCTION PARAMETERS**
+
+    Given a function defined as:
+        @sample(line=('linear_arg1', 'linear_arg2), 
+                plane='plane_arg')
+        output_image = func(*input_images, 
+                             linear_arg1=1, 
+                             linear_arg2=1,
+                             plane_arg=1,
+                             um_to_px=0.5)
+    
+    input_images will be resized by a factor of 0.5 and the function 
+    called as:
+        output_image = func(*input_images_scaled,
+                             linear_arg1=0.5,
+                             linear_arg2=0.5,
+                             plane_arg=0.25,
+                             um_to_px=0.5)
+    
+    If the output is a numpy.ndarray, it will be rescaled to the shape of 
+    the input image.
+    """
+    # pass in argument names or lists of arguments
+    if isinstance(line, str):
+        line = [line]  
+    if isinstance(plane, str):
+        plane = [plane]
+    
+    def wrapper_of_f(func):
+        @wraps(func)
+        def wrapped_f(*args, **kwargs):
+            spec = getargspec(func)
+            kwargs_ = dict(zip(spec.args[::-1], spec.defaults[::-1]))
+            kwargs_.update(kwargs)
+            kwargs = kwargs_
+            
+            
+            if kwargs[scale] != 1:
+                # rescale image arguments
+                images = []
+                for image in args:
+                    scaled = skimage.transform.rescale(image, kwargs[scale],
+                                                   preserve_range=True)
+                    images += [scaled.astype(image.dtype)]
+                
+
+                # adjust parameter scaling
+                for kw in kwargs:
+                    if kw in line:
+                        kwargs[kw] = kwargs[kw] / kwargs[scale]
+                    if kw in plane:
+                        kwargs[kw] = kwargs[kw] / (kwargs[scale]**2)
+            else:
+                images = args
+
+            output = func(*images, **kwargs)
+            
+            # rescale output
+            if isinstance(output, np.ndarray):
+                scaled = skimage.transform.resize(output, args[0].shape,
+                                                 preserve_range=True)
+                return scaled.astype(output.dtype)
+            return output
+        return wrapped_f
+    return wrapper_of_f
+    
