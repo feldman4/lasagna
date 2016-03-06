@@ -24,8 +24,7 @@ DOWNSAMPLE = 2
 
 default_features = {'mean': lambda region: region.intensity_image[region.image].mean(),
                     'median': lambda region: np.median(region.intensity_image[region.image]),
-                    'max': lambda region: region.intensity_image[region.image].max()
-                    }
+                    'max': lambda region: region.intensity_image[region.image].max()}
 
 default_nucleus_features = {
     'area':     lambda region: region.area,
@@ -79,69 +78,41 @@ def fixed_contour(contour):
     return c
 
 
-def pad(array, pad_width, mode=None, **kwargs):
-    if type(pad_width) == int:
-        if pad_width < 0:
-            s = [slice(-1 * pad_width, pad_width)] * array.ndim
-            return array[s]
-    return np.pad(array, pad_width, mode=mode, **kwargs)
-
-
-def table_from_nuclei(row, index_names, source='aligned', nuclei='nuclei', channels=None,
-                      features=default_features, nucleus_features=default_nucleus_features,
-                      nuclei_dilation=None, data=None):
-    """Build Cells DataFrame from Paths DataFrame, list of features, calibrated aligned data, and image with
-    segmented nuclei.
-
-    :param row: from Paths DataFrame, containing filenames in source and nuclei columns
-    :param source: column with filename of data file, [channels, height, width]
-    :param nuclei: column with filename of segmented nuclei, [height, width]
-    :param channels: names of channels, used to name first column index level
-    :param features: dict of functions accepting regionprops region as argument, key used to name
-    second column index level
-    :param nuclei_dilation: structuring element by which to dilate nuclei image before calling regionprops
-    :param data: [channels, height, width] from which channel data is drawn, otherwise loaded from source
-    :return:
+def feature_table(data, mask, features):
+    """Apply functions in features to regions in data specified by
+    integer mask.
     """
-    # prefix to channel-specific features
-    channels = ['channel' + str(i) for i in range(100)] if channels is None else channels
+    regions = lasagna.utils.regionprops(mask, intensity_image=data)
+    results = {feature: [] for feature in features}
+    for region in regions:
+        for feature, func in features.items():
+            results[feature] += [func(region)]
+    return pd.DataFrame(results)
 
-    # load nuclei file, data
-    segmented = io.read_stack(config.paths.full(row[nuclei]))
-    if data is None:
-        data = io.read_stack(config.paths.full(row[source]))
+def build_feature_table(stack, mask, features, index):
+    """Iterate over leading dimensions of stack. Label resulting 
+    table by index = (index_name, index_values).
 
-    if nuclei_dilation is not None:
-        segmented = skimage.morphology.dilation(segmented, nuclei_dilation)
+        stack.shape = (3, 4, 511, 626)
+        index = (('round', range(1,4)), 
+                 ('channel', ('DAPI', 'Cy3', 'A594', 'Cy5')))
+    
+        build_feature_table(stack, mask, features, index) 
 
-    info = []
-
-    for region in regionprops(segmented, intensity_image=segmented):
-        info += [{k: v(region) for k, v in nucleus_features.items()}]
-
-    df = pd.DataFrame(info, index=[list(x) for x in zip(*[list(row.name)] * len(info))])
-    df['file'] = row[source]
-    df['hash'] = [uuid.uuid4().hex for _ in range(df.shape[0])]
-
-    df.columns = pd.MultiIndex(labels=zip(*[[0, i] for i in range(len(df.columns))]),
-                               levels=[['all'], df.columns],
-                               names=['channel', 'feature'])
-
-    # add channel-specific features
-    if data.ndim == 2:
-        data = data[np.newaxis, :, :]
-
-    for channel, image in zip(channels, data):
-        channel_regions = regionprops(segmented, intensity_image=image)
-        for name, fcn in features.items():
-            df[channel, name] = [fcn(r) for r in channel_regions]
-
-
-    df.index.names = index_names
-    df = df.set_index(('all', 'label'), append=True)
-    df.index.set_names('label', level=[('all', 'label')], inplace=True)
-
-    return df
+    """
+    from itertools import product
+    index_vals = list(product(*[vals for _,vals in index]))
+    index_names = [x[0] for x in index]
+    
+    s = stack.shape
+    results = []
+    for frame, vals in zip(stack.reshape(-1, s[-2], s[-1]), index_vals):
+        df = feature_table(frame, mask, features)
+        for name, val in zip(index_names, vals):
+            df[name] = val
+        results += [df]
+    
+    return pd.concat(results)
 
 
 def register_images(images, index=None, window=(500, 500), upsample=1.):
@@ -568,7 +539,8 @@ def alpha_blend(arr, positions, clip=True, edge=0.95, edge_width=0.02, subpixel=
     :param offset_matrix:
     :return:
     """
-
+    
+    @lasagna.utils.Memoized
     def make_alpha(s, edge=0.95, edge_width=0.02):
         """Unity in center, drops off near edge
         :param s: shape
@@ -585,25 +557,26 @@ def alpha_blend(arr, positions, clip=True, edge=0.95, edge_width=0.02, subpixel=
 
         return sigmoid(-(R - s[0] * edge/2) / (s[0] * edge_width))
 
-    positions = np.array(positions)
     # determine output shape, offset positions as necessary
-
+    if subpixel:
+        positions = np.array(positions)
+    else:
+        positions = np.round(positions)
     positions -= positions.min(axis=0)
-    output_shape = np.ceil(positions.max(axis=0)[::-1]) + arr.shape[1:]
-    # output_shape = np.r_[output_shape, [2]]
-
-    alpha = 100 * make_alpha(arr.shape[1:], edge=edge, edge_width=edge_width)
+    shapes = [a.shape for a in arr]
+    output_shape = np.ceil((shapes + positions[:,::-1]).max(axis=0))
 
     # store summed data and alpha layer in trailing channel dimension
-    output = np.zeros(np.r_[[2], output_shape], dtype=float)
+    output = np.zeros([2] + list(output_shape), dtype=float)
     reshape = lambda x: x.reshape(-1, *x.shape[1:])
-
-    for image, xy in zip(reshape(arr), reshape(positions)):
+    
+    for image, xy in zip(arr, positions):
+        alpha = 100 * make_alpha(image.shape, edge=edge, edge_width=edge_width)
         if subpixel is False:
             j, i = xy
-            
-            output[0, i:i+image.shape[0], j:j+image.shape[1]] += image * alpha
-            output[1, i:i+image.shape[0], j:j+image.shape[1]] += alpha
+
+            output[0, i:i+image.shape[0], j:j+image.shape[1]] += image * alpha.T
+            output[1, i:i+image.shape[0], j:j+image.shape[1]] += alpha.T
         else:
             ST = skimage.transform.SimilarityTransform(translation=xy)
 
@@ -627,7 +600,7 @@ def alpha_blend(arr, positions, clip=True, edge=0.95, edge_width=0.02, subpixel=
         while np.isnan(edges(output)).any():
             output = output[4:-4, 4:-4]
 
-    return output.astype(arr.dtype)
+    return output.astype(arr[0].dtype)
 
 
 def compress_offsets(off):

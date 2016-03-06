@@ -5,10 +5,15 @@ from lasagna.io import pile
 from lasagna.io import subimage
 from lasagna.io import parse_MM
 from lasagna.io import offset
+from lasagna.io import read_registered
 
+from lasagna.process import feature_table
+from lasagna.process import build_feature_table
+from lasagna.process import alpha_blend
 from nose.tools import assert_raises
 
 import numpy as np
+import pandas as pd
 import os
 import hashlib 
 
@@ -16,18 +21,18 @@ def hash_np(arr):
 	h = hashlib.sha1(arr).hexdigest()
 	return hash((h, arr.shape))
 
-home = os.path.dirname(__file__)
-nuclei = os.path.join(home, 'nuclei.tif')
-nuclei_compressed = os.path.join(home, 'nuclei_compressed.tif')
-stack = os.path.join(home, 'stack.tif')
-tmp = (os.path.join(home, str(i)) for i in range(1000))
+home = lambda s: os.path.join(os.path.dirname(__file__), s)
+nuclei = home('nuclei.tif')
+nuclei_compressed = home('nuclei_compressed.tif')
+stack = home('stack.tif')
+tmp = (home(str(i)) for i in range(1000))
 
 def test_read_stack():
 	data = read_stack(nuclei)
-	assert hash_np(data) == 5236961424885099196
+	assert hash_np(data) == -856296963688120929
 
 	data = read_stack(nuclei_compressed)
-	assert hash_np(data) == 5236961424885099196
+	assert hash_np(data) == -856296963688120929
 
 	data = read_stack(stack)
 	assert data.shape == (3, 4, 511, 626)
@@ -126,7 +131,53 @@ def test_parse_MM():
      			('100X', None, 'A1', 15)))
 	for s, output in cases:
 		assert parse_MM(s) == output
+
+def test_feature_table():
+	features = {
+		    'area':     lambda region: region.area,
+		    'bounds':   lambda region: region.bbox,
+		    'label':    lambda region: np.median(region.intensity_image[region.intensity_image > 0]),
+	}
+
+	data = read_stack(stack)
+	mask = read_stack(nuclei)
+
+	results = feature_table(data[0][0], mask, features)
+	
+	results_ = pd.read_pickle(os.path.join(home, 'feature_table.pkl'))
+	assert (results == results_).all().all()
   
 
+def test_build_feature_table():
+	features = {
+			'mean': lambda region: region.intensity_image[region.image].mean(),
+            'median': lambda region: np.median(region.intensity_image[region.image]),
+         	'max': lambda region: region.intensity_image[region.image].max()
+    }
 
+	index = (('round', range(1,4)), ('channel', ('DAPI', 'Cy3', 'A594', 'Cy5')))
+
+	data = read_stack(stack)
+	mask = read_stack(nuclei)
+
+	df = build_feature_table(data, mask, features, index)
+	df.index.name = 'cell'
+
+	df = df.set_index(['round', 'channel'], append=True).stack().unstack('cell').T
+
+	df_ = pd.read_pickle(home('build_feature_table.pkl'))
+
+	assert (df == df_).all().all()
+
+
+def test_alpha_blend():
+	tiles = ['tile_%d.tif' % i for i in range(4)]
+	arr = [read_stack(home(t)) for t in tiles]
+	translations = read_registered(home('tiles_registered.txt'))
+
+	fused = alpha_blend(arr, translations, clip=False)
+	fused_ = read_stack(home('fused.tif'))
+	average_diff = np.abs(fused.astype(float) - fused_.astype(float)).sum() / fused.size
+
+	assert average_diff < 1.
 

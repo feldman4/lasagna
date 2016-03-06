@@ -281,7 +281,7 @@ def to_nd_array(x):
 
 
 def argsort_nd(a, axis):
-    """Properly format argsort result so it can be used to index original array.
+    """Format argsort result so it can be used to index original array.
     :param a:
     :param axis:
     :return:
@@ -289,6 +289,15 @@ def argsort_nd(a, axis):
     index = list(np.ix_(*[np.arange(i) for i in a.shape]))
     index[axis] = a.argsort(axis)
     return index
+
+def pad(array, pad_width, mode=None, **kwargs):
+    """Extend numpy.pad to support negative pad width.
+    """
+    if type(pad_width) == int:
+        if pad_width < 0:
+            s = [slice(-1 * pad_width, pad_width)] * array.ndim
+            return array[s]
+    return np.pad(array, pad_width, mode=mode, **kwargs)
 
 
 def argmax_nd(a):

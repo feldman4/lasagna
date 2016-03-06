@@ -244,7 +244,7 @@ def prepare_linear_model():
 
 
 
-def stitch(df, translations=None, clip=True):
+def stitch(data, translations, edge=0.7, edge_width=0.03, clip=True):
     """Stitches images with alpha blending, provided Paths DataFrame with tile filenames in column
     'calibrated' and TileConfiguration.registered.txt file (from GridCollection stitching) with location
     stored in pipeline.tile_configuration. Alternately, provide list of translations (xy).
@@ -258,21 +258,14 @@ def stitch(df, translations=None, clip=True):
     if isinstance(translations, str):
         translations = lasagna.io.load_tile_configuration(translations)
 
-    # kluge for 5x5 vs 3x3 grids present in some data
-    grid_size = int(np.sqrt(len(df['calibrated']))) * np.array([1, 1])
-
-    save_name = lasagna.config.paths.full(df['stitched'][0])
-    print save_name
-    files = np.array([f for f in df['calibrated']]).reshape(grid_size)
-    data = np.array([[lasagna.io.read_stack(lasagna.config.paths.full(x)) for x in y] for y in files])
-    print data.shape
     arr = []
-    for channel in range(data.shape[2]):
-        arr += [lasagna.process.alpha_blend(data[:, :, channel].reshape(-1, *data.shape[-2:]),
-                                            translations, edge=0.48,
-                                            edge_width=0.01,
-                                            clip=clip)]
+    arr = lasagna.process.alpha_blend(np.array(data),
+                                            translations, edge=edge,
+                                            edge_width=edge_width,
+                                            clip=clip)
 
-    lasagna.io.save_hyperstack(save_name, np.array(arr), display_ranges=display_ranges, luts=luts)
+    return np.array(arr)
+
+
 
 
