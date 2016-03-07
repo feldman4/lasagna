@@ -1,0 +1,8 @@
+# Define the number of dimensions we are working on
+dim = 2
+
+# Define the image coordinates
+tile_0.tif; ; (0.0, 0.0)
+tile_1.tif; ; (249.99999999999994, -1.8947806286936004E-14)
+tile_2.tif; ; (-2.8421709430404007E-14, 188.99999999999997)
+tile_3.tif; ; (309.99999999999994, 180.99999999999997)

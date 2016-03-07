@@ -22,9 +22,9 @@ np.mode = scipy.stats.mode
 import lasagna.io
 import lasagna.process
 import lasagna.utils
-from lasagna.io import save_hyperstack as save
+from lasagna.io import save_stack as save
 from lasagna.io import read_stack as read
-from lasagna.io import show_stack as show
+from lasagna.io import show_IJ as show
 import lasagna.config as config
 from lasagna.utils import start_client
 

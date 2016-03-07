@@ -11,6 +11,7 @@ from lasagna.process import feature_table
 from lasagna.process import build_feature_table
 from lasagna.process import alpha_blend
 from lasagna.process import find_nuclei
+from lasagna.process import find_cells
 from nose.tools import assert_raises
 
 import numpy as np
@@ -30,10 +31,10 @@ tmp = (home(str(i)) for i in range(1000))
 
 def test_read_stack():
 	data = read_stack(nuclei)
-	assert hash_np(data) == 1935452079199968973
+	assert hash_np(data) == -2955782303036816501
 
 	data = read_stack(nuclei_compressed)
-	assert hash_np(data) == 1935452079199968973
+	assert hash_np(data) == -2955782303036816501
 
 	data = read_stack(stack)
 	assert data.shape == (3, 4, 511, 626)
@@ -144,7 +145,7 @@ def test_feature_table():
 	mask = read_stack(nuclei)
 
 	df = feature_table(data[0][0], mask, features)
-
+	
 	df_ = pd.read_pickle(home('feature_table.pkl'))
 	assert (df == df_).all().all()
   
@@ -189,6 +190,20 @@ def test_find_nuclei():
 	mask_ = read_stack(home('nuclei.tif'))
 	
 	assert (mask == mask_).all()
+
+def test_find_cells():
+	import skimage.morphology
+	import lasagna.process
+
+	data = read_stack(home('stack.tif'))
+	nuclei_ = read_stack(home('nuclei.tif'))
+	mask = read_stack(home('mask.tif'))
+
+	cells = find_cells(nuclei_, mask)
+
+	cells_ = read_stack(home('cells.tif'))
+
+	assert (cells == cells_[-1]).all()
 
 
 

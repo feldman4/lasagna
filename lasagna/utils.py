@@ -10,6 +10,7 @@ from functools import wraps
 from inspect import getargspec, isfunction
 from itertools import izip, ifilter, starmap, product
 from collections import OrderedDict, Counter
+import decorator
 
 class Memoized(object):
     """Decorator that caches a function's return value each time it is called.
@@ -637,7 +638,6 @@ def sample(line=tuple(), plane=tuple(), scale='um_per_px'):
         plane = [plane]
     
     def wrapper_of_f(func):
-        @wraps(func)
         def wrapped_f(*args, **kwargs):
             spec = getargspec(func)
             kwargs_ = dict(zip(spec.args[::-1], spec.defaults[::-1]))
@@ -649,8 +649,12 @@ def sample(line=tuple(), plane=tuple(), scale='um_per_px'):
                 # rescale image arguments
                 images = []
                 for image in args:
+                    if np.issubdtype(image.dtype, np.integer):
+                        order = 0
+                    else:
+                        order = 1
                     scaled = skimage.transform.rescale(image, kwargs[scale],
-                                                   preserve_range=True)
+                                                   order=order, preserve_range=True)
                     images += [scaled.astype(image.dtype)]
                 
 
@@ -667,10 +671,15 @@ def sample(line=tuple(), plane=tuple(), scale='um_per_px'):
             
             # rescale output
             if isinstance(output, np.ndarray):
+                if np.issubdtype(output.dtype, np.integer):
+                    order = 0
+                else:
+                    order = 1
                 scaled = skimage.transform.resize(output, args[0].shape,
-                                                 preserve_range=True)
+                                                 order=order, preserve_range=True)
                 return scaled.astype(output.dtype)
             return output
+        # return decorator.decorate(func, wrapped_f)
         return wrapped_f
     return wrapper_of_f
     

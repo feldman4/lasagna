@@ -8,6 +8,7 @@ import skimage
 from skimage.feature import register_translation
 import numpy as np
 import pandas as pd
+import scipy.stats
 from skimage.filters import gaussian_filter, threshold_adaptive
 from skimage.morphology import disk, watershed, opening
 from skimage.util import img_as_uint
@@ -212,10 +213,14 @@ def find_nuclei(dapi, radius=15, area_min=50, area_max=500, um_per_px=1.,
 
     mask = _binarize(dapi, radius, area[0])
     labeled = skimage.measure.label(mask, background=0) + 1
-    labeled = filter_by_region(labeled, score, threshold, intensity=dapi)
+    labeled = filter_by_region(labeled, score, threshold, intensity=dapi) > 0
 
-    # should only fill holes below minimum cell area
-    nuclei = apply_watershed(ndimage.binary_fill_holes(labeled > 0), smooth=smooth)
+    # only fill holes below minimum area
+    filled = ndimage.binary_fill_holes(labeled)
+    change = filter_by_region(filled!=labeled, lambda r: r.area < area[0], 0)
+    labeled[change] = filled[change]
+
+    nuclei = apply_watershed(labeled, smooth=smooth)
 
     return filter_by_region(nuclei, lambda r: area[0] < r.area < area[1], threshold)
 
@@ -267,7 +272,9 @@ def fill_holes(img):
 def apply_watershed(img, smooth=4):
     distance = ndimage.distance_transform_edt(img)
     distance = gaussian_filter(distance, smooth)
-    local_maxi = peak_local_max(distance, indices=False, footprint=np.ones((3, 3)))
+    local_maxi = peak_local_max(distance, indices=False, 
+                                footprint=np.ones((3, 3)), 
+                                exclude_border=False)
     markers = ndimage.label(local_maxi)[0]
     return watershed(-distance, markers, mask=img).astype(np.uint16)
 
@@ -668,3 +675,46 @@ def align_scaled(x, y, scale, **kwargs):
 
     # combine images along new leading dimension
     return np.r_['0,4', x_win, y].transpose([0,3,1,2])
+
+def find_cells(nuclei, mask, small_holes=100, remove_boundary_cells=True):
+    """Expand labeled nuclei to cells, constrained to where mask is >0. 
+    Mask is divvied up by  
+    """
+    import skfmm
+
+    # voronoi
+    phi = (nuclei>0) - 0.5
+    speed = mask + 0.1
+    time = skfmm.travel_time(phi, speed)
+    time[nuclei>0] = 0
+
+    cells = skimage.morphology.watershed(time, nuclei)
+
+    # apply mask
+    cells[mask==0] = 0
+    bkgd = cells == 0
+    cells = skimage.measure.label(cells, background=0) + 1
+
+    # remove cells that don't overlap nuclei
+    regions = skimage.measure.regionprops(cells, intensity_image=nuclei)
+    cut = [reg.label for reg in regions if reg.intensity_image.max() == 0]
+    cells.flat[np.in1d(cells, np.unique(cut))] = 0
+
+    # remove cells touching the boundary
+    if remove_boundary_cells:
+        cut = np.concatenate([cells[0,:], cells[-1,:], 
+                              cells[:,0], cells[:,-1]])
+        cells.flat[np.in1d(cells, np.unique(cut))] = 0
+        cells = skimage.measure.label(cells)
+
+    # assign small holes to neighboring cell with most contact
+    holes = skimage.measure.label(cells==0, background=0) + 1
+    regions = skimage.measure.regionprops(holes,
+                intensity_image=skimage.morphology.dilation(cells))
+
+    for reg in regions:
+        if reg.area < small_holes:
+            vals = reg.intensity_image[reg.intensity_image>0]
+            cells[holes == reg.label] = scipy.stats.mode(vals)[0][0]
+
+    return cells.astype(np.uint16)
