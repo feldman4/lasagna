@@ -21,6 +21,7 @@ luts = os.path.join(home, 'resources', 'luts')
 visitor_font = os.path.join(fonts, 'visitor1.ttf')
 
 credentials = os.path.join(home, 'resources', 'gspread-da2f80418147.json')
+wolfram     = os.path.join(home, 'resources', 'wolfram.txt')
 
 cloning = None
 
