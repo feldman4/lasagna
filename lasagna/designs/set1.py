@@ -69,7 +69,7 @@ def cloning_primers(barcode_set, UMI=0, inner=True):
     refs = barcode_set.refs.set_index('name')
     refs = refs.loc[barcode_set.ref_order, 'sequence']
     primers = {}
-    if inner
+    # TODO: FIX SOME SHIT HERE? INNER?
     internal_refs = refs[1:-1]
     naming = '%s_%s' if UMI ==0 else '%s_N' + str(UMI) + '_%s'
     for i, ((name, seq), sense) in enumerate(zip(internal_refs.iteritems(),
