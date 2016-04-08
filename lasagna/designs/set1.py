@@ -280,12 +280,49 @@ class BarcodeSet(object):
         :param seq:
         :return:
         """
-        g = np.vectorize(lambda tile: sum(rc(x).lower() in seq.lower() for x in tile.split(spacer)))
+        @np.vectorize
+        def g(tile):
+            arr = []
+            for x in tile.split(spacer):
+                if x.lower() in seq.lower():
+                    arr += [1.]
+                elif rc(x).lower() in seq.lower():
+                    arr += [1j]
+            return np.sum(arr).astype(complex)
+        # g = np.vectorize(lambda tile: sum(rc(x).lower() in seq.lower() or x.lower() in seq.lower() for x in tile.split(spacer)))
+        
         matches = g(self.tiles_arr)
         hits = matches.argmax(axis=0)
         match_tiles = [x[i] for i, x in zip(hits, self.tiles_arr.transpose())]
         match_barcode = self.make_barcode(match_tiles)
         return match_barcode, matches
+
+    def score_samples_coverage(self, samples):
+        from natsort import natsorted
+        import numpy as np
+        arr = []
+        results = []
+        index = []
+        for sample, ab1 in natsorted(samples.items()):
+            arr = [self.score_seq(load_abi(s))[1] for s in ab1]
+            tmp = []
+            tiles = np.array(range(6))
+            for read in arr:
+                coverage = np.abs(read).sum(axis=0)
+                value = read.argmax(axis=0).astype(float)
+                value[coverage==0] = np.nan
+                x = read.sum(axis=0)
+                strand = (-2 * np.array(np.real(x) > np.imag(x)) + 1)
+                tmp += [strand*((value * 6 + tiles) + 0.01 * coverage)]
+                
+            index += [sample]*len(ab1)
+            results += tmp
+
+        df = pd.DataFrame(results)
+        df['flag'] = [1 in row and -1 in row for row in np.sign(df).as_matrix()]
+        df['sample'] = index
+        return df
+
 
     def score_files(self, files, reverse_complement=False):
         """Apply BarcodeSet.score_seq to each item provided, which can be a sequence or a filename. 
@@ -297,8 +334,12 @@ class BarcodeSet(object):
         parent_dir = os.path.basename(os.path.dirname(files[0]))
         reference = '>%s\n' % parent_dir
         match_seqs, matches_arr = [], []
-        for f, rc in zip(files, reverse_complement):
-            seq = load_abi(f) if not rc else lasagna.design.rc(load_abi(f))
+        for i, (f, rc) in enumerate(zip(files, reverse_complement)):
+            if os.path.isfile(f):
+                seq = load_abi(f) if not rc else lasagna.design.rc(load_abi(f))
+            else:
+                seq = f
+                f = '%03d' % i
             match_barcode, matches = self.score_seq(seq)
             print '%s: %s, %s' % (os.path.basename(f), matches.argmax(axis=0), matches.max(axis=0))
             match_seqs += [match_barcode]

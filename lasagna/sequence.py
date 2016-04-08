@@ -14,6 +14,33 @@ def edit_distance(sequences):
             distances[i,j] = Levenshtein.distance(a, b)
     return distances
 
+def edit_distance_sparse(sequences, k=8):
+    # use rolling kmer as local similarity measure
+    from collections import defaultdict
+    from scipy.sparse import coo_matrix
+    kmers = defaultdict(list)
+
+    for i, s in enumerate(sequences):
+        s2 = s*(20+k)
+        for j in range(20):
+            kmers[s2[j:j+k]] += [i]
+
+    # pairs to calculate
+    pairs = []
+    for v in kmers.values():
+        pairs += [(a,b) for i, a in enumerate(v) for b in v[:i]]
+    pairs = set(pairs)
+
+    n = len(sequences)
+    I,J,V = [], [], []
+    for i,j in pairs:
+        s1, s2 = sequences[i], sequences[j]
+        d = Levenshtein.distance(s1,s2)
+        V += [d]
+        I += [i]
+        J += [j]
+    return coo_matrix((V, (I,J)), shape=(n,n))
+
 
 def make_adjacency(distances, counts, threshold=1):
     """
@@ -32,6 +59,29 @@ def make_adjacency(distances, counts, threshold=1):
     G[G < 0] = 0
     return G
 
+def make_adjacency_sparse(distances, counts):
+    """
+    Input: sparse pairwise distance
+    Ouptut: networkx DiGraph
+    """
+    counts = np.array(counts)
+    # find local maxima in adjacency graph
+    G = (distances == 1)
+
+    # scale columns by total reads
+    # symmetrize
+    G = ((1*G + 1*G.T) > 0).astype(float)
+    # sparse equivalent of
+    # G = G * counts - counts[:,None]
+    # G[G < 0] = 0
+    G = G.tocsr()
+    G.data *= counts[G.indices]
+    G = G.tocsc()
+    G.data -= counts[G.indices]
+    G[G<0] = 0
+    return G
+
+
 
 def edit_str(a,b):
     arr = []
@@ -47,11 +97,17 @@ def edit_str(a,b):
 
 class UMIGraph(nx.DiGraph):
 
-    def __init__(self, sequences, counts, threshold=1):
+    def __init__(self, sequences, counts, threshold=1, kmer=None):
         self.sequences = sequences
         self.counts = counts
-        self.distances = edit_distance(sequences)
-        self.G = make_adjacency(self.distances, counts, threshold=threshold)
+        if kmer:
+            # distance threshold to include edge in adjacency matrix set to 1
+            self.distances = edit_distance_sparse(sequences, k=kmer)
+            self.G = make_adjacency_sparse(self.distances, counts)
+        else:
+            self.distances = edit_distance(sequences)
+            self.G = make_adjacency(self.distances, counts, threshold=threshold)
+
         super(UMIGraph, self).__init__(self.G)
 
         self.components = list(self.find_components())
