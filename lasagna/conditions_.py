@@ -403,7 +403,8 @@ def prepare_linear_model(experiment):
     for sample, row in ivt.iterrows():
         for rnd in model.indices['j']:
             M[sample].loc[rnd, list(ivt.loc[sample, rnd])] = 1
-        if not pd.isnull(row['barcodes']):
+        # empty tuple would index whole pd.Series ...
+        if not pd.isnull(row['barcodes']) and row['barcodes']:
             b[sample][row['barcodes']] = 1
 
     experiment.ind_vars_table['M'] = [M[x] for x in ivt.index]

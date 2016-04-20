@@ -682,4 +682,22 @@ def sample(line=tuple(), plane=tuple(), scale='um_per_px'):
         # return decorator.decorate(func, wrapped_f)
         return wrapped_f
     return wrapper_of_f
-    
+
+def comma_split(df, column, split=', '):
+    """Split entries in given column of strings, duplicating the 
+    index and the rest of the row.
+    """
+    arr, index = [], []
+    for ix, row in df.iterrows():
+        for entry in row[column].split(split):
+            r = row.copy()
+            r[column] = entry
+            arr += [r]
+            index += [ix]
+    df_out = pd.concat(arr, axis=1).T
+    if isinstance(df.index, pd.MultiIndex):
+        df_out.index = pd.MultiIndex.from_tuples(index, names=df.index.names)
+    else:
+        df_out.index=index
+        df_out.index.name = df.index.name
+    return df_out

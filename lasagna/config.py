@@ -71,6 +71,7 @@ def set_linear_model_defaults(model):
     :return:
     """
     pr = cloning['probes']
+    pr = lasagna.utils.comma_split(pr, 'targets')
     pr['oligos'] = pr['oligos'].convert_objects(convert_numeric=True).fillna(0)
     x = pr.reset_index().pivot_table(values='oligos', fill_value=0, index='name', columns='targets')
 
@@ -78,8 +79,8 @@ def set_linear_model_defaults(model):
     tiles = {k: v.split(', ') for k,v in dict(tiles).items()}
 
     B = pd.DataFrame()
-    for barcode, tiles in tiles.items():
-        B[barcode] = x[tiles].sum(axis=1)
+    for barcode, tiles_ in tiles.items():
+        B[barcode] = x[tiles_].sum(axis=1)
 
     model.tables['B'] = B
     model.tables['C'] = (cloning['dyes'].drop('dummy', 1)
