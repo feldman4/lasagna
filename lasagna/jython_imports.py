@@ -126,6 +126,8 @@ def overlay_contours(contours, names=None, imp=None, overlay=None):
 
 @UnPickler('rois')
 def set_overlay_contours_color(rois, imp, color):
+	"""set_overlay_contours_color(rois, imp, color)
+	"""
 	overlay = imp.getOverlay()
 	for i in rois:
 		roi = overlay.get(int(i))

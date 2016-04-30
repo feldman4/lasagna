@@ -176,8 +176,16 @@ def save_stack(name, data, luts=None, display_ranges=None,
     if data.ndim == 2:
         data = data[None]
 
+    if (data.dtype == np.int64):
+        if (data>=0).all() and (data<2**16).all():
+            data = data.astype(np.uint16)
+            print 'Cast int64 to int16'
+        else:
+            data = data.astype(np.float32)
+            print 'Cast int64 to float32'
     if data.dtype == np.float64:
         data = data.astype(np.float32)
+        print 'Cast float64 to float32'
 
     if data.dtype == np.bool:
         data = 255 * data.astype(np.uint8)
@@ -284,23 +292,27 @@ def parse_MM(s):
     
 
 
-def subimage(stack, bbox, pad=None, mode='constant', **np_pad_kwargs):
+def subimage(stack, bbox, pad=0):
     """Index rectangular region from [...xYxX] stack with optional constant-width padding.
     Boundary is supplied as (min_row, min_col, max_row, max_col).
     If boundary lies outside stack, raises error.
     If padded rectangle extends outside stack, fills with fill_value.
 
+    bbox can be bbox or iterable of bbox (faster if padding)
     :return:
     """ 
+    i0, j0, i1, j1 = bbox + np.array([-pad, -pad, pad, pad])
 
-    if pad:
-        bbox = (bbox[0], bbox[1], 
-                  bbox[2] + 2*pad, bbox[3] + 2*pad)
-        pad_width = [(0,0) for _ in stack.shape]
-        pad_width[-2:] = [(pad,pad), (pad, pad)]
-        stack = np.pad(stack, pad_width, mode=mode, **np_pad_kwargs)
-    print bbox
-    return stack[..., bbox[0]:bbox[2], bbox[1]:bbox[3]]
+    sub = np.zeros(stack.shape[:-2]+(i1-i0, j1-j0),     dtype=stack.dtype)
+
+    i0_, j0_ = max(i0, 0), max(j0, 0)
+    i1_, j1_ = min(i1, stack.shape[-2]), min(j1, stack.shape[-1])
+    s = (Ellipsis, 
+         slice(i0_-i0, (i0_-i0) + i1_-i0_),
+         slice(j0_-j0, (j0_-j0) + j1_-j0_))
+
+    sub[s] = stack[..., i0_:i1_, j0_:j1_]
+    return sub
 
 
 
