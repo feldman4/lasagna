@@ -618,7 +618,7 @@ def sample(line=tuple(), plane=tuple(), scale='um_per_px'):
                              linear_arg1=1, 
                              linear_arg2=1,
                              plane_arg=1,
-                             um_to_px=0.5)
+                             um_per_px=0.5)
     
     input_images will be resized by a factor of 0.5 and the function 
     called as:
@@ -626,7 +626,7 @@ def sample(line=tuple(), plane=tuple(), scale='um_per_px'):
                              linear_arg1=0.5,
                              linear_arg2=0.5,
                              plane_arg=0.25,
-                             um_to_px=0.5)
+                             um_per_px=0.5)
     
     If the output is a numpy.ndarray, it will be rescaled to the shape of 
     the input image.
