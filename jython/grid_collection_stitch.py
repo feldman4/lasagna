@@ -14,7 +14,7 @@ if False:
     home_dir = '/Users/feldman/Downloads/20160130_GFP_spinfection/'
 else:
     # windows
-    home_dir = 'D:\\User Folders\\David\\lasagna\\20160219_96W-G026\\'
+    home_dir = 'D:\\User Folders\\David\\lasagna\\20160428_96W-G032\\MAX\\'
 #    home_dir = 'D:\\User Folders\\David\\lasagna\\RAJ\\20160120\\wells\\'
     # home_dir = '\\\\neon-cifs\\blainey_lab\\David\\lasagna\\20150817 6 round\\analysis\\calibrated\\raw\\'
     filesep = '\\'
@@ -37,9 +37,9 @@ channels = len(channel_luts)
 slices = 1;  # Z
 frames = 1;  # T
 
-#### 40X
-tiles, overlap = (4, 4), int(100 * (1. - 300. / 350))
-pixel_width = 0.175 * 2
+##### 40X
+#tiles, overlap = (4, 4), int(100 * (1. - 300. / 350))
+#pixel_width = 0.175 * 2
 
 ###### 20X
 #tiles, overlap = (3, 3), int(100 * (1. - 600. / 675))
@@ -53,10 +53,9 @@ pixel_width = 0.175 * 2
 #tiles, overlap = (7, 7), int(100*(1. - 100./135))
 #pixel_width = 0.066 * 2
 
-### 60X
-#tiles, overlap = (7, 7), int(100*(1. - 200./225.3))
-#overlap = 10
-#pixel_width = 0.110
+## 60X
+tiles, overlap = (3, 3), int(100*(1. - 200./225.3))
+pixel_width = 0.110*2
 
 print tiles, overlap
 nuclei_singleton = False
@@ -82,10 +81,10 @@ def make_template(well, data_dir):
 # first well stitched. to use a specific file as template, stitch it separately and 
 # call template=make_template(well, data_dir) here.
 use_template = False
-#template = make_template('A1', '20160120BarcodeHyb1forward_Scan002')
+template = make_template('A1', '60X_scan_1')
 template = None
 
-data_dirs = ['40X_round1_1']
+data_dirs = ['60X_scan_4']
 
 # usually xyzct, except on bad days when it's xyczt(default)
 order = 'xyzct'
