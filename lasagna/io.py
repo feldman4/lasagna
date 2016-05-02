@@ -662,6 +662,10 @@ def show_IJ(data, title='image', imp=None, check_cache=True, **kwargs):
 
     new_imp.setTitle(title)
     new_imp.show()
+    # set contrast for single channel images
+    if data.ndim == 2:
+        new_imp.setDisplayRange(data.min(), data.max())
+        new_imp.updateAndDraw()
     return new_imp
 
 
