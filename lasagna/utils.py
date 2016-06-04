@@ -1,11 +1,7 @@
 import functools
 import numpy as np
 import pandas as pd
-import signal
-import types
-import subprocess
-import Queue
-import threading
+
 from functools import wraps
 from inspect import getargspec, isfunction
 from itertools import izip, ifilter, starmap, product
@@ -382,6 +378,7 @@ def call(arg, stdin='', shell=True):
     :param stdin:
     :return:
     """
+    import subprocess
     p = subprocess.Popen(arg, stdin=subprocess.PIPE,
                          stdout=subprocess.PIPE, shell=shell)
     p.stdin.write(stdin)
@@ -407,6 +404,7 @@ class TimeoutError(Exception):
 
 class timeout:
     def __init__(self, seconds=1, error_message='Timeout'):
+        import signal
         self.seconds = seconds
         self.error_message = error_message
 
@@ -561,6 +559,7 @@ def cells_to_barcodes(ind_vars_table, cloning=None):
 
 
 def launch_queue(queue):
+    import threading
 
     def evaluate(q):
         """Call functions in queue (doesn't return results).
@@ -701,3 +700,32 @@ def comma_split(df, column, split=', '):
         df_out.index=index
         df_out.index.name = df.index.name
     return df_out
+
+def import_facs(files, drop=lambda s: '-A' in s):
+    """Import a list of FACS files, adding well and x,y info if available.
+    """
+    import FlowCytometryTools as fcs
+    wells = [r+str(c) for r in 'ABCDEFGH' for c in range(1,13)]
+    arr = []
+    for f in files:
+        d = fcs.FCMeasurement(ID=f, datafile=f)
+        df = d.data
+        df['Time'] -= df['Time'].min()
+        df['Time'] /= df['Time'].max()
+        for w in wells:
+            if w in f:
+                df['well'] = w
+                y = 'ABCDEFGH'.index(w[0])
+                x = int(w[1:]) - 1
+                df['x'] = 1.2 * x + df['Time']
+                df['y'] = (-1.2 * y) + np.random.rand(df.shape[0])
+                break
+        else:
+            df['well'] = 'none'
+            df['x'], df['y'] = 0, 0
+        arr += [df]
+    df = pd.concat(arr)
+    return df.drop([c for c in df.columns if drop(c)], axis=1)
+    
+
+

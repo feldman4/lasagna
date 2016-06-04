@@ -4,10 +4,10 @@ import ij.io.FileSaver
 import time, os
 from glob import glob
 
-home_dir = 'D:\\User Folders\\David\\lasagna\\20160428_96W-G032\\'
+home_dir = 'D:\\User Folders\\David\\lasagna\\20160507_96W-G033\\'
 #home_dir = '//Users//feldman//Downloads//20151122_96W-G020//data
 
-sub_dirs = ['60X_scan_4']
+sub_dirs = ['60X_scan_3']
 filesep = '//'
 
 # if acquisition is still running, this needs to be specified
@@ -16,7 +16,6 @@ stack = False
 rows, columns = 'ABCDEFGH', [str(x) for x in range(1, 13)]
 
 wells = [r + c for r in rows for c in columns]
-wells = set(wells) - set(['A1', 'A2', 'A3'])
 
 for sub_dir in sub_dirs:
 	files = glob(home_dir + sub_dir + filesep + '*.tif')

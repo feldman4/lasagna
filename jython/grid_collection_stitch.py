@@ -15,7 +15,7 @@ if False:
 else:
     # windows
     home_dir = 'D:\\User Folders\\David\\lasagna\\20160428_96W-G032\\MAX\\'
-#    home_dir = 'D:\\User Folders\\David\\lasagna\\RAJ\\20160120\\wells\\'
+    home_dir = 'D:\\User Folders\\anja\\160504\\MAX\\'
     # home_dir = '\\\\neon-cifs\\blainey_lab\\David\\lasagna\\20150817 6 round\\analysis\\calibrated\\raw\\'
     filesep = '\\'
 
@@ -25,12 +25,12 @@ else:
 #                ('Green', (2000, 8000)),
 #                ('Red', (800, 8000)),
 #                ('Magenta', (800, 8000)))
-channel_luts = (('Blue', (400, 40000)),
-                ('Green', (400, 6000)),
-                ('Red', (400, 4000)),
-                ('Magenta', (400, 4000)))
-#channel_luts = (('Grays', (400, 40000)),
-#               ('Blue', (800, 8000)))
+#channel_luts = (('Blue', (400, 40000)),
+#                ('Green', (400, 6000)),
+#                ('Red', (400, 4000)),
+#                ('Magenta', (400, 4000)))
+channel_luts = (('Blue', (400, 50000)),
+               ('Green', (0, 5000)))
 #channel_luts = (('Grays', (400, 40000)),)
 
 channels = len(channel_luts)
@@ -41,9 +41,9 @@ frames = 1;  # T
 #tiles, overlap = (4, 4), int(100 * (1. - 300. / 350))
 #pixel_width = 0.175 * 2
 
-###### 20X
-#tiles, overlap = (3, 3), int(100 * (1. - 600. / 675))
-#pixel_width = 0.35 * 2
+##### 20X
+tiles, overlap = (4, 4), int(100 * (1. - 600. / 675))
+pixel_width = 0.35
 
 ### 4X
 #tiles, overlap = (3, 3), int(100*(1. - 1800./3379))
@@ -53,9 +53,9 @@ frames = 1;  # T
 #tiles, overlap = (7, 7), int(100*(1. - 100./135))
 #pixel_width = 0.066 * 2
 
-## 60X
-tiles, overlap = (3, 3), int(100*(1. - 200./225.3))
-pixel_width = 0.110*2
+### 60X
+#tiles, overlap = (3, 3), int(100*(1. - 200./225.3))
+#pixel_width = 0.110*2
 
 print tiles, overlap
 nuclei_singleton = False
@@ -81,10 +81,10 @@ def make_template(well, data_dir):
 # first well stitched. to use a specific file as template, stitch it separately and 
 # call template=make_template(well, data_dir) here.
 use_template = False
-template = make_template('A1', '60X_scan_1')
+#template = make_template('A1', '60X_scan_1')
 template = None
 
-data_dirs = ['60X_scan_4']
+data_dirs = ['bAct8bp_3']
 
 # usually xyzct, except on bad days when it's xyczt(default)
 order = 'xyzct'
