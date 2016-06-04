@@ -94,7 +94,9 @@ def build_feature_table(stack, mask, features, index):
     """Iterate over leading dimensions of stack. Label resulting 
     table by index = (index_name, index_values).
 
-        stack.shape = (3, 4, 511, 626)
+        >>> stack.shape 
+        (3, 4, 511, 626)
+        
         index = (('round', range(1,4)), 
                  ('channel', ('DAPI', 'Cy3', 'A594', 'Cy5')))
     
@@ -688,27 +690,16 @@ def find_cells(nuclei, mask, small_holes=100, remove_boundary_cells=True):
     time = skfmm.travel_time(phi, speed)
     time[nuclei>0] = 0
 
-    cells = skimage.morphology.watershed(time, nuclei)
-
-    # apply mask
-    cells[mask==0] = 0
-    bkgd = cells == 0
-    cells = skimage.measure.label(cells, background=0) + 1
-
-    # remove cells that don't overlap nuclei
-    regions = skimage.measure.regionprops(cells, intensity_image=nuclei)
-    cut = [reg.label for reg in regions if reg.intensity_image.max() == 0]
-    cells.flat[np.in1d(cells, np.unique(cut))] = 0
+    cells = skimage.morphology.watershed(time, nuclei, mask=mask)
 
     # remove cells touching the boundary
     if remove_boundary_cells:
         cut = np.concatenate([cells[0,:], cells[-1,:], 
                               cells[:,0], cells[:,-1]])
         cells.flat[np.in1d(cells, np.unique(cut))] = 0
-        cells = skimage.measure.label(cells)
 
     # assign small holes to neighboring cell with most contact
-    holes = skimage.measure.label(cells==0, background=0) + 1
+    holes = skimage.measure.label(cells==0)
     regions = skimage.measure.regionprops(holes,
                 intensity_image=skimage.morphology.dilation(cells))
 
