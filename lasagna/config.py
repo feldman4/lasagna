@@ -2,7 +2,7 @@ import os
 import pandas as pd
 import lasagna.conditions_
 import lasagna.utils
-import lasagna.io
+# import lasagna.io
 
 home = os.path.dirname(__file__)
 paths = None
