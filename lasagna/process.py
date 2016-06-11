@@ -45,10 +45,11 @@ def binary_contours(img, fix=True, labeled=False):
     """
     if labeled:
         regions = skimage.measure.regionprops(img)
-        contours = [sorted(skimage.measure.find_contours(np.pad(r.image, 1, mode='constant'), 0.5), 
+        contours = [sorted(skimage.measure.find_contours(np.pad(r.image, 1, mode='constant'), 0.5, 'high'),
                 key=lambda x: len(x))[-1] for r in regions]
         contours = [contour + [r.bbox[:2]] for contour,r in zip(contours, regions)]
     else:
+        # pad binary image to get outer contours
         contours = skimage.measure.find_contours(np.pad(img, 1, mode='constant'),
                                                  level=0.5)
         contours = [contour - 1 for contour in contours]
@@ -58,25 +59,23 @@ def binary_contours(img, fix=True, labeled=False):
 
 
 def fixed_contour(contour):
-    """Fix contour generated from binary mask to exactly match outline. Probably won't
-        work well for weirdly shaped masks containing [[1, 0], [0, 1]]
+    """Fix contour generated from binary mask to exactly match outline.
     """
-    # fix corners (rounding error)
-    c = contour.astype(int)
-    d = np.diff(c, axis=0)
-    corners_top = (d == [-1, 1]).all(axis=1)
-    corners_bottom = (d == [1, -1]).all(axis=1)
-    c[np.where(corners_top)] -= [1, 0]
-    c[np.where(corners_bottom)] -= [0, 1]
-    # remove any duplicate points
-    c = c[:-1][d.any(axis=1)]
+    # adjusts corner points based on CCW contour
+    def f(x0, y0, x1, y1):
+        d = (x1 - x0, y1 - y0)
+        if not(x0 % 1):
+            x0 += d[0]
+        else:
+            y0 += d[1]
+        return x0, y0
 
-    # remove redundant points
-    d = np.diff(c, axis=0).clip(min=-1, max=1)
-    cut = (d == np.roll(d, 1, axis=0)).all(axis=1)
-    c = c[:-1][~cut]
-    
-    return c
+    x, y = contour.T
+    xy = []
+    for k in range(len(x) - 1):
+        xy += [f(x[k], y[k], x[k + 1], y[k + 1])]
+
+    return np.array(xy)
 
 
 def feature_table(data, mask, features):

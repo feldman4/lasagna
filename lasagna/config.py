@@ -2,7 +2,6 @@ import os
 import pandas as pd
 import lasagna.conditions_
 import lasagna.utils
-# import lasagna.io
 
 home = os.path.dirname(__file__)
 paths = None
@@ -13,7 +12,7 @@ paths = type('', (), {})()
 paths.full = lambda s: s
 experiment = None
 
-fiji_target = '/Users/feldman/Downloads/20151219_96W-G024/transfer/'
+fiji_target = '/Users/feldman/transfer/'
 
 fonts = os.path.join(home, 'resources', 'fonts')
 luts = os.path.join(home, 'resources', 'luts')

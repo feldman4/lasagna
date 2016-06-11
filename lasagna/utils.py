@@ -8,6 +8,7 @@ from itertools import izip, ifilter, starmap, product
 from collections import OrderedDict, Counter
 import decorator
 
+
 class Memoized(object):
     """Decorator that caches a function's return value each time it is called.
     If called later with the same arguments, the cached value is returned, and
@@ -96,7 +97,6 @@ class Filter2D(object):
             x = [float(width) / i for i in range(1, width + 1)]
             pyramid[width] = np.interp(x, range(1, len(real_filter) + 1), real_filter)
         return pyramid
-
 
 
 def regionprops(*args, **kwargs):
@@ -282,6 +282,7 @@ def argsort_nd(a, axis):
     index = list(np.ix_(*[np.arange(i) for i in a.shape]))
     index[axis] = a.argsort(axis)
     return index
+
 
 def pad(array, pad_width, mode=None, **kwargs):
     """Extend numpy.pad to support negative pad width.
@@ -479,7 +480,8 @@ def jitter(x, r=0.1):
     """Add jitter to matrix of data, proportional to standard deviation of
     each column, with scale factor r.
     """
-    return x + np.random.rand(*x.shape) * np.std(x)[None,:] * r
+    return x + np.random.rand(*x.shape) * np.std(x)[None, :] * r
+
 
 def better_legend(**kwargs):
     """Call pyplot.legend after removing duplicates.
@@ -489,20 +491,22 @@ def better_legend(**kwargs):
     handles, labels = plt.gca().get_legend_handles_labels()
     by_label = OrderedDict(zip(labels, handles))
     plt.legend(by_label.values(), by_label.keys(), **kwargs)
-    
+
+
 def simulate(f):
     """Wrapped function takes original function's args and kwargs as lists and evaluates
     all combinations. Results are stored in a DataFrame indexed by each arg/kwarg combination.
     """
-    def wrapped_f( *args,  **kwargs):
+
+    def wrapped_f(*args, **kwargs):
         all_kwargs = OrderedDict()
-        [all_kwargs.update({'arg_%d' % i: a}) for i,a in enumerate(args)]
+        [all_kwargs.update({'arg_%d' % i: a}) for i, a in enumerate(args)]
         all_kwargs.update(kwargs)
-        
+
         # build index of conditions to evaluate
         index_tuples = list(product(*all_kwargs.values()))
-        index = pd.MultiIndex.from_tuples(index_tuples, 
-                                         names=all_kwargs.keys())
+        index = pd.MultiIndex.from_tuples(index_tuples,
+                                          names=all_kwargs.keys())
 
         # store output in DataFrame, indexed by condition
         results = []
@@ -510,10 +514,11 @@ def simulate(f):
             args = ix[:len(args)]
             kwargs = ix[len(args):]
             kwargs_keys = all_kwargs.keys()[len(args):]
-            kwargs = {k: v for k,v in zip(kwargs_keys, kwargs)}
+            kwargs = {k: v for k, v in zip(kwargs_keys, kwargs)}
             results += [f(*args, **kwargs)]
 
         return pd.DataFrame(results, index=index)
+
     return wrapped_f
 
 
@@ -529,19 +534,22 @@ class DataFrameFind(pd.DataFrame):
             else:
                 index += (slice(None),)
         return self.loc[index, :]
-    
+
 
 def nice_tuple(z):
     """Convert iterable of iterables of strings into list of comma separated strings.
     """
     return [', '.join(y).encode('ascii') for y in z]
 
+
 def probes_to_rounds(rounds=1):
     def f(ind_vars):
         for rnd in range(1, rounds + 1):
             ind_vars['probes round %s' % rnd] = \
-                    [tuple(x.split(', ')) for x in ind_vars['probes']]
+                [tuple(x.split(', ')) for x in ind_vars['probes']]
+
     return f
+
 
 def cells_to_barcodes(ind_vars_table, cloning=None):
     """
@@ -555,7 +563,6 @@ def cells_to_barcodes(ind_vars_table, cloning=None):
     barcodes = barcodes.fillna('')
     # split comma-separated list of barcodes
     ind_vars_table['barcodes'] = [tuple(x.split(', ')) for x in barcodes]
-
 
 
 def launch_queue(queue):
@@ -587,21 +594,23 @@ def launch_queue(queue):
 
 
 def start_client():
-    """Start rpyc client connected to jython instance.
+    """Start rpyc client connected to jython instance. Returns object representing
+    base workspace of jython instance, including imported (Java) classes.
     """
     from lasagna.rpyc_utils import start_client
     client = start_client()
     import lasagna.jython_imports
     j = lasagna.jython_imports.jython_import(client.root.exposed_get_head(),
-                                     client.root.exposed_execute)
-    return j        
-              
+                                             client.root.exposed_execute)
+    return j
+
+
 def pack_contours(contours):
     """Pack contours into lists that can be sent to jython overlay_contours
     """
-    packed = [(1 + c).T.tolist() for c in contours]
+    # imagej origin is at top left corner, matplotlib origin is at center of top left pixel
+    packed = [(0.5 + c).T.tolist() for c in contours]
     return packed
-
 
 
 def sample(line=tuple(), plane=tuple(), scale='um_per_px'):
@@ -632,18 +641,17 @@ def sample(line=tuple(), plane=tuple(), scale='um_per_px'):
     """
     # pass in argument names or lists of arguments
     if isinstance(line, str):
-        line = [line]  
+        line = [line]
     if isinstance(plane, str):
         plane = [plane]
-    
+
     def wrapper_of_f(func):
         def wrapped_f(*args, **kwargs):
             spec = getargspec(func)
             kwargs_ = dict(zip(spec.args[::-1], spec.defaults[::-1]))
             kwargs_.update(kwargs)
             kwargs = kwargs_
-            
-            
+
             if kwargs[scale] != 1:
                 # rescale image arguments
                 images = []
@@ -653,21 +661,20 @@ def sample(line=tuple(), plane=tuple(), scale='um_per_px'):
                     else:
                         order = 1
                     scaled = skimage.transform.rescale(image, kwargs[scale],
-                                                   order=order, preserve_range=True)
+                                                       order=order, preserve_range=True)
                     images += [scaled.astype(image.dtype)]
-                
 
                 # adjust parameter scaling
                 for kw in kwargs:
                     if kw in line:
                         kwargs[kw] = kwargs[kw] / kwargs[scale]
                     if kw in plane:
-                        kwargs[kw] = kwargs[kw] / (kwargs[scale]**2)
+                        kwargs[kw] = kwargs[kw] / (kwargs[scale] ** 2)
             else:
                 images = args
 
             output = func(*images, **kwargs)
-            
+
             # rescale output
             if isinstance(output, np.ndarray):
                 if np.issubdtype(output.dtype, np.integer):
@@ -675,12 +682,15 @@ def sample(line=tuple(), plane=tuple(), scale='um_per_px'):
                 else:
                     order = 1
                 scaled = skimage.transform.resize(output, args[0].shape,
-                                                 order=order, preserve_range=True)
+                                                  order=order, preserve_range=True)
                 return scaled.astype(output.dtype)
             return output
+
         # return decorator.decorate(func, wrapped_f)
         return wrapped_f
+
     return wrapper_of_f
+
 
 def comma_split(df, column, split=', '):
     """Split entries in given column of strings, duplicating the 
@@ -697,15 +707,16 @@ def comma_split(df, column, split=', '):
     if isinstance(df.index, pd.MultiIndex):
         df_out.index = pd.MultiIndex.from_tuples(index, names=df.index.names)
     else:
-        df_out.index=index
+        df_out.index = index
         df_out.index.name = df.index.name
     return df_out
+
 
 def import_facs(files, drop=lambda s: '-A' in s):
     """Import a list of FACS files, adding well and x,y info if available.
     """
     import FlowCytometryTools as fcs
-    wells = [r+str(c) for r in 'ABCDEFGH' for c in range(1,13)]
+    wells = [r + str(c) for r in 'ABCDEFGH' for c in range(1, 13)]
     arr = []
     for f in files:
         d = fcs.FCMeasurement(ID=f, datafile=f)
@@ -726,6 +737,3 @@ def import_facs(files, drop=lambda s: '-A' in s):
         arr += [df]
     df = pd.concat(arr)
     return df.drop([c for c in df.columns if drop(c)], axis=1)
-    
-
-

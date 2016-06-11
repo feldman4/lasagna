@@ -1,5 +1,8 @@
+# functions to connect Fiji Jython and CPython
+# running this module as a script starts the Fiji Jython server
+
 import sys
-sys.path.append('/Users/feldman/anaconda/lib/python2.7/site-packages')
+sys.path.append('/anaconda/lib/python2.7/site-packages')
 sys.path.append('C:\\Users\\Blaineylab\\Anaconda2\\lib\\site-packages')
 
 import rpyc.utils.server
@@ -24,20 +27,13 @@ def start_server(head):
             return sys.path.append(path)
         def exposed_execute(self, cmd):
         	exec cmd in globals()
-    # start the rpyc server
-    server = rpyc.utils.server.ThreadedServer(ServerService, port=12345, protocol_config=PROTOCOL_CONFIG)
+    # start the rpyc server	
+    from rpyc.utils.server import ThreadedServer
+    server = ThreadedServer(ServerService, port=12345, protocol_config=PROTOCOL_CONFIG)
     t = threading.Thread(target=server.start)
     t.daemon = True
     t.start()
 
-
-def start_client():
-    class ServerService(rpyc.Service):
-        pass
-
-    conn = rpyc.connect("localhost", 12345, service=ServerService, config=PROTOCOL_CONFIG)
-    rpyc.BgServingThread(conn)
-    return conn
 
 if __name__ == '__main__':
 	start_server(locals())
