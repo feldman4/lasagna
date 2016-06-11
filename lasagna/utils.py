@@ -6,7 +6,6 @@ from functools import wraps
 from inspect import getargspec, isfunction
 from itertools import izip, ifilter, starmap, product
 from collections import OrderedDict, Counter
-import decorator
 
 
 class Memoized(object):

@@ -23,6 +23,8 @@ credentials = os.path.join(home, 'resources', 'gspread-da2f80418147.json')
 wolfram     = os.path.join(home, 'resources', 'wolfram.txt')
 
 cloning = None
+# overwritten by j = lasagna.config.j = lasagna.utils.start_client()
+j = None
 
 # relative magnification, empirical
 magnification = {'100X': 0.066,
