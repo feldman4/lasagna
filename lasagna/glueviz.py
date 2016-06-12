@@ -318,6 +318,7 @@ def lasagna_to_glue(df, label='data', name_map=default_name_map):
     assert (data.get_component('contour'))
     assert (data.get_component('file'))
     assert (data.get_component('bounds'))
+    return data
 
 
 def map_barcode(digits, k, spacer=0.5):

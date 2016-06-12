@@ -1,6 +1,5 @@
 from __future__ import absolute_import, division, print_function
 
-
 from glue import custom_viewer
 from glue.viewers.custom.qt import CustomViewer
 import lasagna.glueviz
@@ -24,6 +23,7 @@ import lasagna.glueviz
 
 # workaround due to glue's bizarre import and introspection scheme
 # or maybe it allows live updates to callbacks by reloading lasagna.glueviz
+
 class Fiji(CustomViewer):
     name = 'Fiji Viewer'
     source = 'att(file)'

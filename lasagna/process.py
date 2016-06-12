@@ -29,8 +29,8 @@ default_intensity_features = {'mean': lambda region: region.intensity_image[regi
 
 default_object_features = {
     'area':     lambda region: region.area,
-    'y': lambda region: region.centroid[0],
-    'x': lambda region: region.centroid[0],
+    'y':        lambda region: region.centroid[0],
+    'x':        lambda region: region.centroid[1],
     'bounds':   lambda region: region.bbox,
     'contour':  lambda region: binary_contours(region.image, fix=True, labeled=False)[0],
     'label':    lambda region: np.median(region.intensity_image[region.intensity_image > 0]),
