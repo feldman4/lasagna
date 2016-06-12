@@ -132,7 +132,6 @@ def make_polygon(x, y, name=None):
     :return:
     """
     x, y = list(x), list(y)
-    ij.IJ.log(x.__repr__())
     poly = ij.gui.PolygonRoi(x, y, len(x), ij.gui.Roi.POLYGON)
     if name:
         poly.setName(name)
@@ -167,7 +166,6 @@ def set_overlay_contours_color(rois, imp, color):
     for i in rois:
         roi = overlay.get(int(i))
         if roi:
-            ij.IJ.log(str(type(color)))
             roi.setStrokeColor(color)
 
 

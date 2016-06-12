@@ -23,14 +23,16 @@ import lasagna.utils
 
 DOWNSAMPLE = 2
 
-default_features = {'mean': lambda region: region.intensity_image[region.image].mean(),
+default_intensity_features = {'mean': lambda region: region.intensity_image[region.image].mean(),
                     'median': lambda region: np.median(region.intensity_image[region.image]),
                     'max': lambda region: region.intensity_image[region.image].max()}
 
-default_nucleus_features = {
+default_object_features = {
     'area':     lambda region: region.area,
-    'centroid': lambda region: region.centroid,
+    'y': lambda region: region.centroid[0],
+    'x': lambda region: region.centroid[0],
     'bounds':   lambda region: region.bbox,
+    'contour':  lambda region: binary_contours(region.image, fix=True, labeled=False)[0],
     'label':    lambda region: np.median(region.intensity_image[region.intensity_image > 0]),
     'mask':     lambda region: Mask(region.image),
     'hash':     lambda region: hex(random.getrandbits(128))
@@ -78,7 +80,7 @@ def fixed_contour(contour):
     return np.array(xy)
 
 
-def feature_table(data, mask, features):
+def feature_table(data, mask, features, global_features=None):
     """Apply functions in features to regions in data specified by
     integer mask.
     """
@@ -87,7 +89,11 @@ def feature_table(data, mask, features):
     for region in regions:
         for feature, func in features.items():
             results[feature] += [func(region)]
+    if global_features:
+        for feature, func in global_features.items():
+            results[feature] = func(data, mask)
     return pd.DataFrame(results)
+
 
 def build_feature_table(stack, mask, features, index):
     """Iterate over leading dimensions of stack. Label resulting 

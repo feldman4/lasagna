@@ -1,5 +1,3 @@
-import glue
-
 from glue.core.data import Data
 from glue.core.component import CategoricalComponent
 from glue.core.component_id import ComponentID
@@ -8,12 +6,11 @@ from glue.core.subset import RoiSubsetState, CategorySubsetState, AndState
 from glue.core.subset_group import SubsetGroup
 from glue.core.edit_subset_mode import EditSubsetMode
 
-
 import numpy as np
 
 import lasagna.config
 import lasagna.io
-
+import lasagna.utils
 
 luts = None
 display_ranges = None
@@ -98,14 +95,16 @@ class FijiViewer(object):
         att_index = np.where(self.files == file_to_show)
         if file_to_show != self.displayed_file:
             data = lasagna.io.read_stack(file_to_show)
-            self.imp = lasagna.io.show_stack(data, imp=self.imp,
+            self.imp = lasagna.io.show_IJ(data, imp=self.imp,
                                              luts=luts, display_ranges=display_ranges)
 
             self.displayed_file = file_to_show
 
             # overlay all contours for the new file
-            all_contours = self.contours[att_index]
-            packed = [(1 + contour).T.tolist() for contour in all_contours]
+            # all_contours = self.contours[att_index]
+            # packed = [(1 + contour).T.tolist() for contour in all_contours]
+            packed = lasagna.utils.pack_contours(self.contours[att_index])
+            self.packed = packed
             j.overlay_contours(packed, imp=self.imp)
             self.imp.getOverlay().setStrokeColor(default_color())
         # lasagna.config.j.ij.IJ.log('changed to %s' % file_to_show)
@@ -155,7 +154,7 @@ class FijiViewer(object):
         state.yatt = y.id
         return state
 
-    # update selection, bypassing callback
+        # update selection, bypassing callback
 
 
 class FijiGridViewer(object):
@@ -207,7 +206,7 @@ class FijiGridViewer(object):
                 shape = data.shape
                 data = lasagna.io.montage(data)
                 self.imp = lasagna.io.show_IJ(data, imp=self.imp,
-                                                 luts=luts, display_ranges=display_ranges)
+                                              luts=luts, display_ranges=display_ranges)
 
                 if show_nuclei:
                     # offset contours to match grid spacing
@@ -232,10 +231,6 @@ def update_selection(selection, viewer):
     """Assumes first dataset contains 'x' and 'y' components.
 	Selection consists of (xmin, xmax, ymin, ymax)
 	"""
-    from glue.core.roi import RectangularROI
-    from glue.core.subset import RoiSubsetState, CategorySubsetState, AndState
-    from glue.core.edit_subset_mode import EditSubsetMode
-    from glue.core.subset_group import SubsetGroup
 
     xmin, xmax, ymin, ymax = selection
     roi = RectangularROI(xmin=xmin, xmax=xmax, ymin=ymin, ymax=ymax)
@@ -249,8 +244,7 @@ def update_selection(selection, viewer):
     data_collection = lasagna.config.app.data_collection
 
     # if no subset groups selected, make a new one
-    layers = (lasagna.config.app.centralWidget()
-              .layerWidget.layerTree.selected_layers())
+    layers = (lasagna.config.app._layer_widget.selected_layers())
     subset_groups = [s for s in layers if isinstance(s, SubsetGroup)]
     if len(subset_groups) == 0:
         global fiji_label
@@ -259,6 +253,7 @@ def update_selection(selection, viewer):
         data_collection.new_subset_group(label=new_label, subset_state=subset_state)
     else:
         edit_mode = EditSubsetMode()
+        lasagna.config.self.subset_state=subset_state
         edit_mode.update(data_collection, subset_state)
 
 
@@ -278,12 +273,12 @@ def make_selection_listener(viewer, key='u'):
 
 
 def grid_view(files, bounds, padding=40):
-    from lasagna.io import b_idx, pile, read_stack
+    from lasagna.io import subimage, pile, read_stack
 
     arr = []
     for filename, bounds_ in zip(files, bounds):
-        I = read_stack(filename, memmap=True)
-        I_cell = I[b_idx(None, bounds=bounds_, padding=((padding, padding), I.shape))]
+        I = read_stack(filename, memmap=False)
+        I_cell = subimage(I, bounds_, pad=padding)
         arr.append(I_cell.copy())
 
     return pile(arr)
@@ -291,10 +286,10 @@ def grid_view(files, bounds, padding=40):
 
 def pandas_to_glue(df, label='data', name_map=default_name_map):
     """Convert dataframe to glue.core.data.Data. Glue categorical variables require hashing,
-	store array of unhashable components in ComponentID._unhashable. Override column names
-	in name_map with dictionary values.
+    store array of unhashable components in ComponentID._unhashable. Override column names
+    in name_map with dictionary values.
 
-	"""
+    """
 
     name_map = dict(name_map)
     data = Data(label=label)
@@ -306,11 +301,23 @@ def pandas_to_glue(df, label='data', name_map=default_name_map):
         try:
             data.add_component(df[c], c_name)
         except TypeError:
-            cc = CategoricalComponent(range(len(df[c])))
+            # some fucking pd.factorize error with int list input to CategoricalComponent
+            r = ['%09d' % i for i in range(len(df[c]))]
+            cc = CategoricalComponent(r)
             c_id = ComponentID(c_name)
             c_id._unhashable = df[c]
             data.add_component(cc, c_id)
     return data
+
+
+def lasagna_to_glue(df, label='data', name_map=default_name_map):
+
+    data = pandas_to_glue(df, label='data', name_map=default_name_map)
+    assert (data.get_component('x'))
+    assert (data.get_component('y'))
+    assert (data.get_component('contour'))
+    assert (data.get_component('file'))
+    assert (data.get_component('bounds'))
 
 
 def map_barcode(digits, k, spacer=0.5):
@@ -361,6 +368,7 @@ def check_artist(artists, this_layer):
 
     return flag3 or flag2 or flag1
 
+
 # lasagna.config.style = style
 # print "---%s---" % style.parent.label
 # for ca in lasagna.config.self.widget.layers:
@@ -384,10 +392,18 @@ def check_artist(artists, this_layer):
 # lasagna.config.d2[style.parent.label] = style.parent
 # current_artist_position = layers.index(style.parent)
 # if all(layers.index(style.parent) < layers.index(a.layer) for a in active_artists):
-# 	lasagna.config.reset += [style.parent]
+# 	lasagna.config.reset += [style.parent]~
 # 	# reset overlay
 # 	overlay = self.imp.getOverlay()
 # 	if overlay:
 # 		overlay.setStrokeColor(default_color())
 # 	print 'reset on %s' % style.parent
 # # lasagna.config.style += [style]
+
+
+def debug_trace():
+    '''Set a tracepoint in the Python debugger that works with Qt'''
+    from PyQt4.QtCore import pyqtRemoveInputHook
+    from pdb import set_trace
+    pyqtRemoveInputHook()
+    set_trace()
