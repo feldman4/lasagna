@@ -3,6 +3,10 @@ from __future__ import absolute_import, division, print_function
 from glue import custom_viewer
 from glue.viewers.custom.qt import CustomViewer
 import lasagna.glueviz
+from glue.viewers.table.qt import TableWidget
+from glue.config import qt_client
+
+qt_client.add(TableWidget)
 
 """Declare any extra link functions like this"""
 # @link_function(info='translates A to B', output_labels=['b'])

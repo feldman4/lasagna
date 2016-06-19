@@ -277,7 +277,7 @@ def grid_view(files, bounds, padding=40):
 
     arr = []
     for filename, bounds_ in zip(files, bounds):
-        I = read_stack(filename, memmap=False)
+        I = read_stack(filename, memmap=True)
         I_cell = subimage(I, bounds_, pad=padding)
         arr.append(I_cell.copy())
 

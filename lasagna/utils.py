@@ -20,7 +20,7 @@ class Memoized(object):
 
     def __call__(self, *args, **kwargs):
         key = str(args) + str(kwargs)
-        try:
+        try:comm
             # if type(self.cache[key]) == np.ndarray:
             #                 return self.cache[key].copy()
             return self.cache[key]
@@ -711,7 +711,7 @@ def comma_split(df, column, split=', '):
     return df_out
 
 
-def import_facs(files, drop=lambda s: '-A' in s):
+def import_facs(files, drop=lambda s: '-A$' in s):
     """Import a list of FACS files, adding well and x,y info if available.
     """
     import FlowCytometryTools as fcs
