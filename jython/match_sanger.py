@@ -18,7 +18,10 @@ if __name__ == '__main__':
 
     import regex as re
 
-    patterns = {'sgRNA': "ACCG(.{19,20})GTTT"}
+    patterns = {'sgRNA': "ACCG(.{19,20})GTTT",
+                's1_UMI': 'CCGGT(.{19,20})TTCCCA',
+                's1_UMI_rc': 'TGGGAA(.{19,20})ACCGG',
+                'TM10': 'AGAAAT(.{35,42})GTACA'}
 
     for name, pattern in patterns.items():
         flag = False
@@ -32,4 +35,4 @@ if __name__ == '__main__':
                     if flag:
                         print name
                         flag = False
-                    print f, ':', match[0]
+                    print name, match[0], f
