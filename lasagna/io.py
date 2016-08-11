@@ -702,7 +702,10 @@ def _get_mapped_tif(filename):
     # adjust strides to account for offset
     shape = [x for x in TF.series[0].shape if x != 1]
     strides = np.r_[np.cumprod(shape[::-1])[::-1][1:], [1]] * 2
-    strides[:-2] += np.r_[[1], np.cumprod(shape[-3:0:-1])][::-1] * stride_offset
+    # TODO: figure out what the fuck is going on here
+    skip_count = np.cumprod(shape[-3:0:-1]) # of IFDs skipped over in leading dimensions
+    skip_count = np.r_[[1], skip_count][::-1]
+    strides[:-2] += skip_count.astype(int) * stride_offset
 
     # make the initial memmap
     fh = TF.filehandle

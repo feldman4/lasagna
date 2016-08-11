@@ -25,6 +25,7 @@ import lasagna.utils
 from lasagna.io import save_stack as save
 from lasagna.io import read_stack as read
 from lasagna.io import show_IJ as show
+from lasagna.io import BLUE, GREEN, RED, MAGENTA, GRAY, CYAN, GLASBEY 
 import lasagna.config as config
 from lasagna.utils import start_client
 

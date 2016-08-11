@@ -212,14 +212,15 @@ class Sample(object):
 @lasagna.utils.sample()
 def find_nuclei(dapi, radius=15, area_min=50, area_max=500, um_per_px=1., 
                 score=lambda r: r.mean_intensity,
-                threshold=skimage.filters.threshold_otsu):
-    """Could downsample to consistent pixel size (40X?)
+                threshold=skimage.filters.threshold_otsu,
+                verbose=False, smooth=1.35):
+    """
     """
     area = area_min, area_max
-    smooth = 1.35 # gaussian smoothing in watershed
+    # smooth = 1.35 # gaussian smoothing in watershed
 
     mask = _binarize(dapi, radius, area[0])
-    labeled = skimage.measure.label(mask, background=0) + 1
+    labeled = skimage.measure.label(mask)
     labeled = filter_by_region(labeled, score, threshold, intensity=dapi) > 0
 
     # only fill holes below minimum area
@@ -229,7 +230,10 @@ def find_nuclei(dapi, radius=15, area_min=50, area_max=500, um_per_px=1.,
 
     nuclei = apply_watershed(labeled, smooth=smooth)
 
-    return filter_by_region(nuclei, lambda r: area[0] < r.area < area[1], threshold)
+    result = filter_by_region(nuclei, lambda r: area[0] < r.area < area[1], threshold)
+    if verbose:
+        return mask, labeled, nuclei, result
+    return result
 
 
 def _binarize(dapi, radius, min_size):
@@ -252,7 +256,7 @@ def filter_by_region(labeled, score, threshold, intensity=None):
     provided threshold function. If scores are boolean, scores are used as a mask and 
     threshold is disregarded. 
     """
-    labeled = labeled.copy()
+    labeled = labeled.copy().astype(int)
 
     if intensity is None:
         regions = skimage.measure.regionprops(labeled)

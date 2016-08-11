@@ -173,9 +173,11 @@ class FijiGridViewer(object):
         pass
 
     @staticmethod
-    def plot_subset(self, axes, Fiji, show_nuclei, source, contours, bounds, sort_by, padding, limit, style):
+    def plot_subset(self, axes, Fiji, show_nuclei, source, contour, bounds, sort_by, padding, limit, style):
         """Show a grid of cells, when called by the first visible layer.
 		"""
+        contours = contour
+        lasagna.config.gridviewer = self
         j = lasagna.config.j
         artists = lasagna.config.artists = self.widget.layers
         this_layer = lasagna.config.this_layer = style.parent
@@ -202,6 +204,7 @@ class FijiGridViewer(object):
                 files = source.categories[source.astype(int)][index]
                 bounds = bounds.categories[bounds.astype(int)][index]
                 lasagna.config.bounds = bounds
+                lasagna.config.files = files
                 data = grid_view(files, bounds, padding=padding)
                 shape = data.shape
                 data = lasagna.io.montage(data)
@@ -211,11 +214,14 @@ class FijiGridViewer(object):
                 if show_nuclei:
                     # offset contours to match grid spacing
                     offsets = (np.array([y, x]).T * shape[-2:]) + padding
-                    # need to apply subset to unhashable, then sort order
+                    lasagna.config.wtf = (contours, x, y, offsets, index)
+                    # need to apply subset to unhashable, then apply sort order
                     c = contours.id._unhashable[contours.astype(int)][index]
                     contours_offset = np.array([x + y[:2] for x, y in zip(c, offsets)])
-                    packed = [(1 + contour).T.tolist() for contour in contours_offset]
-
+                    # packed = [(1 + contour).T.tolist() for contour in contours_offset]
+                    
+                    packed = lasagna.utils.pack_contours(contours_offset)
+                    lasagna.config.packed = packed
                     j.overlay_contours(packed, imp=self.imp)
                     self.imp.getOverlay().setStrokeColor(default_color())
                 else:
@@ -305,7 +311,7 @@ def pandas_to_glue(df, label='data', name_map=default_name_map):
             r = ['%09d' % i for i in range(len(df[c]))]
             cc = CategoricalComponent(r)
             c_id = ComponentID(c_name)
-            c_id._unhashable = df[c]
+            c_id._unhashable = np.array(df[c])
             data.add_component(cc, c_id)
     return data
 
