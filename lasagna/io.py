@@ -640,6 +640,7 @@ def show_IJ(data, title='image', imp=None, check_cache=True, **kwargs):
 
     if imp:
         # rather than convert from grayscale to composite, just replace
+        # TODO: remove this sketchy shit
         if new_imp.getDisplayMode() != imp.getDisplayMode():
 
             # move the old listeners over

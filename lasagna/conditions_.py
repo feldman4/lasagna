@@ -1,5 +1,4 @@
 import gspread
-from oauth2client.client import SignedJwtAssertionCredentials
 import json
 import regex as re
 import numpy as np
@@ -32,9 +31,13 @@ def load_sheet(worksheet, g_file='Lasagna FISH'):
     :return:
     """
     # see http://gspread.readthedocs.org/en/latest/oauth2.html
-    json_key = json.load(open(lasagna.config.credentials))
+
+    from oauth2client.service_account import ServiceAccountCredentials
+
+
     scope = ['https://spreadsheets.google.com/feeds']
-    credentials = SignedJwtAssertionCredentials(json_key['client_email'], json_key['private_key'], scope)
+    credentials = ServiceAccountCredentials.from_json_keyfile_dict(lasagna.config.credentials, scope)
+
     gc = gspread.authorize(credentials)
     xsheet = gc.open(g_file)
 
