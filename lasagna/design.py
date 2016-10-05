@@ -13,6 +13,7 @@ import regex as re
 # # import pygraphviz as pgv
 import networkx as nx
 import lasagna.utils
+from itertools import product
 
 
 def greedyTSP(G):
@@ -70,6 +71,7 @@ watson_crick = {'A': 'T',
                 'T': 'A',
                 'C': 'G',
                 'G': 'C',
+                'U': 'A',
                 'N': 'N'}
 watson_crick.update({k.lower(): v.lower() for k, v in watson_crick.items()})
 
@@ -86,7 +88,7 @@ duplex_re = re.compile('(\S*)\s*([0-9]+,[0-9]+)\s*:\s*([0-9]+,[0-9]+)\s*\(\s*(.*
 fold_re = re.compile('\s*(.*)\n(.*)\s\(\s*(.*)\)')
 
 
-def RNAduplex(a, b, full=True):
+def RNAduplex(a, b, full=True, noGU=False):
     """Returns RNAResult from folding query strands. Provide full=True to save
     full sequence, otherwise truncated to window around bound bases.
     :param a: single str or list of str
@@ -104,6 +106,11 @@ def RNAduplex(a, b, full=True):
             a = [a] * len(b)
 
     arg = ['RNAduplex']
+
+    if noGU:
+        arg[0] += ' --noGU'
+
+
     stdin = '\n'.join(sum(zip(a, b), tuple()))
     out = lasagna.utils.call(arg, stdin)
     arr = []
@@ -127,7 +134,7 @@ def RNAduplex(a, b, full=True):
     return arr[ix]
 
 
-def RNAfold(a):
+def RNAfold(a, noGU=False, cofold=False):
     """Returns dot structure and energy.
     :param a:
     :return:
@@ -140,6 +147,11 @@ def RNAfold(a):
 
     # default behavior is to save rna.ps
     arg = ['RNAfold --noPS']
+    if cofold:
+        arg = ['RNAcofold --noPS']
+
+    if noGU:
+        arg[0] += ' --noGU'
     stdin = '\n'.join(a)
     out = lasagna.utils.call(arg, stdin)
 
@@ -149,6 +161,40 @@ def RNAfold(a):
                           energy=float(energy))]
 
     return arr[ix]
+
+
+def RNAcofold(a, b, noGU=False):
+    
+    is_str = np.lib._iotools._is_string_like
+
+    single_input = is_str(a) and is_str(b)
+
+    a = [a] if is_str(a) else a
+    b = [b] if is_str(b) else b
+
+    queries = []
+    for a_, b_ in product(a, b):
+        queries += [a_ + '&' + b_]
+
+    # default behavior is to save rna.ps
+    arg = ['RNAcofold --noPS']
+    if noGU:
+        arg[0] += ' --noGU'
+
+    stdin = '\n'.join(queries)
+    out = lasagna.utils.call(arg, stdin)
+
+    arr = []
+    for sequence, structure, energy in fold_re.findall(out):
+        sequence = sequence.replace('&', '.') # helps RNAplot
+        arr += [RNAResult(sequence=sequence, structure=structure,
+                          energy=float(energy))]
+
+    if single_input:
+        return arr[0]
+
+    return arr
+
 
 
 class RNAResult(object):

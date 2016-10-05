@@ -36,7 +36,7 @@ def load_sheet(worksheet, g_file='Lasagna FISH'):
 
 
     scope = ['https://spreadsheets.google.com/feeds']
-    credentials = ServiceAccountCredentials.from_json_keyfile_dict(lasagna.config.credentials, scope)
+    credentials = ServiceAccountCredentials.from_json_keyfile_name(lasagna.config.credentials, scope)
 
     gc = gspread.authorize(credentials)
     xsheet = gc.open(g_file)
