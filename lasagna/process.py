@@ -718,3 +718,45 @@ def find_cells(nuclei, mask, small_holes=100, remove_boundary_cells=True):
             cells[holes == reg.label] = scipy.stats.mode(vals)[0][0]
 
     return cells.astype(np.uint16)
+
+def find_peaks(aligned, n=5):
+    """At peak, max value in neighborhood and max-min
+    """
+    from scipy.ndimage import filters
+    neighborhood_size = (1,)*(aligned.ndim-2) + (n,n)
+    data_max = filters.maximum_filter(aligned, neighborhood_size)
+    data_min = filters.minimum_filter(aligned, neighborhood_size)
+    peaks = data_max - data_min
+    peaks[aligned!=data_max] = 0
+    
+    # remove peaks close to edge
+    mask = np.ones(peaks.shape, dtype=bool)
+    mask[...,n:-n, n:-n] = False
+    peaks[mask] = 0
+    
+    return peaks
+
+
+def peak_to_region(peak, data, threshold=2000, n=5):
+    selem = np.ones((n,n))
+    peak = peak.copy()
+    peak[peak<threshold] = 0
+    
+    labeled = skimage.measure.label(peak)
+    regions = lasagna.utils.regionprops(labeled, intensity_image=data)
+    # hack for rare peak w/ more than 1 pixel
+    for r in regions:
+        if r.area > 1:
+            labeled[labeled==r.label] = np.array([r.label] + [0]*(r.area-1))
+
+    # dilate labels so higher intensity regions win
+    fwd = [r.max_intensity for r in regions]
+    fwd = np.argsort(np.argsort(fwd)) + 1
+    rev = np.argsort(fwd)
+
+    labeled[labeled>0] = fwd
+
+    labeled = skimage.morphology.dilation(labeled, selem)
+    labeled[labeled>0] = rev[labeled[labeled>0] - 1]
+
+    return labeled
