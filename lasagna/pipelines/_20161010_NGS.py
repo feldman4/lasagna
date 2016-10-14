@@ -108,9 +108,9 @@ def add_features(df, add_well_info_from_sample=True):
         x = x.copy()
         x['mapped'] = x['count'].sum()
         return x
-    df = df.groupby(['pattern_name', 'sample']).apply(f)
- 
 
+    df = df.groupby(['pattern_name', 'sample']).apply(f)
+    df['fraction'] = df['count'] / df['mapped']
 
     return df.reset_index(drop=True)
 
@@ -161,6 +161,10 @@ def load_target_info():
 
 
 def msa(template, sequences, match=2, mismatch=-1, open=-1, extend=-0.5):
+    """Fake multiple sequence alignment to template. Do pairwise alignment
+    to determine gap locations, then repeat alignments. For the second pass, 
+    don't allow gaps in the template.
+    """
     from Bio import pairwise2
     template = str(template)
     for s in sequences:
@@ -173,12 +177,6 @@ def msa(template, sequences, match=2, mismatch=-1, open=-1, extend=-0.5):
                                           s, match, mismatch, -100, -100, open, extend)
         aligned += [results[0][1]]
     return [template] + aligned
-
-
-def collapse_sgRNAs(df, n=3):
-    a = df.query('pattern_name=="sgRNA"').groupby(['sgRNA', 'match'])['count'].sum().reset_index()
-    a = a.sort_values(['sgRNA', 'count'], ascending=[True, False]).groupby('sgRNA').head(n)
-    return a.set_index('sgRNA')
 
 
 def format_msa(template, aligned):
@@ -208,13 +206,21 @@ def display_table(table, cols=('formatted_alignment', 'sgRNA')):
 
 
 def display_target_sgRNAs(target, df, target_info):
-    a = collapse_sgRNAs(df)
+
+    def collapse_sgRNAs(df, n=3):
+        """Take the top 3 sgRNAs for 
+        """
+        a = df.query('pattern_name=="sgRNA"').groupby(['sgRNA', 'match'])['count'].sum().reset_index()
+        a = a.sort_values(['sgRNA', 'count'], ascending=[True, False]).groupby('sgRNA').head(n)
+        return a.set_index('sgRNA')
+
+    collapsed_sgRNAs = collapse_sgRNAs(df)
     
     sgRNA = target_info.set_index('target').loc[target, 'sgRNA']
     t = target_info.set_index('target').loc[target, 'FWD_seq']
     s = target_info.set_index('target').loc[target, 'sgRNA_seq']
 
-    sequences, counts = a.loc[sgRNA].as_matrix().T
+    sequences, counts = collapsed_sgRNAs.loc[sgRNA].as_matrix().T
     aligned = msa(t, sequences)
     template, aligned = aligned[0], aligned[1:]
     
@@ -249,5 +255,7 @@ def normalize_sgRNA_counts(table, df):
 
 
 def count_sgRNAs_d9(df):
+    """Used for normalizing 
+    """
     x = df.query('day=="d9"&pattern_name=="sgRNA"&dox=="dox"&row!="A"')
-    return x.groupby(['match', 'sgRNA']).sum()['count'].unstack('sgRNA') # sum over all d9 samples
+    return x.pivot_table(values='fraction', columns='sgRNA', index='match')
