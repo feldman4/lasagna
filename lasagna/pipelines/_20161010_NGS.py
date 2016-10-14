@@ -155,5 +155,99 @@ def display_ind_var(df, ind_var, run=None, fix_rows_cols=True):
 
 
 def load_target_info():
+    from lasagna.conditions_ import load_sheet
     x = load_sheet('targets', g_file='inventory for a time machine')
     return pd.DataFrame(x[1:], columns=x[0])
+
+
+def msa(template, sequences, match=2, mismatch=-1, open=-1, extend=-0.5):
+    from Bio import pairwise2
+    template = str(template)
+    for s in sequences:
+        results = pairwise2.align.localms(template.upper(), 
+                                          s, match, mismatch, open, extend)
+        template = results[0][0]
+    aligned = []
+    for s in sequences:
+        results = pairwise2.align.localmd(template.upper(), 
+                                          s, match, mismatch, -100, -100, open, extend)
+        aligned += [results[0][1]]
+    return [template] + aligned
+
+
+def collapse_sgRNAs(df, n=3):
+    a = df.query('pattern_name=="sgRNA"').groupby(['sgRNA', 'match'])['count'].sum().reset_index()
+    a = a.sort_values(['sgRNA', 'count'], ascending=[True, False]).groupby('sgRNA').head(n)
+    return a.set_index('sgRNA')
+
+
+def format_msa(template, aligned):
+    def color(c, shade=None):
+        return '<span style="color: %s">%s</span>' % (shade, c)
+    
+    arr = []
+    for s in aligned:
+        span = ''
+        for c0, c1 in zip(template, s):
+            if c1 != c0 and c1 != '-':
+                span += color(c1, 'red')
+            else:
+                span += color(c1)
+        arr += ['%s' % span]
+    
+    return '<div style="font-family: Consolas">%s<br>%s</div>' % (template, '<br>'.join(arr))
+
+
+def display_table(table, cols=('formatted_alignment', 'sgRNA')):
+    from IPython.display import HTML
+    cols = list(cols)
+    with pd.option_context('display.max_colwidth', 100000):
+        html = table[cols].to_html(escape=False,
+            float_format=lambda x: "%.3f%%" % (100*x))
+    return HTML(html)
+
+
+def display_target_sgRNAs(target, df, target_info):
+    a = collapse_sgRNAs(df)
+    
+    sgRNA = target_info.set_index('target').loc[target, 'sgRNA']
+    t = target_info.set_index('target').loc[target, 'FWD_seq']
+    s = target_info.set_index('target').loc[target, 'sgRNA_seq']
+
+    sequences, counts = a.loc[sgRNA].as_matrix().T
+    aligned = msa(t, sequences)
+    template, aligned = aligned[0], aligned[1:]
+    
+    arr = []
+    for a,s,c in zip(aligned, sequences, counts):
+        arr += [[target, sgRNA, template, a, s, c]]
+    
+    df2 = pd.DataFrame(arr)
+    df2.columns = 'target', 'sgRNA', 'template', 'aligned', 'sgRNA_sequence', 'count'
+    
+    formatted = format_msa(template, aligned)    
+    formatted = formatted.replace('ATG', '<span style="color: green">ATG</span>')
+    formatted = formatted.replace('AGGCCT', '<span style="color: blue">AGG</span>CCT')
+    
+    df2['formatted_alignment'] = formatted
+    
+    return df2
+
+def normalize_sgRNA_counts(table, df):
+    # 
+    cols = slice('sgV-101', 'sgV-3K-5')
+    df = df.copy()
+    table = table.copy()
+    x = df.query('day=="d9"&pattern_name=="sgRNA"&dox=="dox"&row!="A"')
+    y = x[['sgRNA', 'sample', 'mapped']].drop_duplicates(['sgRNA', 'sample'])
+    y = y.groupby('sgRNA').sum()
+    
+    a = table.loc[:, cols].T.copy()
+    b = a.divide(y['mapped'], axis=0).T
+    table.loc[:, cols] = b
+    return table
+
+
+def count_sgRNAs_d9(df):
+    x = df.query('day=="d9"&pattern_name=="sgRNA"&dox=="dox"&row!="A"')
+    return x.groupby(['match', 'sgRNA']).sum()['count'].unstack('sgRNA') # sum over all d9 samples
