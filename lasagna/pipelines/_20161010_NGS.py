@@ -8,13 +8,79 @@ import numpy as np
 # sns.set(style='white', font_scale=1.5)
 
 
+# sgV-102 / T10 are absent due to missing samples
+
 sgRNAs = {'sgV-101': 'GAGACCAGCAGAACCGACAA',
  'sgV-106': 'CGGGAGGGCAGGGCACGAAA',
  'sgV-107': 'GCGCAACAGAGAGGGGAGCG',
  'sgV-116': 'AGGGCACAGACCCCAGGGAG',
  'sgV-117': 'CAGGGGGGAGCGAAAGAGAA'}
 
+targets = 'T9', 'T11', 'T12', 'T13', 'T14'
 
+def make_csvs():
+    # summarize fastq files
+    df_samples = pd.concat([make_sample_table('20160918_AJG'), 
+                            make_sample_table('20161012_JDB_AJG')])
+    
+    # read fastq, match regular expressions, tabulate results
+    patterns = {'sgRNA': 'ACCG(.{17,20})GTTT',
+                'TM10': 'CCAGAACA(.*)TCGAGGAG'}
+    samples = dict(df_samples.set_index(['run', 'well'])['R1'])
+    df = match_patterns_samples(samples, patterns)
+    df = add_features(df)
+    df = add_closest_sgRNA(df, sgRNAs)
+    
+    # get sample info from google sheets
+    a = load_conditions('20161012_JDB_AJG')
+    b = load_conditions('20160918_AJG')
+    c = load_conditions('20160917_Flow_AJG', g_file='inventory for a time machine')
+    sample_info = pd.concat([a, b, c])
+
+    # get target info from google sheets
+    target_info = load_target_info()
+
+    # add sample info to table of matched reads
+    df = df.join(sample_info.set_index(['run', 'well']), on=['run', 'well'])
+    df = df.dropna(subset=['sgRNA'])
+    df = mark_controls(df, target_info)
+    
+    # align sgRNAs to targets and show representation in libraries
+    num_to_show = 3
+    target_table = pd.concat([display_target_sgRNAs(target, df, target_info, n=num_to_show)
+               for target in targets])
+
+    # include the fraction of these sgRNAs in representative samples
+    sgRNA_counts = count_sgRNAs_d9(df)
+    target_table = target_table.join(sgRNA_counts, on='sgRNA_sequence').fillna(0)
+    target_table = target_table.set_index('target')
+    
+    # summarize flow
+    df_fcs = load_flowstats()
+    fcs_sample_info = sample_info.query('run=="20160917_Flow_AJG"').set_index('well')
+    fcs_sample_info = fcs_sample_info.drop(['day', 'run', 'gate'], axis=1)
+    df_fcs = df_fcs.join(fcs_sample_info, on='well')
+    
+    df_samples.to_csv('samples.csv', index=None)
+    df.to_csv('pattern_counts.csv', index=None)
+    sample_info.to_csv('sample_info.csv', index=None)
+    target_info.to_csv('target_info.csv')
+    target_table.to_csv('target_table.csv')
+    df_fcs.to_csv('fcs_stats.csv', index=None)
+
+    print 'saved .csv files to %s' % os.getcwd()
+
+
+def load_csvs():
+    """ df_samples, df, sample_info, target_info, target_table = load_csvs()
+    """
+    df_samples = pd.read_csv('samples.csv')
+    df = pd.read_csv('pattern_counts.csv')
+    sample_info = pd.read_csv('sample_info.csv')
+    target_info = pd.read_csv('target_info.csv').set_index('target')
+    target_table = pd.read_csv('target_table.csv').set_index('target')
+    df_fcs = pd.read_csv('fcs_stats.csv')
+    return df_samples, df, sample_info, target_info, target_table, df_fcs
 
 def read_fastq(filepath):
     with open(filepath, 'r') as fh:
@@ -226,16 +292,16 @@ def display_table(table, cols=('formatted_alignment', 'sgRNA')):
     return HTML(html)
 
 
-def display_target_sgRNAs(target, df, target_info):
+def display_target_sgRNAs(target, df, target_info, n=3):
 
-    def collapse_sgRNAs(df, n=3):
+    def collapse_sgRNAs(df, n):
         """Take the top 3 sgRNAs for 
         """
         a = df.query('pattern_name=="sgRNA"').groupby(['sgRNA', 'match'])['count'].sum().reset_index()
         a = a.sort_values(['sgRNA', 'count'], ascending=[True, False]).groupby('sgRNA').head(n)
         return a.set_index('sgRNA')
 
-    collapsed_sgRNAs = collapse_sgRNAs(df)
+    collapsed_sgRNAs = collapse_sgRNAs(df, n)
     
     sgRNA = target_info.loc[target, 'sgRNA']
     t = target_info.loc[target, 'FWD_seq']
@@ -261,7 +327,7 @@ def display_target_sgRNAs(target, df, target_info):
     return df2
 
 def count_sgRNAs_d9(df):
-    """Used for normalizing 
+    """sgRNA fraction in representative samples.
     """
     x = df.query('day=="d9"&pattern_name=="sgRNA"&dox=="dox"&row!="A"')
     return x.pivot_table(values='fraction', columns='sgRNA', index='match')
@@ -403,16 +469,11 @@ def load_flowstats():
     return pd.concat(arr)
 
 
-
-
-
-
 def load_target_info():
     from lasagna.conditions_ import load_sheet
     x = load_sheet('targets', g_file='inventory for a time machine')
     df = pd.DataFrame(x[1:], columns=x[0])
     return df.set_index('target') 
-
 
 
 def add_closest_sgRNA(df, sgRNAs):
@@ -433,3 +494,173 @@ def add_closest_sgRNA(df, sgRNAs):
     df.loc[filt, 'closest_sgRNA_dist'] = [n[0][0] for n in closest]
     
     return df
+
+
+def melt_sgRNA_libraries(df, other=2):
+    """Combine matches based on closest sgRNA. Matches with 
+    an edit distance to all sgRNAs above threshold will be marked 
+    as other.
+    """
+    df_sgRNA = df.query('pattern_name=="sgRNA"').copy()
+    df_sgRNA['gate'] = df_sgRNA['gate'].fillna('none')
+    df_sgRNA['gate'] = [s.replace('d9_sonySort_', '') for s in df_sgRNA['gate']]
+    
+    filt = df_sgRNA['closest_sgRNA_dist'] > other
+    df_sgRNA.loc[filt, 'closest_sgRNA'] = 'other'
+    
+    cols = ['sgRNA', 'gate', 'target', 'well', 'closest_sgRNA', 'library', 'day']
+    df_sgRNA = df_sgRNA.groupby(cols)['fraction'].sum().reset_index()
+    
+    df_sgRNA['background'] = [s[:6] for s in df_sgRNA['sgRNA']]
+    return df_sgRNA
+    
+
+def melt_TM10_libraries(df):
+    filt =   df['pattern_name'] == "TM10" 
+    filt &=  df['day'] != "d28" 
+    filt &= ~df['library']
+    filt &=  df['dox'] == "dox"
+    filt &=  df['length'] > 30
+    df_TM10 = df[filt].copy()
+    def f(x):
+        x['% mapped'] = (x['count'] / x['count'].sum())*-100
+        return x
+    df_TM10 = df_TM10.groupby(['sample']).apply(f)
+    df_TM10 = df_TM10.groupby(['day', 'control', 'frame', 'target', 'row', 'sgRNA', 'dox', 'sample']).sum().reset_index()
+
+    return df_TM10
+
+
+
+def plot_waterfall(df, df_fcs, inflate_GFP=1):
+    import seaborn as sns
+    sns.set(style='white', font_scale=1.5)
+    df_TM10 = df.query('pattern_name=="TM10" & day!="d28" & ~library & length>30')
+    def f(x): 
+        x['% mapped'] = (x['count'] / x['count'].sum())*-100
+        return x
+    df_TM10 = df_TM10.groupby(['sample']).apply(f)
+    df_TM10 = df_TM10.groupby(['day', 'control', 'frame', 'target', 'row', 'sgRNA', 'sample']).sum().reset_index()
+
+    # missing data
+    s = df_TM10.iloc[0].copy()
+    s['day'] = 7
+    s['% mapped'] = 0
+    df_TM10 = df_TM10.append(s)
+
+    df_TM10 = df_TM10.sort_values(['sgRNA', 'row'])
+
+    b,g,r = sns.color_palette('muted')[:3]
+    palette = r,b,g
+    fg = sns.factorplot(data=df_TM10, x='day', y='% mapped', 
+                        hue='frame', row='row', col='sgRNA', 
+                        kind='bar', palette=palette) #, row_order=list('ABCD'), col_order=cols)
+
+    df2 = pd.melt(df_fcs, id_vars=['row', 'sgRNA', 'day'], 
+            value_vars=['% GFP+', '% mCherry+', '% negative'],
+           value_name='percent', var_name='population')
+
+    df2.loc[df2['population'] == '% GFP+', 'percent'] *= inflate_GFP
+
+    b,g,r = sns.color_palette('pastel')[:3]
+    palette = r,b,g
+
+    for row, ax_ in zip(fg.row_names, fg.axes):
+        for sgRNA, ax in zip(fg.col_names, ax_):
+
+            sns.barplot(ax=ax, data=df2.query('row==@row & sgRNA==@sgRNA'), 
+                        x='day', y='percent', hue='population',  
+                        hue_order=['% mCherry+', '% negative', '% GFP+'], 
+                        palette=palette)
+            ax.legend('')
+            ax.set_xlabel('')
+            ax.set_ylabel('')
+            ax.set_title('')
+        
+    fg._legend.set_visible(False)
+    legend_labels = ['+0 / mCherry+', '+1 / negative', '+2 / GFP+']
+    legend_data = sorted(fg._legend_data.items())
+    fg.add_legend({k: v for k,(_,v) in zip(legend_labels, legend_data)}, 
+                  title='indel / FACS')
+
+    ax = fg.axes.flat[0]
+    ax.set_xlim(-0.5, 3.5)
+    ax.set_ylim(-100, 100)
+    ax.set_xticks([0,1,2,3])
+    ax.set_xticklabels(['d3', 'd5', 'd7', 'd9'])
+
+    for ax in fg.axes[:,0]:
+        ax.set_ylabel(r'indel % $\leftarrow \rightarrow$ FACS %')
+
+    title = 'time machine frameshift reporter\n top row mismatched sgRNA, bottom row matched sgRNA'
+    if inflate_GFP != 1:
+        title += '\n GFP FACS inflated x %g' % inflate_GFP
+    fg.fig.suptitle(title)
+    fg.fig.tight_layout()
+
+    fg.fig.subplots_adjust(top=0.8, right=0.9)
+
+    return fg
+
+
+def plot_pointplot(df, df_fcs):
+    import seaborn as sns
+    df_TM10 = melt_TM10_libraries(df)
+    # missing data
+    s = df_TM10.iloc[0].copy()
+    s['day'] = 'd7'
+    s['% mapped'] = 0
+    df_TM10 = df_TM10.append(s)
+
+    df2 = pd.melt(df_fcs, id_vars=['sgRNA', 'target', 'day', 'row', 'dox'], 
+            value_vars=['% GFP+', '% mCherry+', '% negative'],
+           value_name='percent', var_name='population')
+    df2['frame'] = pd.factorize(df2['population'])[0]
+
+    cols = ['sgRNA', 'target', 'day', 'frame', 'dox', 'row']
+    df_TM10 = df_TM10.join(df2.set_index(cols), on=cols)
+    extra_data = df2.query('day=="d7"&dox=="dox"').copy()
+    extra_data['control'] = extra_data['row'] != 'B'
+    df_TM10 = pd.concat([df_TM10, extra_data])
+    df_TM10.loc[df_TM10['population'] == '% GFP+', 'percent']*= 10
+    # df_TM10['fraction'] = 100*df_TM10['fraction'] - 200
+    df_TM10['fraction'] *= -100
+    df_TM10['day'] = df_TM10['day'].astype('category')
+
+    palette = lambda name: np.array(sns.color_palette(name))[[2,0,1]]
+
+    df_TM10 = df_TM10.sort_values(['sgRNA', 'control', 'frame'])
+    fg = sns.FacetGrid(data=df_TM10, row='control', hue='frame', 
+                       col='sgRNA', palette=palette('pastel'))
+
+    fg.map(sns.pointplot, 'day', 'fraction')
+    fg._colors = palette('muted')
+    fg.map(sns.pointplot, 'day', 'percent')
+
+    [ax.set_title('') for ax in fg.axes.flat[:]]
+
+    return fg
+
+
+def plot_enrichments(df, yscale='log'):
+    import seaborn as sns
+    sns.set(style='whitegrid')
+    df_sgRNA = melt_sgRNA_libraries(df)
+    df_sgRNA = df_sgRNA.query('library & ~(day=="d28" & gate=="none")')
+    filt = ~df_sgRNA['gate'].isin(['cells', 'MC5%'])
+
+
+    order = 'none', 'GFP1%', 'GFP+'
+    col_order = 'T9', 'T11', 'T12', 'T13', 'T14'
+    hue_order = 'other', 'sgV-101', 'sgV-106', 'sgV-107', 'sgV-116', 'sgV-117'
+    
+    fg = sns.factorplot(data=df_sgRNA[filt], hue='closest_sgRNA', x='gate', col='target', 
+                   row='background', y='fraction', kind='bar', 
+                        col_order=col_order, order=order, hue_order=hue_order)
+
+    fg.set_xticklabels(rotation=30)
+    fg.axes.flat[0].set_yscale(yscale)
+    fg.fig.tight_layout()
+    fg.fig.subplots_adjust(right=0.95)
+
+    return fg
