@@ -283,12 +283,16 @@ def format_msa(template, aligned):
     return '<div style="font-family: Consolas">%s<br>%s</div>' % (template, '<br>'.join(arr))
 
 
-def display_table(table, cols=('formatted_alignment', 'sgRNA')):
+def display_table(table, cols=('formatted_alignment', 'sgRNA'), filename=None):
     from IPython.display import HTML
     cols = list(cols)
     with pd.option_context('display.max_colwidth', 100000):
         html = table[cols].to_html(escape=False,
             float_format=lambda x: "%.3f%%" % (100*x))
+
+    if filename:
+        with open(filename, 'w') as fh:
+            fh.write(html + table_css)
     return HTML(html)
 
 
@@ -664,3 +668,20 @@ def plot_enrichments(df, yscale='log'):
     fg.fig.subplots_adjust(right=0.95)
 
     return fg
+
+
+table_css = """
+ <style>
+table {
+  font-family: Helvetica;
+  border-collapse: collapse;
+  border-spacing: 0;
+  white-space: nowrap;
+}
+
+td,
+th {
+  padding: 4;
+}
+</style>
+"""
