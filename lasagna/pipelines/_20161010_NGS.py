@@ -58,8 +58,12 @@ def make_csvs():
     # summarize flow
     df_fcs = load_flowstats()
     fcs_sample_info = sample_info.query('run=="20160917_Flow_AJG"').set_index('well')
+    # add individual sgRNA info
     fcs_sample_info = fcs_sample_info.drop(['day', 'run', 'gate'], axis=1)
     df_fcs = df_fcs.join(fcs_sample_info, on='well')
+    # add library info
+    library_samples = ['K' in f for f in df_fcs['fcs']]
+    df.loc[library_samples, 'sgRNA'] = ['sgV-'+f[:4] for f in df_fcs.loc[library_samples, 'fcs']]
     
     df_samples.to_csv('samples.csv', index=None)
     df.to_csv('pattern_counts.csv', index=None)
@@ -299,7 +303,7 @@ def display_table(table, cols=('formatted_alignment', 'sgRNA'), filename=None):
 def display_target_sgRNAs(target, df, target_info, n=3):
 
     def collapse_sgRNAs(df, n):
-        """Take the top 3 sgRNAs for 
+        """Take the top 3 matches for each sgRNA across all single-sgRNA samples.
         """
         a = df.query('pattern_name=="sgRNA"').groupby(['sgRNA', 'match'])['count'].sum().reset_index()
         a = a.sort_values(['sgRNA', 'count'], ascending=[True, False]).groupby('sgRNA').head(n)
@@ -537,6 +541,8 @@ def melt_TM10_libraries(df):
 
 
 def plot_waterfall(df, df_fcs, inflate_GFP=1):
+    """Returns FacetGrid, DataFrame of indels, DataFrame of FACS
+    """
     import seaborn as sns
     sns.set(style='white', font_scale=1.5)
     df_TM10 = df.query('pattern_name=="TM10" & day!="d28" & ~library & length>30')
@@ -548,11 +554,12 @@ def plot_waterfall(df, df_fcs, inflate_GFP=1):
 
     # missing data
     s = df_TM10.iloc[0].copy()
-    s['day'] = 7
+    s['day'] = 'd7'
     s['% mapped'] = 0
     df_TM10 = df_TM10.append(s)
 
-    df_TM10 = df_TM10.sort_values(['sgRNA', 'row'])
+    df_TM10 = df_TM10.sort_values(['sgRNA', 'row', 'day'])
+    df_TM10['day'] = pd.factorize(df_TM10['day'], sort=True)[0]
 
     b,g,r = sns.color_palette('muted')[:3]
     palette = r,b,g
@@ -604,7 +611,7 @@ def plot_waterfall(df, df_fcs, inflate_GFP=1):
 
     fg.fig.subplots_adjust(top=0.8, right=0.9)
 
-    return fg
+    return fg, df_TM10, df2
 
 
 def plot_pointplot(df, df_fcs):
