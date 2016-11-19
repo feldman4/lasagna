@@ -614,7 +614,7 @@ GLASBEY = read_lut('glasbey')
 
 hash_cache = {}
 # decorate to store hash_cache in function
-def show_IJ(data, title='image', imp=None, check_cache=True, **kwargs):
+def show_IJ(data, title='image', imp=None, check_cache=False, **kwargs):
     """Display image in linked ImageJ instance. If imp is provided,
     replaces contents; otherwise opens new ij.ImagePlus. 
 
