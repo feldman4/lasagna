@@ -9,7 +9,7 @@ from skimage.feature import register_translation
 import numpy as np
 import pandas as pd
 import scipy.stats
-from skimage.filters import gaussian_filter, threshold_adaptive
+from skimage.filters import gaussian, threshold_adaptive
 from skimage.morphology import disk, watershed, opening
 from skimage.util import img_as_uint
 import skimage.measure
@@ -282,7 +282,7 @@ def fill_holes(img):
 
 def apply_watershed(img, smooth=4):
     distance = ndimage.distance_transform_edt(img)
-    distance = gaussian_filter(distance, smooth)
+    distance = gaussian(distance, sigma=smooth)
     local_maxi = peak_local_max(distance, indices=False, 
                                 footprint=np.ones((3, 3)), 
                                 exclude_border=False)
@@ -304,29 +304,6 @@ def get_blobs(row, pad=(3, 3), threshold=0.01, method='dog'):
                                                max_sigma=3.,
                                                threshold=threshold)]
     return blobs_all
-
-
-def gaussian(x, sigma):
-    return np.exp(-x ** 2 / (2 * sigma ** 2))
-
-
-def double_gaussian(sigma1, sigma2):
-    return lambda x: gaussian(x, sigma1) * (1 - gaussian(x, sigma2))
-
-
-f2d = Filter2D(double_gaussian(50, 3), window_size=2048)
-
-
-def fourier_then_blob(region, pad_width=5, threshold=50):
-    I = region.intensity_image_full
-    I[I == 0] = I[I != 0].mean()
-    I_filt = f2d(I, pad_width=pad_width)
-    I_filt = I_filt[region.image]
-    # blobs = skimage.feature.blob_dog(I_filt, min_sigma=1,
-    #                                  max_sigma=3,
-    #                                  threshold=threshold)
-
-    return I_filt.max()
 
 
 spectral_order = ['empty', 'Atto488', 'Cy3', 'A594', 'Cy5', 'Atto647']

@@ -655,7 +655,7 @@ def plot_pointplot(df, df_fcs):
 
 def plot_enrichments(df, yscale='log'):
     import seaborn as sns
-    sns.set(style='whitegrid')
+    sns.set(style='whitegrid', font_scale=1.5)
     df_sgRNA = melt_sgRNA_libraries(df)
     df_sgRNA = df_sgRNA.query('library & ~(day=="d28" & gate=="none")')
     filt = ~df_sgRNA['gate'].isin(['cells', 'MC5%'])
@@ -672,7 +672,7 @@ def plot_enrichments(df, yscale='log'):
     fg.set_xticklabels(rotation=30)
     fg.axes.flat[0].set_yscale(yscale)
     fg.fig.tight_layout()
-    fg.fig.subplots_adjust(right=0.95)
+    fg.fig.subplots_adjust(right=0.9)
 
     return fg
 
