@@ -232,7 +232,7 @@ def find_nuclei(dapi, radius=15, area_min=50, area_max=500, um_per_px=1.,
 
     result = filter_by_region(nuclei, lambda r: area[0] < r.area < area[1], threshold)
     if verbose:
-        return mask, labeled, nuclei, result
+        return mask, labeled, nuclei, result, change
     return result
 
 
@@ -251,7 +251,7 @@ def _binarize(dapi, radius, min_size):
 
 
 def filter_by_region(labeled, score, threshold, intensity=None):
-    """Apply a filter to labeled image. The key function takes a single region as input and
+    """Apply a filter to labeled image. The score function takes a single region as input and
     returns a score. Regions are filtered out by score using the
     provided threshold function. If scores are boolean, scores are used as a mask and 
     threshold is disregarded. 
