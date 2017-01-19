@@ -25,8 +25,8 @@ qt_client.add(TableWidget)
 # qt_client(ClientClass)
 
 
-# workaround due to glue's bizarre import and introspection scheme
-# or maybe it allows live updates to callbacks by reloading lasagna.glueviz
+# placeholder due to glue's bizarre import and introspection scheme
+# allows live updates to callbacks by reloading lasagna.glueviz
 
 class Fiji(CustomViewer):
     name = 'Fiji Viewer'

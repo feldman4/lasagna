@@ -622,6 +622,10 @@ def show_IJ(data, title='image', imp=None, check_cache=False, **kwargs):
     check the file cache using a hash of metadata and sparsely sampled pixels, and only 
     export if not found in cache.
     """
+    
+    if not isinstance(data, np.ndarray):
+        data = np.array(data) # for pandas and xarray, could use data.values
+
     # have we done this before?
     skip = min(100, data.size)
     key = hash(str(kwargs)) + \

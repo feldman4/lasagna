@@ -15,6 +15,7 @@ display_ranges = ((500, 50000),
                   (500, 3000),
                   (500, 3000))
 
+DO_index = [0, 2, 4]
 DO_slices = [2, 4]
 DO_thresholds = ('DO_Puro', 1000), ('DO_ActB', 500)
 
@@ -26,7 +27,7 @@ peak_features =  {'max':  lambda r: r.max_intensity,
                   'mean': lambda r: r.mean_intensity}
 
  
-all_index= (('cycle',   ('c0-DO', 'c1-5B3', 'c2-5B1', 'c3-DO', 'c4-5BX'))
+all_index= (('cycle',   ('c0-DO', 'c1-5B3'))
            ,('channel', ('DAPI', 'FITC', 'Cy3', 'TxRed', 'Cy5')))
 
 
@@ -107,7 +108,7 @@ def paths():
     return df
 
 
-def make_filename(dataset, mag, well, tag, cycle=None):
+def make_filename(dataset, mag, well, tag, cycle=None, date=None):
     if cycle:
         filename = '%s_%s_%s.%s.tif' % (mag, cycle, well, tag)
     else:
@@ -115,10 +116,11 @@ def make_filename(dataset, mag, well, tag, cycle=None):
     return os.path.join(dataset, filename)
 
 def crop(data):
+    print '96W-G072 needs extra cropping'
     return data[..., 30:-30, 30:-30]
     
 def do_alignment(df_files):
-    """Aligns 20161203_96W-G073 data. DO and sequencing cycles are aligned using DAPI.
+    """Aligns 20161201_96W-G073 data. DO and sequencing cycle are aligned using DAPI.
     Within each sequencing cycle, all channels except DAPI are aligned to FITC.
     """
 
@@ -133,11 +135,11 @@ def do_alignment(df_files):
                 data2[DO_index] = data_
                 data += [data2]
             elif '5B' in f or '3B' in f:
-                # register sequencing channels to FITC
-                # data_reg = data_.copy()
+                # register sequencing channels to FITC, sometimes off by 1 pixel
+                data_reg = data_.copy()
                 # data_reg[data_reg > 2500] = 2500
-                offsets = [[0, 0]] + [o.astype(int) for o in register_images(data_[1:])]
-                if max([a for b in offsets for a in b])**2 < 100: 
+                offsets = [[0, 0]] + [o.astype(int) for o in register_images(data_reg[1:])]
+                if max([a for b in offsets for a in b])**2 > 100: 
                     print 'weird channel offset', offsets, 'in', f
                 data_ = [lasagna.io.offset(d, o) for d, o in zip(data_, offsets)]
                 data += [np.array(data_)]
@@ -150,12 +152,28 @@ def do_alignment(df_files):
         data = np.array(data)
 
         # register channels
-        data = data
+        offsets = register_images([data[0][2], data[1][1]])
+        data = [lasagna.io.offset(d, o.astype(int)) for d, o in zip(data, offsets)]
+        data = np.array(data)
+
         dataset, mag, well = df_.iloc[0][['dataset', 'mag', 'well']]
         f = make_filename(dataset, mag, well, 'aligned')
         save(f, crop(data), luts=luts, display_ranges=display_ranges)
         print well, f
         lasagna.io._get_stack._reset()
+        
+
+def do_peak_detection():
+    df = paths()
+    for f in df.query('tag=="aligned"')['file']:
+        aligned = read(f)
+        peaks = pipeline.find_peaks(aligned)
+        f2 = f.replace('aligned', 'aligned.peaks')
+        if f != f2:
+            save(f2, peaks, luts=luts, compress=1)
+            print f
+        else:
+            print 'wtf',
 
 
 def peak_to_region(peak, threshold, n=5):

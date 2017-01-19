@@ -33,6 +33,9 @@ default_name_map = (
     (('barcode y', '', ''), 'barcode y'),
     (('positive', '', ''), 'positive'),
     (('signal', '', ''), 'signal'),
+    (('x', '', ''), 'x'),
+    (('y', '', ''), 'y'),
+    (('file', '', ''), 'file')
 )
 
 
@@ -52,7 +55,8 @@ class FijiViewer(object):
 
     @staticmethod
     def plot_data(self, axes, source, y, contours, bounds):
-        """
+        """ I think this gets called first to set up the plot. Then plot_subset
+        is called for each active subset. What happens when subset is unticked?
         :param self:
         :param axes:
         :param source:
@@ -67,6 +71,7 @@ class FijiViewer(object):
 
         # can recolor these as necessary
         bounds = bounds.categories[bounds.astype(int)]
+        # uses (x,y) in bounds to center contours
         self.contours = np.array([x + y[:2] for x, y in zip(contours.id._unhashable, bounds)])
 
         self.files = source.categories[source.astype(int)]
@@ -75,6 +80,7 @@ class FijiViewer(object):
         if self.imp.getOverlay():
             self.imp.getOverlay().setStrokeColor(j.java.awt.Color.GRAY)
 
+        # shouldn't this happen in setup?
         # make a key listener for selection events
         j.add_key_typed(j.make_selection_listener(update_selection, self,
                                                   lasagna.config.queue_appender, key='`'), self.imp)
@@ -283,12 +289,21 @@ def grid_view(files, bounds, padding=40):
 
     arr = []
     for filename, bounds_ in zip(files, bounds):
-        I = read_stack(filename, memmap=True)
+        I = read_stack(filename, memmap=False) # some memory issue right now
         I_cell = subimage(I, bounds_, pad=padding)
         arr.append(I_cell.copy())
 
     return pile(arr)
 
+
+def map_column_names(c):
+    name_map = dict(default_name_map)
+    if c in name_map:
+        return name_map[c]
+    if isinstance(c, tuple) and len(c) > 1:
+        if all(x == '' for x in c[1:]):
+            return c[0] # column names like this result from pivot_table
+    return str(c)
 
 def pandas_to_glue(df, label='data', name_map=default_name_map):
     """Convert dataframe to glue.core.data.Data. Glue categorical variables require hashing,
@@ -297,13 +312,9 @@ def pandas_to_glue(df, label='data', name_map=default_name_map):
 
     """
 
-    name_map = dict(name_map)
     data = Data(label=label)
     for c in df.columns:
-        if c in name_map:
-            c_name = name_map[c]
-        else:
-            c_name = str(c)
+        c_name = map_column_names(c)
         try:
             data.add_component(df[c], c_name)
         except TypeError:
@@ -324,7 +335,24 @@ def lasagna_to_glue(df, label='data', name_map=default_name_map):
     assert (data.get_component('contour'))
     assert (data.get_component('file'))
     assert (data.get_component('bounds'))
+
     return data
+
+def calculate_plate_xy(wells, x, y):
+    xr = max(x) - min(x)
+    yr = max(y) - min(y)
+    rows = 'ABCDEFGH'
+    cols = [str(n) for n in range(0,13)]
+
+    arr = []
+    for well, xc, yc in zip(wells, x, y):
+        row = rows.index(well[0])
+        col = cols.index(well[1:])
+        arr += [[xc + xr*col*1.1, yc + yr*row*1.1]]
+
+    plate_x, plate_y = zip(*arr)
+
+    return plate_x, plate_y
 
 
 def map_barcode(digits, k, spacer=0.5):

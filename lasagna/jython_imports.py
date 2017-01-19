@@ -183,6 +183,9 @@ def mouse_pressed(f):
 
 
 def add_key_typed(f, imp, re_add=True):
+    """ Removes existing KeyListeners on Canvas associated to provided ImagePlus.
+    Attaches new KeyListener with provided callback. Reattaches old KeyListeners.
+    """
     class KL(java.awt.event.KeyAdapter):
         def keyTyped(self, event):
             pass
@@ -231,6 +234,9 @@ def jython_import(head, executor):
 
 
 def make_selection_listener(update_selection, viewer, queue_append, key='u'):
+    """ Called from FijiViewer setup. Creates a callback to be attached to 
+    KeyListener (?) on ImagePlus (?). The callback is executed in CPython.
+    """
     def selection_listener(event):
         if event.getKeyChar().lower() == key:
             imp = event.getSource().getImage()

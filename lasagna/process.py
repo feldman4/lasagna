@@ -282,7 +282,8 @@ def fill_holes(img):
 
 def apply_watershed(img, smooth=4):
     distance = ndimage.distance_transform_edt(img)
-    distance = gaussian(distance, sigma=smooth)
+    if smooth > 0:
+        distance = gaussian(distance, sigma=smooth)
     local_maxi = peak_local_max(distance, indices=False, 
                                 footprint=np.ones((3, 3)), 
                                 exclude_border=False)
