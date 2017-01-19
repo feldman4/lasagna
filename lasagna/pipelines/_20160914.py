@@ -15,7 +15,7 @@ display_ranges = ((500, 20000),
                   (500, 6000),
                   (500, 6000))
 
-DO_slices = [0, 2, 4]
+DO_slices = [2, 4]
 DO_thresholds = ('DO_Puro', 1000), ('DO_ActB', 500)
 
 
@@ -29,38 +29,41 @@ def do_alignment(df_files):
     """Aligns data. DO and sequencing cycles are aligned using DAPI.
     Within each sequencing cycle, all channels except DAPI are aligned to FITC.
     """ 
-
+    DO_index = [0] + DO_slices # include DAPI
+    bases = 'base2_1', 'base2_common_1', 'base3_1', 'base4_1'
+    index_fwd = [2, 1, 3, 4]
+    index_rev = [0, 1, 2, 3]
     for well, df_ in df_files.groupby('well'):
         files = df_.sort_values('cycle')['file']
         data = []
         for f in files:
+            if not any(b in f for b in bases + ('DO',)):
+                raise NotImplementedError('file name not recognized: ' + f)
             data_ = read(f)
             if 'DO' in f:
+                # fill in blanks
                 shape = 5, data_.shape[1], data_.shape[2]
                 data2 = np.zeros(shape, np.uint16)
-                data2[DO_slices] = data_
-                data += [data2]
-            elif 'base2_1' in f or 'base2_common_1' or 'base3_1' in f or 'base4_1' in f:
-                # register sequencing channels to FITC
-                # data_reg = data_.copy()
-                # data_reg[data_reg > 2500] = 2500
-                offsets = [[0, 0]] + [o.astype(int) for o in register_images(data_[1:], window=[100,100])]
-                for i, (x,y) in enumerate(offsets):
-                    if x**2 + y**2 > 30:
-                        print 'weird channel offset', (i, (x,y)), 'in', f
-                        offsets[i] = [0, 0]
-                data_ = [lasagna.io.offset(d, o) for d, o in zip(data_, offsets)]
-                data += [np.array(data_)]
+                data2[DO_index] = data_
+                data_ = data2
+            data += [data_]
+        
         assert len(set([d.shape for d in data])) == 1 # all data for this well is the same shape
-        data = np.array(data)
+        data = np.array(data) 
 
         # register DAPI
-        offsets = register_images([d[0] for d in data])
-        data = [lasagna.io.offset(d, o.astype(int)) for d, o in zip(data, offsets)]
-        data = np.array(data)
+        offsets = register_images(data[:,0])
+        print 'DAPI offsets:', offsets
+        data = np.array([lasagna.io.offset(d, o.astype(int)) for d, o in zip(data, offsets)])
+        
+        # spectral alignment to FITC, susceptible to crap in images
+        if data.shape[0] > 1:
+            data = data.transpose([1,0,2,3])
+            offsets = [np.array([0, 0])] + register_images(data[1:,1], window=[100, 100])
+            print 'channel offsets:', offsets
+            data = np.array([lasagna.io.offset(d, o.astype(int)) for d, o in zip(data, offsets)])
+            data = data.transpose([1,0,2,3])
 
-        # register channels
-        data = data
         dataset, mag, well = df_.iloc[0][['dataset', 'mag', 'well']]
         f = make_filename(dataset, mag, well, 'aligned')
         save(f, crop(data), luts=luts, display_ranges=display_ranges)
@@ -94,3 +97,5 @@ def find_nuclei_fast(dapi, smooth=0):
     t = skimage.filters.threshold_li(dapi)
     w = lasagna.process.apply_watershed(dapi > t, smooth=smooth)
     return w
+
+

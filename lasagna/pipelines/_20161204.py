@@ -186,10 +186,12 @@ def peak_to_region(peak, threshold, n=5):
     return labeled
 
 
-def get_features(data, peaks):
-    """ Uses peaks from DO only
+def get_features(data, peaks, DO_thresholds=DO_thresholds):
+    """ Uses peaks from DO only. 
+    peaks: C x X x Y
+    DO_thresholds: ((name, val),) * C
     """
-    DO_masks = peaks_to_DO_masks(peaks)
+    DO_masks = peaks_to_DO_masks(peaks, DO_thresholds)
 
     arr = []
     # loop over peak sources
@@ -204,8 +206,7 @@ def get_features(data, peaks):
     return pd.concat(arr)
 
 
-def peaks_to_DO_masks(peaks):
-    peaks = peaks[0, DO_slices]
+def peaks_to_DO_masks(peaks, DO_thresholds):
     DO_regions = {}
     for p, (s, t) in zip(peaks, DO_thresholds):
         DO_regions[s] = peak_to_region(p, t)
