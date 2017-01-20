@@ -92,10 +92,14 @@ def make_filename(dataset, mag, well, tag, cycle=None):
     return os.path.join(dataset, filename)
 
 
-
 def find_nuclei_fast(dapi, smooth=0):
     t = skimage.filters.threshold_li(dapi)
     w = lasagna.process.apply_watershed(dapi > t, smooth=smooth)
     return w
 
+
+def fix_cycle_labels(df):
+    """Replace labels from `all_index` with labels from experiment sheet.
+    """
+    pass
 

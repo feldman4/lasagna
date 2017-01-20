@@ -217,7 +217,7 @@ def tidy_to_long(df, values, extra_values=None):
     """ For viewing in glue
     """
     # values = ['max', 'min', '20p']
-    # object_values = ['well', 'source', 'label']
+    # extra_values = ['well', 'source', 'label']
     columns = ['channel', 'cycle']
     index = ['file', 'source', 'label']
 
@@ -226,6 +226,8 @@ def tidy_to_long(df, values, extra_values=None):
                values=values, index=index)
 
     object_values = ['x', 'y', 'bounds', 'contour', 'well']
+    if extra_values:
+        object_values += extra_values
 
     df2 = df.drop_duplicates(index).set_index(index)
     for col in object_values:
