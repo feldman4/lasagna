@@ -38,8 +38,10 @@ def get_appender(queue):
     return appender
     
 queue = []
-thread = lasagna.utils.launch_queue(queue)
+queue_log = []
+thread = lasagna.utils.launch_queue(queue, queue_log)
 queue_appender = get_appender(queue)
+
 
 
 def load_sheets():

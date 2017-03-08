@@ -564,7 +564,7 @@ def cells_to_barcodes(ind_vars_table, cloning=None):
     ind_vars_table['barcodes'] = [tuple(x.split(', ')) for x in barcodes]
 
 
-def launch_queue(queue):
+def launch_queue(queue, log=None):
     import threading
 
     def evaluate(q):
@@ -580,11 +580,10 @@ def launch_queue(queue):
         while True:
             time.sleep(0.1)
             if len(q):
-                if q is None:
-                    break
-                else:
-                    f, (args, kwargs) = q.pop()
-                    f(*args, **kwargs)
+                f, (args, kwargs) = q.pop()
+                f(*args, **kwargs)
+                if log is not None:
+                    log.append([f, (args, kwargs)])
 
     t = threading.Thread(target=evaluate, args=(queue,))
     t.daemon = True

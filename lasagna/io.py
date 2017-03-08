@@ -660,7 +660,7 @@ def show_IJ(data, title='image', imp=None, check_cache=False, **kwargs):
                 
         else:
             imp.setImage(new_imp)
-            imp.updateAndRepaintWindow()
+            imp.updateAndRepaintWindow() # TODO: sometimes this doesn't redraw. flipping Z frame manually fixes it.
             imp.setTitle(title)
             new_imp.close()
             return imp

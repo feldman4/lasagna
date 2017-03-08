@@ -43,9 +43,6 @@ class FijiViewer(object):
     @staticmethod
     def setup(self, axes):
         """Creates ImagePlus tied to this viewer.
-        :param self:
-        :param axes:
-        :return:
         """
         if lasagna.config.j is None:
             print 'connecting to Fiji via rpyc...'
@@ -57,13 +54,6 @@ class FijiViewer(object):
     def plot_data(self, axes, source, y, contours, bounds):
         """ I think this gets called first to set up the plot. Then plot_subset
         is called for each active subset. What happens when subset is unticked?
-        :param self:
-        :param axes:
-        :param source:
-        :param y:
-        :param contours:
-        :param bounds:
-        :return:
         """
         j = lasagna.config.j
         if y.size:
@@ -83,15 +73,17 @@ class FijiViewer(object):
         # shouldn't this happen in setup?
         # make a key listener for selection events
         j.add_key_typed(j.make_selection_listener(update_selection, self,
-                                                  lasagna.config.queue_appender, key='`'), self.imp)
+                                                  lasagna.config.queue_appender, '`'), self.imp)
 
     @staticmethod
     def plot_subset(self, axes, source, y, contours, style):
+        """This is called once (?) for each active layer. 
+        """
         j = lasagna.config.j
-        lasagna.config.self = self
+        lasagna.config.self = self # for debugging
 
         # decide on a file
-        if not source.size:
+        if not source.size:  
             return
 
         # take first selected file, only update display if changed
@@ -101,21 +93,16 @@ class FijiViewer(object):
         att_index = np.where(self.files == file_to_show)
         if file_to_show != self.displayed_file:
             data = lasagna.io.read_stack(file_to_show)
-            self.imp = lasagna.io.show_IJ(data, imp=self.imp,
-                                             luts=luts, display_ranges=display_ranges)
+            self.imp = lasagna.io.show_IJ(data, imp=self.imp, title=file_to_show,
+                                             luts=luts, display_ranges=display_ranges, check_cache=False)
 
             self.displayed_file = file_to_show
 
             # overlay all contours for the new file
-            # all_contours = self.contours[att_index]
-            # packed = [(1 + contour).T.tolist() for contour in all_contours]
-            packed = lasagna.utils.pack_contours(self.contours[att_index])
-            self.packed = packed
-            j.overlay_contours(packed, imp=self.imp)
+            self.packed = lasagna.utils.pack_contours(self.contours[att_index])
+            j.overlay_contours(self.packed, imp=self.imp)
             self.imp.getOverlay().setStrokeColor(default_color())
-        # lasagna.config.j.ij.IJ.log('changed to %s' % file_to_show)
 
-        # lasagna.config.j.ij.IJ.log('displayed %s' % str(style.parent))
         overlay = self.imp.getOverlay()
         color = j.java.awt.Color.decode(style.color)
         # only show contours that apply to this file
@@ -128,20 +115,19 @@ class FijiViewer(object):
         # reset contour when mpl artist removed
         if not y.size:
             artist = axes.scatter([1], [1])
-        # lasagna.config.j.ij.IJ.log('y was empty %s' % style.parent.label)
         else:
             artist = axes.scatter(source, y, s=100, c=style.color, marker='.', alpha=0.5)
-        rois = np.intersect1d(contours, att_index)
+        
         rois = np.where(np.in1d(att_index, contours))[0]
 
         def do_first(g, imp=self.imp, rois=rois, style=style):
+            """Glue removes layers by calling artist.remove. We need to add a callback to
+            reset the ROIs in ImageJ.
+            """
             def wrapped(*args, **kwargs):
                 # if overlay is gone (new file loaded), skip
                 if imp.getOverlay():
-                    lasagna.config.rois = rois
-                    j.set_overlay_contours_color(rois,
-                                                 imp, default_color())
-                # lasagna.config.j.ij.IJ.log('removed %d rois from %s' % (len(rois), style.parent.label))
+                    j.set_overlay_contours_color(rois, imp, default_color())
                 return g(*args, **kwargs)
 
             return wrapped
@@ -150,17 +136,15 @@ class FijiViewer(object):
 
     @staticmethod
     def make_selector(self, roi, source, y):
-        from glue.core.subset import RoiSubsetState
+        """Selections coming from ImageJ correspond to a rectangle in x and y.
+        Could propagate more complex selection criteria from image (e.g.,
+        magic wand for nearest neighbors on barcode simplex)
+        """
         state = RoiSubsetState()
         state.roi = roi
-        # selections on image will always be along x and y axes
-        # could imagine propagating more complex selection criteria from image (e.g.,
-        # magic wand for nearest neighbors on barcode simplex)
         state.xatt = source.id
         state.yatt = y.id
         return state
-
-        # update selection, bypassing callback
 
 
 class FijiGridViewer(object):
@@ -187,7 +171,7 @@ class FijiGridViewer(object):
         j = lasagna.config.j
         artists = lasagna.config.artists = self.widget.layers
         this_layer = lasagna.config.this_layer = style.parent
-
+ 
         if check_artist(artists, this_layer):
 
             lasagna.config.sort_by = sort_by
@@ -240,10 +224,10 @@ class FijiGridViewer(object):
 
 
 def update_selection(selection, viewer):
-    """Assumes first dataset contains 'x' and 'y' components.
+    """Called after an ImageJ selection keypress. Assumes first dataset contains the 
+    'x' and 'y' components. Builds a Glue SubsetState and applies it using Glue's current settings.
 	Selection consists of (xmin, xmax, ymin, ymax)
 	"""
-
     xmin, xmax, ymin, ymax = selection
     roi = RectangularROI(xmin=xmin, xmax=xmax, ymin=ymin, ymax=ymax)
     xatt = lasagna.config.app.data_collection[0].data.find_component_id('x')
@@ -265,23 +249,7 @@ def update_selection(selection, viewer):
         data_collection.new_subset_group(label=new_label, subset_state=subset_state)
     else:
         edit_mode = EditSubsetMode()
-        lasagna.config.self.subset_state=subset_state
         edit_mode.update(data_collection, subset_state)
-
-
-def make_selection_listener(viewer, key='u'):
-    def selection_listener(event):
-        if event.getKeyChar().lower() == key:
-            imp = event.getSource().getImage()
-            roi = imp.getRoi()
-            if roi:
-                if roi.getTypeAsString() == 'Rectangle':
-                    rect = roi.getBounds()
-                    selection = (rect.getMinX(), rect.getMaxX(),
-                                 rect.getMinY(), rect.getMaxY())
-                    update_selection(selection, viewer)
-
-    return selection_listener
 
 
 def grid_view(files, bounds, padding=40):
@@ -296,14 +264,17 @@ def grid_view(files, bounds, padding=40):
     return pile(arr)
 
 
-def map_column_names(c):
-    name_map = dict(default_name_map)
-    if c in name_map:
-        return name_map[c]
-    if isinstance(c, tuple) and len(c) > 1:
-        if all(x == '' for x in c[1:]):
-            return c[0] # column names like this result from pivot_table
-    return str(c)
+def lasagna_to_glue(df, label='data', name_map=default_name_map):
+
+    data = pandas_to_glue(df, label='data', name_map=default_name_map)
+    assert (data.get_component('x'))
+    assert (data.get_component('y'))
+    assert (data.get_component('contour'))
+    assert (data.get_component('file'))
+    assert (data.get_component('bounds'))
+
+    return data
+
 
 def pandas_to_glue(df, label='data', name_map=default_name_map):
     """Convert dataframe to glue.core.data.Data. Glue categorical variables require hashing,
@@ -318,7 +289,7 @@ def pandas_to_glue(df, label='data', name_map=default_name_map):
         try:
             data.add_component(df[c], c_name)
         except TypeError:
-            # some fucking pd.factorize error with int list input to CategoricalComponent
+            # pd.factorize error with int list input to CategoricalComponent
             r = ['%09d' % i for i in range(len(df[c]))]
             cc = CategoricalComponent(r)
             c_id = ComponentID(c_name)
@@ -327,16 +298,17 @@ def pandas_to_glue(df, label='data', name_map=default_name_map):
     return data
 
 
-def lasagna_to_glue(df, label='data', name_map=default_name_map):
+def map_column_names(c):
+    """ Helper for pandas_to_glue
+    """
+    name_map = dict(default_name_map)
+    if c in name_map:
+        return name_map[c]
+    if isinstance(c, tuple) and len(c) > 1:
+        if all(x == '' for x in c[1:]):
+            return c[0] # column names like this result from pivot_table
+    return str(c)
 
-    data = pandas_to_glue(df, label='data', name_map=default_name_map)
-    assert (data.get_component('x'))
-    assert (data.get_component('y'))
-    assert (data.get_component('contour'))
-    assert (data.get_component('file'))
-    assert (data.get_component('bounds'))
-
-    return data
 
 def calculate_plate_xy(wells, x, y):
     xr = max(x) - min(x)
@@ -356,6 +328,8 @@ def calculate_plate_xy(wells, x, y):
 
 
 def map_barcode(digits, k, spacer=0.5):
+    """Make a 2D projection of a barcode consisting of integers in [0, k).
+    """
     flag = False
     if len(digits) % 2:
         digits = list(digits) + [0]
@@ -384,10 +358,6 @@ def check_artist(artists, this_layer):
 
     # 1. we are redrawing the first visible layer only
     # 2. redrawing all, this is the first visible layer (supposedly)
-    # try:
-    # 	j.ij.IJ.log('artists: %s' % artists)
-    # except TypeError:
-    # 	pass
     if active_artists:
         flag1 = this_layer == active_layers[0]
         flag2 = layers.index(this_layer) < min(layers.index(x) for x in active_layers)
@@ -404,41 +374,12 @@ def check_artist(artists, this_layer):
     return flag3 or flag2 or flag1
 
 
-# lasagna.config.style = style
-# print "---%s---" % style.parent.label
-# for ca in lasagna.config.self.widget.layers:
-
-# 	print "%s: enabled (%s) visible (%s)" % (ca.layer.label, ca.enabled, ca.visible)
-
-
-# artists = self.widget.layers
-# layers = [a.layer for a in artists]
-# # determine if this is the first layer
-# # layer currently being plotted is not visible
-# active_artists = [] # subsets, excluding currently plotted one
-# for i, a in enumerate(artists):
-# 	if a.enabled and a.visible and not isinstance(a.layer, glue.core.data.Data):
-# 		active_artists += [a]
-# print active_artists
-
-# lasagna.config.d[style.parent.label] = active_artists
-# # TODO fix the index checking
-# lasagna.config.d1[style.parent.label] = layers
-# lasagna.config.d2[style.parent.label] = style.parent
-# current_artist_position = layers.index(style.parent)
-# if all(layers.index(style.parent) < layers.index(a.layer) for a in active_artists):
-# 	lasagna.config.reset += [style.parent]~
-# 	# reset overlay
-# 	overlay = self.imp.getOverlay()
-# 	if overlay:
-# 		overlay.setStrokeColor(default_color())
-# 	print 'reset on %s' % style.parent
-# # lasagna.config.style += [style]
-
-
 def debug_trace():
+    """Did not get this to work.
+    """
     '''Set a tracepoint in the Python debugger that works with Qt'''
     from PyQt4.QtCore import pyqtRemoveInputHook
     from pdb import set_trace
     pyqtRemoveInputHook()
     set_trace()
+
