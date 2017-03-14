@@ -12,7 +12,7 @@ paths = type('', (), {})()
 paths.full = lambda s: s
 experiment = None
 
-fiji_target = '/Users/feldman/transfer/'
+fiji_target = os.path.expanduser('~/transfer/')
 
 fonts = os.path.join(home, 'resources', 'fonts')
 luts = os.path.join(home, 'resources', 'luts')
