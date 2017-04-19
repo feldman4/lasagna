@@ -5,6 +5,7 @@ from natsort import natsorted
 from collections import OrderedDict, Counter
 from itertools import product
 from glob import glob
+from functools import partial
 
 import regex as re
 

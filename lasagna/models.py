@@ -178,8 +178,6 @@ def score_matrices(M, N):
     
     return S_
 
-
-    
     
 class LinearModel(object):
     def __init__(self):

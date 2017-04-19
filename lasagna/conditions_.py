@@ -5,6 +5,8 @@ import numpy as np
 import pandas as pd
 from itertools import product
 from collections import defaultdict, OrderedDict
+import urllib2
+from lasagna.design import rc
 
 import lasagna.models
 import lasagna.config
@@ -14,6 +16,209 @@ ROW_INDICATOR = 'A'
 
 ROWS = 'ABCDEFGH'
 COLS = [str(x) for x in range(1,17)]
+
+doc_ids = {'Lasagna Supreme' : '1nF_Z5gkM6uXjA5WkBum7XpsJnpHIiWlhL4iWy3sxgZ0',
+           'Lasagna Oligos'  : '16Pn5RB0nOj_an_3ad0YUgTmWklQXNvINncs93r2rG9I'}
+
+google_csv_url = 'https://docs.google.com/spreadsheets/d/%s/gviz/tq?tqx=out:csv&sheet=%s'
+
+default_translation_table = ''.join([chr(x) for x in range(256)])
+
+default_dyes = 'Cy3', 'Cy5', 'A647', 'Tex615', 'AlexF488', 'AlexF594'
+
+
+def format_output(columns=None):
+    def f(series):
+        output = [list(s) for s in series]
+        return pd.DataFrame(output, index=series.index, columns=columns)
+    return f
+
+
+def apply_df(f, formatter=format_output(), **kwargs):
+        
+    def call(series):
+        return f(**series.to_dict())
+
+    listargs = []
+    keys = sorted(kwargs.keys())
+    for k in keys:
+        v = kwargs[k]
+        if not isinstance(v, list):
+            v = [v]
+        listargs.append(v)
+    
+    listargs = list(product(*listargs))
+    arguments = pd.DataFrame(listargs, columns=keys)
+    output = arguments.apply(call, axis=1)
+    output = formatter(output)
+    return pd.concat([arguments, output], axis=1)
+
+
+def oligo_to_nucleotides(s):
+    table = default_translation_table
+    table = table.replace('U', 'T').upper()
+    return s.translate(table, 'm+')
+
+
+def mod_to_dye(m):
+    for dye in default_dyes:
+        if dye.lower() in mod.lower():
+            return dye
+    return 'dye not in' + dyes
+
+
+def load_google_csv(sheet='Lasagna Oligos', worksheet='in situ'):
+    url = google_csv_url % (urllib2.quote(doc_ids[sheet]), urllib2.quote(worksheet))
+    return pd.read_csv(url)
+
+
+def load_in_situ_sequences():
+    # load oligos
+    # kinds = 'DO', 'Padlock', 'LNA primer'
+    rename = {'Name': 'name', 'Sequence': 'sequence', 'Kind of oligo': 'kind'}
+    cols_to_keep = 'name', 'sequence', 'kind', "5' mod.", "3' mod."
+
+    df_oligos = load_google_csv(sheet='Lasagna Oligos', worksheet='in situ')
+    df_oligos = df_oligos.rename(columns=rename)
+    df_oligos['sequence'] = df_oligos['sequence'].apply(oligo_to_nucleotides)
+    # filt = df_oligos['kind'].isin(kinds)
+    df_oligos = df_oligos.loc[:, cols_to_keep].dropna(how='all').fillna('')
+    
+    # load barcoded plasmids
+    cols_to_keep = 'name', 'sequence'
+    rename = {'oligo FWD': 'sequence'}
+    df_barcodes = load_google_csv(sheet='Lasagna Supreme', worksheet='pL43_pL44')
+    df_barcodes = df_barcodes.rename(columns=rename)
+    df_barcodes = df_barcodes.loc[:, cols_to_keep].dropna(how='all').fillna('')
+    df_barcodes['sequence'] = df_barcodes['sequence'].apply(oligo_to_nucleotides)
+
+    # load misc. padlocks
+    df_padlocks_misc = load_google_csv(sheet='Lasagna Oligos', worksheet='misc. padlocks')
+    df_padlocks_misc = df_padlocks_misc.loc[:, cols_to_keep].dropna(how='all').fillna('')
+    df_padlocks_misc['sequence'] = df_padlocks_misc['sequence'].apply(oligo_to_nucleotides)
+
+    df_seqs = pd.concat([df_oligos, df_barcodes, df_padlocks_misc]).set_index('name')
+    df_seqs = df_seqs[df_seqs.columns.sort_values(ascending=False)].fillna('')
+    return df_seqs
+
+
+def gapfill_ligate(padlock, transcript, binding_threshold=10):
+    """Returns gapfill (may be the empty string) if padlock matches
+    transcript, None otherwise. Padlock and transcript are both sense.
+    """
+    for i in range(1, len(padlock)):
+        if padlock[-i:] not in transcript:
+            i-=1
+            break
+    ix = transcript.find(padlock[-i:])
+    for j in range(1, len(padlock)):
+        if padlock[:j] not in transcript:
+            j-=1
+            break
+    jx = transcript.find(padlock[:j])
+    fillin = transcript[ix+i:jx]
+
+    if (i>binding_threshold) & (j>binding_threshold):
+        return fillin
+    else:
+        return None
+
+
+def show_signal(df_seqs, 
+                transcript_name,
+                padlock_name,
+                anchor_primer_name,
+                labeled_oligo_names,
+                verbose=False):
+
+    
+
+    if isinstance(labeled_oligo_names, str):
+        labeled_oligo_names = [labeled_oligo_names]
+
+    dyes = set()
+    for labeled_oligo_name in labeled_oligo_names:
+
+        # get sequences
+        mod_names = ["5' mod.", "3' mod."]
+        transcript    = df_seqs.loc[transcript_name, 'sequence']
+        padlock       = df_seqs.loc[padlock_name, 'sequence']
+        anchor_primer = df_seqs.loc[anchor_primer_name, 'sequence']
+        anchor_mods   = df_seqs.loc[anchor_primer_name, mod_names]
+        labeled_oligo = df_seqs.loc[labeled_oligo_name, 'sequence']
+        labeled_mods  = df_seqs.loc[labeled_oligo_name, mod_names]
+
+        gapfill, dye = show_signal_(transcript, 
+                padlock, 
+                anchor_primer,
+                anchor_mods,
+                labeled_oligo,
+                labeled_mods,
+                verbose=verbose)
+
+        dyes |= set(dye)
+
+    return gapfill, sorted(dyes)
+
+
+def show_signal_(transcript, 
+                padlock, 
+                anchor_primer,
+                anchor_mods,
+                labeled_oligo,
+                labeled_mods,
+                verbose=False):
+    """
+    Return None if there is no binding.
+    """
+    def vprint(s):
+        if verbose:
+            print s
+
+    dye = [m for m in labeled_mods if m and 'Phos' not in m]
+    
+    # do the gapfill + ligation
+    gapfill = gapfill_ligate(padlock, transcript)
+    if gapfill is None:
+        vprint('no detection')
+        return None, ''
+    vprint('gapfill added %d bases: %s' % (len(gapfill), gapfill))
+    
+    # circularize and amplify
+    # RCA product is antisense
+    RCA = padlock + gapfill + padlock[:-17]
+    
+    # hybridize anchor primer, ligate
+    # annealing combinators would be nice
+    ix = RCA.find(anchor_primer)
+    if labeled_oligo in RCA:
+        vprint('detection oligo bound %s' % labeled_oligo)
+        return gapfill, dye
+    if ix == -1:
+        vprint('anchor primer did not bind')
+        return gapfill, []
+    
+    # sequencing from anchor primer
+    # adapter has 5' phosphate
+    pattern = labeled_oligo.replace('N', '.')
+    if 'phos' in labeled_mods[0].lower():
+        if re.findall(anchor_primer + pattern, RCA):
+            return gapfill, dye
+    # anchor primer has 5' phosphate
+    if 'phos' in anchor_mods[0].lower():
+        if re.findall(pattern + anchor_primer, RCA):
+            return gapfill, dye
+
+    return gapfill, []
+
+
+def get_adapters(df_seqs, base):
+    """
+    f = partial(get_adapters, df_seqs)
+    f('5B1')
+    """
+    filt = df_seqs['kind']==base
+    return list(df_seqs[filt].index)
 
 
 def flatten_layout_row_col(x):
@@ -223,73 +428,6 @@ class Experiment(object):
 
         return pd.concat([table, results], axis=1)
         
-
-
-
-
-
-
-
-
-#
-#
-#
-#
-#
-#
-# def load_sheet(worksheet, gfile='Lasagna FISH', grid_size=(6, 6),
-#               find_conditions=True):
-#     """Find conditions demarcated in grid format from local .xls or google sheet.
-#     :param str worksheet: name of google sheet, can provide int index as well
-#     :param str file: google sheet to search in
-#     :param tuple grid_size: dimensions of sample layout (rows, columns)
-#     :return (dict[str, tuple], dict[str, list], numpy.ndarray): (wells: dict of tuples, {well: condition},
-#      conditions: OrderedDict, {variable_name: conditions},
-#      cube: N-d array representing space of conditions, integer entries indicate number of replicates)
-#     """
-#
-#
-#     wells = defaultdict(list)
-#     for (i, j) in product(range(grid_size[0]), range(grid_size[1])):
-#         well = ROWS[i] + COLS[j]
-#         for title, grid in grids.items():
-#             val = xs_values[grid][i*grid_size[1] + j]
-#             wells[well] += [val]
-#
-#
-#     wells_ = {}
-#     for well, values in wells.items():
-#         # exclude fully empty wells
-#         if all(x == '' for x in values):
-#             continue
-#
-#         tmp = []
-#         for x in values:
-#             try:
-#                 tmp += [float(x)]
-#             except ValueError:
-#                 tmp += [np.nan]
-#         wells.update({well: tmp})
-#
-#     wells = {a: [float(x) for x in b] for a, b in wells.items()
-#              if not all(x == '' for x in b)}
-#
-#     # easy out for non-standard condition indexing
-#     if not find_conditions:
-#         return wells
-#
-#     # get the named conditions for each variable
-#     conditions = extract_conditions(xs_values, grids.keys())
-#
-#     cube = np.zeros([max(x) + 1 for x in zip(*wells.values())])
-#     for coords in wells.values():
-#         cube[tuple(coords)] += 1
-#
-#     return wells, conditions, cube
-#
-
-
-
 
 def get_named_wells(wells, conditions):
     """Convert dict of wells with indexed conditions to dict with named conditions

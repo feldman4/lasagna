@@ -58,7 +58,30 @@ def add_dir(path, dir_to_add):
     return '/'.join(x[:-1] + [dir_to_add] + [x[-1]])
 
 
+def find_files(start='', include='', exclude='', depth=2):
+    # or require glob2
+    files = []
+    for d in range(depth):
+        path_str = '*/' * d + '*.tif'
+        files += glob(os.path.join(start, path_str))
 
+    def keep(f):
+        flag1 = include and not re.findall(include, f)
+        flag2 = exclude and re.findall(exclude, f)
+        return (not flag1 or flag2)
+
+    return filter(keep, files)
+
+
+def well_to_row_col(df, in_place=False, col_to_int=True):
+    if not in_place:
+        df = df.copy()
+    f = lambda s: int(s) if col_to_int else s
+
+    df['row'] = [s[0] for s in df['well']]
+    df['col'] = [f(s[1:]) for s in df['well']]
+
+    return df
 
 
 def get_row_stack(row, full=False, nuclei=False, apply_offset=False, pad=0):
@@ -349,7 +372,15 @@ default_dirs = {'raw': 'raw',
                 'calibration': 'calibration',
                 'export': 'export'}
 
-default_file_pattern = '(data)/((([0-9]*X).*round([0-9]))*.*)/(((.*_([A-Z][0-9]))-Site_([0-9]*)).ome.tif)'
+default_file_pattern = \
+        r'(?P<dataset>(?P<date>[0-9]{8}).*)[\/\\]' + \
+        r'(?P<mag>[0-9]+X).' + \
+        r'(?:(?P<cycle>[^_\.]*).*?(?:.*MMStack)?.)?' + \
+        r'(?P<well>[A-H]([0-9]|[[01][012]))' + \
+        r'(?:\.(?P<tag>.*))*\.tif'
+
+
+default_file_pattern_old = '(data)/((([0-9]*X).*round([0-9]))*.*)/(((.*_([A-Z][0-9]))-Site_([0-9]*)).ome.tif)'
 default_file_groups = 'data', 'set', '', 'mag', 'round', 'file', 'file_well_site', 'file_well', 'well', 'site'
 default_path_formula = {'raw': '[data]/[set]/[file]',
                         'calibrated': '[data]/[set]/[file_well_site].calibrated.tif',
@@ -427,7 +458,7 @@ class Paths(object):
         for dirpath, dirnames, filenames in os.walk(self.full(self.dirs['data'])):
             self.datafiles += [os.path.join(dirpath, f) for f in filenames]
 
-    def update_table(self, file_pattern=default_file_pattern, groups=default_file_groups,
+    def update_table(self, file_pattern=default_file_pattern_old, groups=default_file_groups,
                      path_formula=default_path_formula, table_index=default_table_index):
 
         """Match pattern to find original files in dataset. For each raw file, apply patterns in
