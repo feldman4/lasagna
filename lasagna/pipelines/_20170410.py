@@ -2,7 +2,7 @@ from lasagna.imports import *
 from lasagna.process import build_feature_table, feature_table
 
 # name of lasagna folder and sheet in Lasagna FISH
-datasets = '20170305_96W-G078', '20170416_96W-G092'
+datasets = '20170410_96W-G088'
 file_pattern = lasagna.io.default_file_pattern
 channels = 'DAPI', 'FITC', 'Cy3', 'TexasRed', 'Cy5'
 luts = GRAY, CYAN, GREEN, RED, MAGENTA
@@ -111,9 +111,7 @@ def do_alignment(df_files):
 
         # all data for this well is the same shape
         assert len(set([d.shape for d in data])) == 1 
-        print [d.shape for d in data]
         data = np.array(data)
-        print data.shape
         
         # register DAPI
         offsets = register_images([d[0] for d in data])
@@ -124,7 +122,7 @@ def do_alignment(df_files):
         data = data
         dataset, mag, well = df_.iloc[0][['dataset', 'mag', 'well']]
         f = make_filename(dataset, mag, well, 'aligned')
-        print data.shape
+
         save(f, data, luts=luts, display_ranges=display_ranges)
         print well, f
         lasagna.io._get_stack._reset()
@@ -136,7 +134,7 @@ def peak_to_region(peak, threshold, n=5):
     """
     selem = np.ones((n,n))
     peak = peak.copy()
-    peak[peak<threshold] = 0
+    peak[peak<=threshold] = 0
     
     labeled = skimage.measure.label(peak)
     regions = lasagna.utils.regionprops(labeled, intensity_image=peak)
@@ -145,15 +143,17 @@ def peak_to_region(peak, threshold, n=5):
         if r.area > 1:
             labeled[labeled==r.label] = np.array([r.label] + [0]*(r.area-1))
 
+
     # dilate labels so higher intensity regions win
-    fwd = [r.max_intensity for r in regions]
-    fwd = np.argsort(np.argsort(fwd)) + 1
-    rev = np.argsort(fwd)
+    ranks = [r.max_intensity for r in regions]
+    ranks = np.argsort(np.argsort(ranks)) + 1
+    rank_to_label = np.argsort(ranks) + 1
 
-    labeled[labeled>0] = fwd
-
+    # switch to ranks for the dilation
+    labeled[labeled>0] = ranks
     labeled = skimage.morphology.dilation(labeled, selem)
-    labeled[labeled>0] = rev[labeled[labeled>0] - 1]
+    # convert pixels labeled by rank back to the original label
+    labeled[labeled>0] = rank_to_label[labeled[labeled>0] - 1]
 
     return labeled
 
@@ -177,6 +177,12 @@ def get_features(data, peaks, DO_thresholds=DO_thresholds):
         table['source'] = source
         arr += [table]
     return pd.concat(arr)
+
+
+def get_nuclear_features(dapi, nuclei):
+    features = dict(object_features)
+    features.update(peak_features)
+    return feature_table(dapi, nuclei, features)
 
 
 def peaks_to_DO_masks(peaks, DO_thresholds):
@@ -209,3 +215,16 @@ def tidy_to_long(df, values, extra_values=None):
 
     return df_long.reset_index()
 
+
+def show_DO(*args, **kwargs):
+    luts = GRAY, GREEN, MAGENTA
+    display_ranges=None
+    return show(*args, luts=luts, display_ranges=display_ranges, **kwargs)
+
+
+def show_al(*args, **kwargs):
+    global luts
+    global display_ranges
+    luts = luts
+    display_ranges=display_ranges
+    return show(*args, luts=luts, display_ranges=display_ranges, **kwargs)

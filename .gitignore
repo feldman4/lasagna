@@ -2,4 +2,4 @@
 /lasagna/resources/wolfram.txt
 *.pyc
 */*.pyc
-
+*/*$py.class

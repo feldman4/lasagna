@@ -641,7 +641,7 @@ def read_registered(path):
     translations = [[float(x) for x in pos[1:-1].split(',')] for pos in m]
     return translations
 
-GLASBEY = read_lut('glasbey')
+GLASBEY = read_lut('glasbey_inverted')
 
 hash_cache = {}
 # decorate to store hash_cache in function
