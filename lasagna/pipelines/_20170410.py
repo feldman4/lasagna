@@ -23,10 +23,10 @@ peak_features =  {'max':  lambda r: r.max_intensity,
                   'median': lambda r: np.percentile(r.intensity_image.flat[:], 50),
                   'min':  lambda r: r.min_intensity,
                   'mean': lambda r: r.mean_intensity}
-
  
 all_index= (('cycle',   ('c0-DO', 'c1-5B1'))
            ,('channel', ('DAPI', 'FITC', 'Cy3', 'TxRed', 'Cy5')))
+
 
 def paths(file_pattern=file_pattern, depth=2):
     """Finds all files in the current directory that match the file pattern.
@@ -228,3 +228,109 @@ def show_al(*args, **kwargs):
     luts = luts
     display_ranges=display_ranges
     return show(*args, luts=luts, display_ranges=display_ranges, **kwargs)
+
+
+def find_nearest(centers, points):
+    """Assign points to the nearest center. Returns (distance, assignment).
+    Uses euclidean distance.
+    """
+    distances, labels = scipy.spatial.KDTree(centers).query(points)
+    return distances, labels
+
+
+def to_ij_contour(contours, bounds):
+    """Automatically adjusts and packs the contours for viewing
+    in ImageJ.
+    """
+    contours = np.array([x + y[:2] for x,y in zip(contours, bounds)])
+    packed = lasagna.utils.pack_contours(contours)
+    return packed
+
+
+def mark_blobs_by_nuclei(df_blobs, df_nuclei):
+    """Adds nucleus_distance and nucleus_label columns to df_blobs. Blob to nuclei
+    distances are calculated using centroids.
+    """
+    def get_xy(df, index=('label', 'well', 'source')):
+        cols = [c for c in index if c in df]
+        df = df.set_index(cols)
+        
+        df = df[~df.index.duplicated(keep='first')]
+        return df[['x', 'y']]
+
+
+    df = df_blobs
+    df_n = df_nuclei
+    arr = []
+    for well, df_ in df.groupby('well'):
+
+        nucleus_c = get_xy(df_n[df_n['well'] == well])
+        blob_c    = get_xy(df_)
+
+        distances, labels = find_nearest(nucleus_c, blob_c)
+        xs = np.array(nucleus_c.reset_index()['label'])
+
+
+        blob_c['nucleus_distance'] = distances
+        blob_c['nucleus_label'] = xs[labels]
+
+        df2 = df_.set_index(['label', 'well', 'source'])
+
+        df2['nucleus_distance'] = blob_c['nucleus_distance']
+        df2['nucleus_label']    = blob_c['nucleus_label']
+        arr += [df2.reset_index()]
+
+    df = pd.concat(arr)
+    return df
+
+
+def check_max(row):
+    from lasagna.glueviz import grid_view
+    
+    grid = grid_view([row['file']], [row['bounds']], padding=0)
+    
+    d = dict(all_index)
+    channel_ix = d['channel'].index(row['channel'])
+    cycle_ix   = d['cycle'].index(row['cycle'])
+    
+    data = grid[0, cycle_ix, channel_ix]
+    
+    mask = row['mask'].mask
+    
+    assert data[mask].max() == row['max']
+
+
+class ImageGrid(object):
+    default_title = 'ImageGrid'
+    def __init__(self, grid, mask, title=default_title):
+        """
+        ig = ImageGrid(df['file'][::20], df3['bounds'][::20])
+        ig.get_selected()
+        """
+        self.imp = show_al(montage(grid), title=title)
+        self.grid, self.grid_mask = grid, mask
+
+
+    @staticmethod
+    def from_files_bounds(files, bounds, padding=0, title=default_title):
+        from lasagna.glueviz import grid_view
+
+        grid, mask = grid_view(files, bounds, padding=padding, with_mask=True)
+        return ImageGrid(grid, mask, title=title)
+        
+    def get_selected(self):
+        """Gets indices corresponding to the current PointROI.
+        """
+        x, y = self.get_point_xy(self.imp)
+        selected = montage(self.grid_mask)[y,x]
+        selected = selected.astype(int) - 1
+        return selected
+
+     
+    @staticmethod
+    def get_point_xy(imp):
+        poly = imp.roi.getPolygon()
+        x = list(poly.xpoints)
+        y = list(poly.ypoints)
+        return x, y
+

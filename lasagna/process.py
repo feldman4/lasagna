@@ -33,7 +33,8 @@ default_object_features = {
     'x':        lambda region: region.centroid[1],
     'bounds':   lambda region: region.bbox,
     'contour':  lambda region: binary_contours(region.image, fix=True, labeled=False)[0],
-    'label':    lambda region: np.median(region.intensity_image[region.intensity_image > 0]),
+    # 'label':    lambda region: np.median(region.intensity_image[region.intensity_image > 0]),
+    'label':    lambda region: region.label,
     'mask':     lambda region: Mask(region.image),
     'hash':     lambda region: hex(random.getrandbits(128))
 }
