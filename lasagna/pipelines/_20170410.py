@@ -326,7 +326,7 @@ class ImageGrid(object):
         x, y = self.get_point_xy(self.imp)
         selected = montage(self.grid_mask)[y, x]
         
-        return [self.labels[i - 1] for i in selected]
+        return [self.labels[i - 1] if i != 0 else -1 for i in selected ]
 
      
     @staticmethod
@@ -335,7 +335,7 @@ class ImageGrid(object):
         x = list(poly.xpoints)
         y = list(poly.ypoints)
         return x, y
-        
+
 
 def overlay_df(imp, df, awt_color=None, overlay=None):
     """Add colored contours to overlay. Need to keep stuff around. Would be 
