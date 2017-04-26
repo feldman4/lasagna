@@ -310,9 +310,10 @@ class ImageGrid(object):
         self.imp = show_al(montage(grid), title=title)
         self.grid, self.grid_mask = grid, mask
 
+        self.labels = [x - 1 for x in range(mask.max() + 1)]
 
     @staticmethod
-    def from_files_bounds(files, bounds, padding=0, title=default_title):
+    def from_files_bounds(files, bounds, title=default_title, padding=0):
         from lasagna.glueviz import grid_view
 
         grid, mask = grid_view(files, bounds, padding=padding, with_mask=True)
@@ -321,10 +322,11 @@ class ImageGrid(object):
     def get_selected(self):
         """Gets indices corresponding to the current PointROI.
         """
+        self.labels = list(self.labels) # auto-convert 
         x, y = self.get_point_xy(self.imp)
-        selected = montage(self.grid_mask)[y,x]
-        selected = selected.astype(int) - 1
-        return selected
+        selected = montage(self.grid_mask)[y, x]
+        
+        return [self.labels[i - 1] for i in selected]
 
      
     @staticmethod
@@ -333,4 +335,28 @@ class ImageGrid(object):
         x = list(poly.xpoints)
         y = list(poly.ypoints)
         return x, y
+        
 
+def overlay_df(imp, df, awt_color=None, overlay=None):
+    """Add colored contours to overlay. Need to keep stuff around. Would be 
+    more convenient to wrap imp in a python class with added functionality.
+    """
+    assert lasagna.config.j is not None
+    j = lasagna.config.j
+
+    if awt_color is None:
+        awt_color = j.java.awt.Color.GREEN
+
+    packed = to_ij_contour(df['contour'], df['bounds'])
+    
+    if overlay:
+        n = len(overlay.toArray())
+        overlay = j.overlay_contours(packed, overlay=overlay)
+        rois = range(n, n + len(df))
+        j.set_overlay_contours_color(rois, imp, awt_color)
+    else:
+        overlay = j.overlay_contours(packed, overlay=overlay)
+        # sets color for everything
+        overlay.strokeColor = awt_color
+    imp.updateAndDraw()
+    return overlay
