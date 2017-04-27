@@ -405,3 +405,18 @@ def get_masked_dapi(row):
     dapi = grid[0, 0, 0]
     dapi[~row['mask'].mask] = 0
     return dapi
+
+
+class FixedSeed:
+    """from stack overflow
+    """
+    def __init__(self, seed):
+        self.seed = seed
+        self.state = None
+
+    def __enter__(self):
+        self.state = np.random.get_state()
+        np.random.seed(self.seed)
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        np.random.set_state(self.state)
