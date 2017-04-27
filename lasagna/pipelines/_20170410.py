@@ -258,7 +258,6 @@ def mark_blobs_by_nuclei(df_blobs, df_nuclei):
         df = df[~df.index.duplicated(keep='first')]
         return df[['x', 'y']]
 
-
     df = df_blobs
     df_n = df_nuclei
     arr = []
@@ -314,10 +313,16 @@ class ImageGrid(object):
 
     @staticmethod
     def from_files_bounds(files, bounds, title=default_title, padding=0):
-        from lasagna.glueviz import grid_view
-
         grid, mask = grid_view(files, bounds, padding=padding, with_mask=True)
         return ImageGrid(grid, mask, title=title)
+
+    @staticmethod
+    def from_dataframe(df, title=default_title, padding=0):
+        files = df['file']
+        bounds = df['bounds']
+        ig = ImageGrid.from_files_bounds(files, bounds, title=title, padding=padding)
+        ig.labels = df['label']
+        return ig
         
     def get_selected(self):
         """Gets indices corresponding to the current PointROI.
@@ -328,6 +333,16 @@ class ImageGrid(object):
         
         return [self.labels[i - 1] if i != 0 else -1 for i in selected ]
 
+    def __iter__(self):
+        for i in range(len(self.grid)):
+            yield self.__getitem__(i)
+
+    def __getitem__(self, key):
+        """Returns image without padding.
+        """
+        grid, mask = self.grid[key], self.grid_mask[key]
+        i, j = [max(x) for x in np.where(mask)]
+        return grid[..., :i+1, :j+1]
      
     @staticmethod
     def get_point_xy(imp):
@@ -360,3 +375,33 @@ def overlay_df(imp, df, awt_color=None, overlay=None):
         overlay.strokeColor = awt_color
     imp.updateAndDraw()
     return overlay
+
+
+def textures(image):
+    """A few off-the-shelf features.
+    """
+    gcm = skimage.feature.greycomatrix
+    gcp = skimage.feature.greycoprops
+    image = skimage.img_as_ubyte(image)
+    
+    # make the co-occurence matrix
+    P = gcm(image, [1], [0, np.pi/4, np.pi/2, 3*np.pi/4]
+            , normed=True, symmetric=True)
+    
+    # derive the chosen features
+    features = 'dissimilarity', 'homogeneity', 'contrast'
+    x = pd.Series([gcp(P, f)[0, 0] for f in features], index=features)
+    x['max'] = image.max()
+    x['mean'] = image[image>0].mean()
+    x['area'] = (image>0).sum()
+    
+    return x
+
+def get_masked_dapi(row):
+    """Convenience.
+    """
+    from lasagna.glueviz import grid_view
+    grid = grid_view([row['file']], [row['bounds']],padding=0)
+    dapi = grid[0, 0, 0]
+    dapi[~row['mask'].mask] = 0
+    return dapi
