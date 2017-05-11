@@ -45,9 +45,10 @@ if __name__ == '__main__':
     import regex as re
 
     patterns = {'sgRNA': "ACCG(.{19,20})GTTT",
+                'sgRNA26': "ACCG(.{25,27})GTTT",
                 's1_UMI': 'CCGGT(.{19,20})TTCCCA',
                 's1_UMI_rc': 'TGGGAA(.{19,20})ACCGG',
-                'TM10': 'AGAAAT(.{32,70})GTACA'}
+                'TM10': 'AGAAAT(.{32,90})GTACA'}
 
     if args.database:
         from Levenshtein import distance
@@ -71,6 +72,7 @@ if __name__ == '__main__':
                 if match:
                     if flag:
                         print name
+                        flag = False
                     line = name, match[0], f
                     if args.database:
 

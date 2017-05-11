@@ -1,4 +1,5 @@
 import functools
+import regex as re
 import numpy as np
 import pandas as pd
 
@@ -735,3 +736,19 @@ def import_facs(files, drop=lambda s: '-A$' in s):
         arr += [df]
     df = pd.concat(arr)
     return df.drop([c for c in df.columns if drop(c)], axis=1)
+
+def to_row_col(s):
+    pat = '([A-Z])([0-9]+)'
+    match = re.findall(pat, s)
+    if match:
+        row, col = match[0][0], int(match[0][1])
+        return row, col
+    else:
+        raise ValueError('%s not a well' % s)
+
+
+def pivot_96w(wells, values):
+    rows = [(v,) + to_row_col(w) for w, v in zip(wells, values)]
+    df = (pd.DataFrame(rows, columns=['value', 'row', 'column'])
+          .pivot(values='value', index='row', columns='column'))
+    return df
