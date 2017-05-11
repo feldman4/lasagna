@@ -364,6 +364,29 @@ def offset(stack, offsets):
     return stack
 
 
+def grid_view(files, bounds, padding=40, with_mask=False):
+    """Mask is 1-indexed. Zero values indicate background.
+    """
+    from lasagna.io import subimage, pile, read_stack
+
+    arr = []
+    for filename, bounds_ in zip(files, bounds):
+        I = read_stack(filename, memmap=False) # some memory issue right now
+        I_cell = subimage(I, bounds_, pad=padding)
+        arr.append(I_cell.copy())
+
+    if with_mask:
+        arr_m = []
+        for i, (i0, j0, i1, j1) in enumerate(bounds):
+            shape = i1 - i0 + padding, j1 - j0 + padding
+            img = np.zeros(shape, dtype=np.uint16) + i + 1
+            arr_m += [img]
+        return pile(arr), pile(arr_m)
+
+    return pile(arr)
+
+
+
 default_dirs = {'raw': 'raw',
                 'data': 'data',
                 'analysis': 'analysis',
