@@ -35,6 +35,7 @@ if sys.subversion[0] == 'Jython':
     import ij.gui.PolygonRoi
     import ij.gui.TextRoi
     import ij.gui.Overlay
+    import ij.gui
     import ij.ImagePlus
     import ij.ImageStack
     import ij.process.ImageProcessor

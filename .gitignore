@@ -3,3 +3,6 @@
 *.pyc
 */*.pyc
 */*$py.class
+.DS_Store
+.idea/*
+*.ipynb

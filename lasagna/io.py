@@ -36,7 +36,7 @@ MAGENTA = tuple(range(256) + [0] * 256 + range(256))
 GRAY = tuple(range(256) * 3)
 CYAN = tuple([0] * 256 + range(256) * 2)
 
-DEFAULT_LUTS = BLUE, GREEN, RED, MAGENTA, GRAY, GRAY, GRAY
+DEFAULT_LUTS = GRAY, CYAN, GREEN, RED, MAGENTA, GRAY, GRAY, GRAY
 
 DIR = {}
 
@@ -325,8 +325,9 @@ def subimage(stack, bbox, pad=0):
     :return:
     """ 
     i0, j0, i1, j1 = bbox + np.array([-pad, -pad, pad, pad])
+    print i0, j0, i1, j1
 
-    sub = np.zeros(stack.shape[:-2]+(i1-i0, j1-j0),     dtype=stack.dtype)
+    sub = np.zeros(stack.shape[:-2]+(i1-i0, j1-j0), dtype=stack.dtype)
 
     i0_, j0_ = max(i0, 0), max(j0, 0)
     i1_, j1_ = min(i1, stack.shape[-2]), min(j1, stack.shape[-1])
@@ -340,7 +341,7 @@ def subimage(stack, bbox, pad=0):
 
 
 def offset(stack, offsets):
-    """Applies offset to stack, fills with zero.
+    """Applies offset to stack, fills with zero. Only applies integer offsets.
     :param stack: N-dim array
     :param offsets: list of N offsets
     :return:
@@ -350,6 +351,9 @@ def offset(stack, offsets):
             offsets = [0] * (stack.ndim - 2) + list(offsets)
         else:
             raise IndexError("number of offsets must equal stack dimensions, or 2 (trailing dimensions)")
+
+    offsets = np.array(offsets).astype(int)
+
     n = stack.ndim
     ns = (slice(None),)
     for d, offset in enumerate(offsets):
@@ -367,7 +371,7 @@ def offset(stack, offsets):
 def grid_view(files, bounds, padding=40, with_mask=False):
     """Mask is 1-indexed. Zero values indicate background.
     """
-    from lasagna.io import subimage, pile, read_stack
+    padding = int(padding)
 
     arr = []
     for filename, bounds_ in zip(files, bounds):
@@ -735,7 +739,8 @@ def read_stack(filename, memmap=False):
         data = _get_mapped_tif(filename)
     else:
         # os.stat detects if file has been updated
-        data = _imread(filename, hash(os.stat(filename)))
+        # data = _imread(filename, hash(os.stat(filename)))
+        data = _imread(filename, 0)
         while data.shape[0] == 1:
             data = np.squeeze(data, axis=(0,))
     return data

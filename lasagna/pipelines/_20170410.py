@@ -1,6 +1,7 @@
 from lasagna.imports import *
 from lasagna.process import build_feature_table, feature_table
 
+
 # name of lasagna folder and sheet in Lasagna FISH
 datasets = '20170410_96W-G088'
 file_pattern = lasagna.io.default_file_pattern
@@ -284,7 +285,6 @@ def mark_blobs_by_nuclei(df_blobs, df_nuclei):
 
 
 def check_max(row):
-    from lasagna.glueviz import grid_view
     
     grid = grid_view([row['file']], [row['bounds']], padding=0)
     
@@ -307,12 +307,14 @@ class ImageGrid(object):
         ig.get_selected()
         """
         self.imp = show_al(montage(grid), title=title)
+        assert False
         self.grid, self.grid_mask = grid, mask
 
         self.labels = [x - 1 for x in range(mask.max() + 1)]
 
     @staticmethod
     def from_files_bounds(files, bounds, title=default_title, padding=0):
+
         grid, mask = grid_view(files, bounds, padding=padding, with_mask=True)
         return ImageGrid(grid, mask, title=title)
 
@@ -397,10 +399,11 @@ def textures(image):
     
     return x
 
+
 def get_masked_dapi(row):
     """Convenience.
     """
-    from lasagna.glueviz import grid_view
+    
     grid = grid_view([row['file']], [row['bounds']],padding=0)
     dapi = grid[0, 0, 0]
     dapi[~row['mask'].mask] = 0

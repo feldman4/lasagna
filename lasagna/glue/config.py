@@ -57,8 +57,8 @@ grid = custom_viewer('Grid Viewer',
                      contours='att(contour)',
                      bounds='att(bounds)',
                      sort_by='att',
-                     padding=50,
-                     limit=256)
+                     padding=30,
+                     limit=64)
 
 
 @grid.setup

@@ -113,7 +113,7 @@ def regionprops(*args, **kwargs):
         intensity_image = kwargs['intensity_image']
         for region in regions:
             b = region.bbox
-            region.intensity_image_full = intensity_image[b[0]:b[2], b[1]:b[3]]
+            region.intensity_image_full = intensity_image[..., b[0]:b[2], b[1]:b[3]]
     return regions
 
 
@@ -752,3 +752,21 @@ def pivot_96w(wells, values):
     df = (pd.DataFrame(rows, columns=['value', 'row', 'column'])
           .pivot(values='value', index='row', columns='column'))
     return df
+
+
+def long_to_wide(df, values, columns, index, extra_values):
+    """Pivots dataframe based on `values`, `columns`, and `index`.
+    Columns in `extra_values` are not pivoted, but the first value at the pivot
+    index is kept.
+    """
+
+    df_long = pd.pivot_table(df, columns=columns, 
+               values=values, index=index)
+
+    if extra_values:
+        # copy in columns that didn't need to be pivoted
+        df2 = df.drop_duplicates(index).set_index(index)
+        for col in extra_values:
+            df_long[col] = df2[col]
+
+    return df_long.reset_index()

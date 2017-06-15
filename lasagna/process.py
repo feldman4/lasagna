@@ -226,7 +226,9 @@ def find_nuclei(dapi, radius=15, area_min=50, area_max=500, um_per_px=1.,
 
     # only fill holes below minimum area
     filled = ndimage.binary_fill_holes(labeled)
-    change = filter_by_region(filled!=labeled, lambda r: r.area < area[0], 0)
+    difference = skimage.measure.label(filled!=labeled)
+
+    change = filter_by_region(difference, lambda r: r.area < area[0], 0) > 0
     labeled[change] = filled[change]
 
     nuclei = apply_watershed(labeled, smooth=smooth)

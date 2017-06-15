@@ -16,7 +16,8 @@ import lasagna.utils
 luts = None
 display_ranges = None
 
-default_color = lambda: lasagna.config.j.java.awt.Color.GRAY
+# transparent
+default_color = lambda: lasagna.config.j.java.awt.Color(0, 0, 0, 0)
 
 fiji_label = 1
 
@@ -69,7 +70,7 @@ class FijiViewer(object):
         self.source_id = source.id
 
         if self.imp.getOverlay():
-            self.imp.getOverlay().setStrokeColor(j.java.awt.Color.GRAY)
+            self.imp.getOverlay().setStrokeColor(default_color())
 
         # shouldn't this happen in setup?
         # make a key listener for selection events
@@ -105,6 +106,7 @@ class FijiViewer(object):
             self.imp.getOverlay().setStrokeColor(default_color())
 
         overlay = self.imp.getOverlay()
+        print style.color
         color = j.java.awt.Color.decode(style.color)
         # only show contours that apply to this file
         rois = np.where(np.in1d(att_index, contours))[0]
@@ -253,8 +255,16 @@ def update_selection(selection, viewer):
         edit_mode.update(data_collection, subset_state)
 
 
-
 def lasagna_to_glue(df, label='data', name_map=default_name_map):
+    cols = []
+    for c in df.columns:
+        if 'x' in c:
+            x = c
+        elif 'y' in c:
+            y = c
+        else:
+            cols += [c]
+    df = df[[x, y] + cols]
 
     data = pandas_to_glue(df, label='data', name_map=default_name_map)
     assert (data.get_component('x'))
