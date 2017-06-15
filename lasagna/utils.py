@@ -13,6 +13,7 @@ class Memoized(object):
     """Decorator that caches a function's return value each time it is called.
     If called later with the same arguments, the cached value is returned, and
     not re-evaluated.
+    Numpy arrays are treated specially with `copy` kwarg.
     """
 
     def __init__(self, func):
@@ -23,7 +24,10 @@ class Memoized(object):
         key = str(args) + str(kwargs)
         try:
             if isinstance(self.cache[key], np.ndarray):
-                            return self.cache[key].copy()
+                if kwargs.get('copy', True):
+                    return self.cache[key].copy()
+                else:
+                    return self.cache[key]
             return self.cache[key]
         except KeyError:
             value = self.func(*args, **kwargs)

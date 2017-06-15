@@ -325,7 +325,6 @@ def subimage(stack, bbox, pad=0):
     :return:
     """ 
     i0, j0, i1, j1 = bbox + np.array([-pad, -pad, pad, pad])
-    print i0, j0, i1, j1
 
     sub = np.zeros(stack.shape[:-2]+(i1-i0, j1-j0), dtype=stack.dtype)
 
@@ -375,7 +374,7 @@ def grid_view(files, bounds, padding=40, with_mask=False):
 
     arr = []
     for filename, bounds_ in zip(files, bounds):
-        I = read_stack(filename, memmap=False) # some memory issue right now
+        I = read_stack(filename, memmap=False, copy=False) # some memory issue right now
         I_cell = subimage(I, bounds_, pad=padding)
         arr.append(I_cell.copy())
 
@@ -732,7 +731,7 @@ def show_IJ(data, title='image', imp=None, check_cache=False, **kwargs):
     return new_imp
 
 
-def read_stack(filename, memmap=False):
+def read_stack(filename, memmap=False, copy=True):
     """Read a .tif file into a numpy array, with optional memory mapping.
     """
     if memmap:
@@ -740,13 +739,13 @@ def read_stack(filename, memmap=False):
     else:
         # os.stat detects if file has been updated
         # data = _imread(filename, hash(os.stat(filename)))
-        data = _imread(filename, 0)
+        data = _imread(filename, 0, copy=copy)
         while data.shape[0] == 1:
             data = np.squeeze(data, axis=(0,))
     return data
 
 @lasagna.utils.Memoized
-def _imread(filename, dummy):
+def _imread(filename, dummy, copy=True):
     """Call TiffFile imread. Dummy arg to separately memoize calls.
     """
     return imread(filename, multifile=False)
