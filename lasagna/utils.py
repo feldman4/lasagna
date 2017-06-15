@@ -774,3 +774,9 @@ def long_to_wide(df, values, columns, index, extra_values):
             df_long[col] = df2[col]
 
     return df_long.reset_index()
+
+
+def load_ij_roi(filename):
+    import ijroi
+    with open(filename, "rb") as fh:
+        return ijroi.read_roi(fh).astype(int)

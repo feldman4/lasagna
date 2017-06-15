@@ -412,16 +412,8 @@ def yoshis_lasISland(nuclei, labels, six=False):
 
     return d
 
-def load_roi(well, tile):
-    import ijroi
-    f_roi = '20170529_96W-G112-B/rois/%s_tile-%d.aligned.roi' % (well, tile)
-    with open(f_roi, "rb") as fh:
-        roi = ijroi.read_roi(fh).astype(int)
-    return roi
-
 def roi_to_mask(roi, h=2533, w=2531):
     mask = np.zeros((h,w), bool)
     mask[roi[:,0], roi[:,1]] = True
     return mask
-
 
