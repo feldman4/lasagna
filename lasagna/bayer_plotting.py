@@ -48,7 +48,6 @@ def plot_primary_secondary(df_, rows, cols, size=2.5):
         plt.subplots_adjust(hspace=0.1, wspace=0.1)
     return fg
 
-
 def legend_min_lines(fg, n):
     """Include legend for lines with peaks at smallest x values.
     """
@@ -59,7 +58,6 @@ def legend_min_lines(fg, n):
         if ax.lines:
             lines = lines_sort(ax)[:n]
             ax.legend(lines, [line.get_label() for line in lines])
-
 
 def plot_base_cycle_distributions(df_, cycles=4, size=2.5, codes=24, lines=2):
     """
@@ -102,7 +100,6 @@ def plot_base_cycle_distributions(df_, cycles=4, size=2.5, codes=24, lines=2):
     legend_min_lines(fg, lines)
     fg.fig.tight_layout()
     return fg
-
 
 def plot_base_correlations(df, low=2, high=4):
 
@@ -155,3 +152,40 @@ def plot_base_correlations(df, low=2, high=4):
     for handle in handles:
         handle._sizes = [30]
     return pg
+
+
+def plot_counts(df_, barcode_column='barcode_4', cutoff=0.0003):
+    x = df_[barcode_column].value_counts()
+    order = list(x[(x/x.sum()) > cutoff].index)
+    barcode_length = len(order[0])
+
+    # extra axis for x labels
+    bottom = 0.1 * (barcode_length / 3.)
+    # left, bottom, width, height
+    rect_counts = [0, bottom, 1, 1 - bottom]
+    rect_labelx = [0, 0, 1, bottom]
+
+    fig = plt.figure(figsize=(12,8))
+    ax_counts = plt.axes(rect_counts)
+    ax_label_x = plt.axes(rect_labelx, sharex=ax_counts)
+
+    ax = sns.countplot(data=df_, x=barcode_column 
+                   , hue='legit', order=order, ax=ax_counts, hue_order=[True, False])
+
+    # draw labels
+    for i, barcode in enumerate(order):
+        for j, c in enumerate(barcode):
+            color = 'bgrm'['TGCA'.index(c)]
+            spacing = 1./barcode_length
+            ax_label_x.text(i, 1 - ((1 + j)*spacing), c
+                          , fontdict=dict(size=14
+                                          , family='monospace'
+                                          , horizontalalignment='center'
+                                          , color=color))
+    ax_label_x.axis('off')
+    ax_counts.xaxis.set_visible(False)
+    legit_fraction = df_['legit'].mean()
+    cells = df_.drop_duplicates(['file', 'label']).shape[0]
+    title = '%d cells, %.1f%% legit' % (cells, 100 * legit_fraction)
+    ax_counts.legend(title=title, loc='upper right')
+    return fig

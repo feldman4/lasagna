@@ -21,7 +21,9 @@ doc_ids = {'Lasagna Supreme' : '1Q-4z1NwvncMjhTencZYdua-_E2IUdZzyo4cm12XdZ38',
            'Lasagna Oligos'  : '16Pn5RB0nOj_an_3ad0YUgTmWklQXNvINncs93r2rG9I',
            'inventory for a time machine': '1Ov5aPW-J8s_K_tGQ3kc9zbx17c7HbgfOPo-Jt86oDzc'}
 
-google_csv_url = 'https://docs.google.com/spreadsheets/d/%s/gviz/tq?tqx=out:csv&sheet=%s'
+def google_csv_url(sheet, worksheet):
+    return ('https://docs.google.com/spreadsheets/d/%s/gviz/tq?tqx=out:csv&sheet=%s'
+        % (doc_ids[sheet], worksheet))
 
 default_translation_table = ''.join([chr(x) for x in range(256)])
 
@@ -69,7 +71,9 @@ def mod_to_dye(m):
 
 
 def load_google_csv(sheet='Lasagna Oligos', worksheet='in situ'):
-    url = google_csv_url % (urllib2.quote(doc_ids[sheet]), urllib2.quote(worksheet))
+    # url = google_csv_url % (urllib2.quote(doc_ids[sheet]), urllib2.quote(worksheet))
+    url = google_csv_url(sheet, worksheet)
+    print url
     response = urllib2.urlopen(url)
     html = response.read()
     return html

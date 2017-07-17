@@ -2,6 +2,12 @@ from lasagna.imports import *
 import skimage.io
 from decorator import decorator
 from scipy.ndimage.filters import gaussian_laplace, maximum_filter
+import networkx as nx
+import skimage.measure
+import scipy.spatial
+
+def my_function():
+    print 5
 
 def register_and_offset(images, registration_images=None, verbose=False):
     if registration_images is None:
@@ -334,7 +340,7 @@ def remove_unnamed(df):
     cols = [c for c in df.columns if 'Unnamed' not in c]
     return df[cols]
 
-def call_cells(f, order='TGCA'):
+def call_cells(f, cycles=6, order='TGCA'):
     """
     f = '20170529_96W-G112-B/E?_tile-?.aligned.tif'
     """
@@ -343,10 +349,11 @@ def call_cells(f, order='TGCA'):
     f4 = f.replace('.aligned', '.called.aligned')
 
     data = read(f2, memmap=True)
+    data = data[:cycles]
     blobs = find_blobs(data[0])
     nuclei, cells = read(f3)
     called = read(f4)
-    cycles = data.shape[0]
+    called = called[:cycles]
 
     img = called.copy()
     img[:,:,blobs==0] = 0
@@ -531,3 +538,63 @@ def values_to_dataframe(values):
 
     return df_v 
  
+
+def counts_per_cell(df_):
+    df2 = df_.drop_duplicates('index').copy()
+    df2['count_per_cell'] = (df2.groupby(['file', 'label', 'barcode_4'])['index']
+                                .transform('count'))
+    return df2
+
+def majority_barcodes(df2):
+    df_top = (df2
+                 #.drop_duplicates(['file', 'label', 'barcode_4'])
+                 .sort_values('count_per_cell', ascending=False)
+                 .groupby(['file', 'label'])
+                 .head(1)
+                 .reset_index()
+             )
+    return df_top
+
+def adjacent_cells(cells):
+    """Integer mask => set of neighboring regions
+    """
+    a = skimage.morphology.dilation(cells)
+    b = skimage.morphology.erosion(cells)
+
+    m = np.array([a,b,cells])
+
+    mask = (m != 0).all(axis=0)
+    mask &= (m[0] != m[1:]).all(axis=0)
+
+    touching = m[:, mask].T
+    touching = np.unique(touching, axis=0)
+    touching = set([tuple(sorted(set(x))) for x in touching])
+    touching = [x for x in touching if len(x) == 2]
+    
+    # adjacency matrix
+    G = nx.Graph()
+    labels = [x for x in np.unique(cells) if x != 0]
+    G.add_nodes_from(labels)
+    G.add_edges_from(touching)
+    adjacency_matrix = nx.adjacency_matrix(G)
+
+    return np.array(touching), adjacency_matrix
+
+def neighboring_cells(cells, distance):
+
+    regions = skimage.measure.regionprops(cells)
+    centroids = [r.centroid for r in regions]
+    # can be missing some
+    labels = np.array([r.label for r in regions])
+
+    # just the pairs
+    kdt = scipy.spatial.KDTree(centroids)
+    pairs = kdt.query_pairs(distance)
+    pairs = np.array(list(pairs))
+    pairs = labels[pairs]
+    
+    # distance matrix, consistent with pairs?
+    distance_matrix = kdt.sparse_distance_matrix(kdt, max_distance=distance)
+    distance_matrix = distance_matrix.tocsr()
+    return pairs, distance_matrix
+

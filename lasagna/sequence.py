@@ -12,7 +12,7 @@ def load_fastq(f):
     with open(f, 'r') as fh:
         return fh.read().splitlines()[1::4]
 
-def edit_distance(sequences, second=None):
+def edit_distance(sequences):
     """Calculate pairwise distances, return in lower triangular matrix.
     """
     distances = np.zeros(2 * [len(sequences)])
@@ -26,16 +26,19 @@ def edit_distance_sparse(sequences, k=8):
     from collections import defaultdict
     from scipy.sparse import coo_matrix
     kmers = defaultdict(list)
-
+    
     for i, s in enumerate(sequences):
-        s2 = s*(20+k)
-        for j in range(20):
-            kmers[s2[j:j+k]] += [i]
+        repeat = int(1 + np.ceil((len(s) + k) / len(s)))
+        s2 = s*repeat
+        for j in range(len(s)):
+            kmers[s2[j:j+k]].append(i)
 
-    # pairs to calculate
+    # extract pairs to calculate from bins
     pairs = []
     for v in kmers.values():
-        pairs += [(a,b) for i, a in enumerate(v) for b in v[:i]]
+        pairs.extend((a,b) for i, a in enumerate(v) for b in v[:i])
+
+    print len(pairs)
     
     # memory issues...
     # pairs = set(pairs)
@@ -48,10 +51,10 @@ def edit_distance_sparse(sequences, k=8):
     for i,j in pairs:
         s1, s2 = sequences[i], sequences[j]
         d = Levenshtein.distance(s1,s2)
-        V += [d]
-        I += [i]
-        J += [j]
-    return coo_matrix((V, (I,J)), shape=(n,n))
+        V.append(d)
+        I.append(i)
+        J.append(j)
+    return coo_matrix((V, (I,J)), shape=(n,n)), kmers
 
 
 def make_adjacency(distances, counts, threshold=1):
@@ -67,7 +70,10 @@ def make_adjacency(distances, counts, threshold=1):
     # scale columns by total reads
     # symmetrize
     G = ((1*G + 1*G.T) > 0).astype(float)
+    # G[i,j] is the weight for edge from i to j
+    # incoming - outgoing
     G = G * counts - counts[:,None]
+    # only keep downhill edges, graph rooted at local maxima
     G[G < 0] = 0
     return G
 
@@ -165,7 +171,8 @@ class UMIGraph(object):
         peaks = list(nx.attracting_components(self.G))
         # only local maxima
         assert all(len(p)==1 for p in peaks)
-        peaks = [p[0] for p in peaks]
+        # return set now?
+        peaks = [list(p)[0] for p in peaks]
         components = []
         for peak in peaks:
             nodes = nx.shortest_path(self.G, target=peak).keys()
