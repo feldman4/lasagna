@@ -24,7 +24,7 @@ lasagna_enzymes = {
  'XhoI': 'CTCGAG',
  'XmaI': 'CCCGGG'}
 
-
+# from Kosuri 2010
 # minimum edit distance 6, look OK on thermo MPA
 dialout_primers = \
 [('CTTAAACCGGCCAACATACC', 'ATGCTACTCGTTCCTTTCGA'),
