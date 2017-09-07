@@ -6,9 +6,6 @@ import networkx as nx
 import skimage.measure
 import scipy.spatial
 
-def my_function():
-    print 5
-
 def register_and_offset(images, registration_images=None, verbose=False):
     if registration_images is None:
         registration_images = images

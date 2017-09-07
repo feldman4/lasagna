@@ -14,7 +14,7 @@ import numpy as np
 from numpy.lib.stride_tricks import as_strided
 import regex as re
 import StringIO, pickle, zlib
-from skimage.external.tifffile import TiffFile, imsave, imread
+from lasagna.external.tifffile import TiffFile, imsave, imread
 
 imagej_description = ''.join(['ImageJ=1.49v\nimages=%d\nchannels=%d\nslices=%d',
                               '\nframes=%d\nhyperstack=true\nmode=composite',

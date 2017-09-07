@@ -9,6 +9,7 @@ import regex as re
 lasagna_enzymes = {
  'AgeI': 'ACCGGT',
  'BamHI': 'GGATCC',
+ 'BbsI': 'GAAGAC',
  'BsaI': 'GGTCTC',
  'BsiWI': 'CGTACG',
  'BsmBI': 'CGTCTC',
@@ -78,12 +79,13 @@ default_parts = \
     ,'BsaI_rc' : 'GAGACC'
     ,'C' : 'C'
     ,'G' : 'G'
-    ,'sticky_U6': 'ACCG'
+    ,'sticky_U6': 'CACC'
     ,'sticky_scaffold': 'GTTT'
     ,'spacer': 'nnnnnn'# 'GGATAC'
     ,'dialout_5': dialout_primers[0][0]
     ,'dialout_3_rc': rc(dialout_primers[0][1])
     ,'N': 'N'
+    ,'NN': 'NN'
     ,'sticky_Pd42_5': 'TTCC'
     ,'sticky_Pd42_3': 'ACTG'
      
@@ -100,7 +102,7 @@ default_layouts = \
           'sticky_Pd42_5', 'barcode', 
           'sticky_Pd42_3', 'C', 'BsaI_rc', 'dialout_3_rc')
           , 'gecko':
-          ('dialout_5', 'BsmBI', 'N', 'sgRNA', 'N', 'BsmBI_rc', 'dialout_3_rc', 'padding')
+          ('dialout_5', 'BsmBI', 'N', 'sticky_U6', 'sgRNA', 'sticky_scaffold', 'N', 'BsmBI_rc', 'dialout_3_rc', 'padding')
           }
 
 
@@ -224,7 +226,7 @@ def load_cheese_sgRNAs():
 def load_wang():
     columns = {'sgRNA sequence':'sgRNA'
           ,'Symbol': 'gene_symbol'}
-    df_wang = (pd.read_csv('Wang_2015_STable1.csv')
+    df_wang = (pd.read_csv('Wang_2015_supplement/Wang_2015_STable1.csv')
                  .rename(columns=columns)[columns.values()])
 
     enst_ncbi = (load_enst_ncbi()
@@ -236,9 +238,9 @@ def load_wang():
     return df_wang
 
 
-def load_enst_ncbi():
+def load_enst_ncbi(path=''):
     columns = {'NCBI gene ID': 'gene_id', 'Gene name': 'gene_symbol'}
-    enst_ncbi = (pd.read_csv('ENS_to_NCBI.tsv', sep='\t')
+    enst_ncbi = (pd.read_csv(path + 'ENS_to_NCBI.tsv', sep='\t')
                    .rename(columns=columns))
     return enst_ncbi
 
@@ -398,6 +400,8 @@ def filter_sgRNAs(df_sgRNAs):
 
 
 def color(df_barcodes, red=196, orange=596, green=608, seed=0):
+    """Green 5bp not in red. Orange 5bp not in red. 
+    """
     df_barcodes = df_barcodes.copy().set_index('8bp')
     df_barcodes['red'] = False
     df_barcodes['orange'] = False
@@ -410,7 +414,7 @@ def color(df_barcodes, red=196, orange=596, green=608, seed=0):
     green_barcodes = (df_barcodes.query('subset_5bp')
                                  .query('~red')
                                  .sample(green, random_state=seed + 1))
-    df_barcodes.loc[green_barcodes.index, 'green']   = True
+    df_barcodes.loc[green_barcodes.index, 'green'] = True
     
     # red 5bp sequences are excluded from orange and green
     filt = ~df_barcodes['5bp'].isin(red_barcodes['5bp'])
@@ -427,8 +431,9 @@ def color(df_barcodes, red=196, orange=596, green=608, seed=0):
 def contains_typeIIS(s):
     s = s.upper()
 
-    a, b = lasagna_enzymes['BsmBI'], lasagna_enzymes['BsaI']
-    sites = a, rc(a), b, rc(b)
+    a, b, c = lasagna_enzymes['BsmBI'], lasagna_enzymes['BsaI'], lasagna_enzymes['BbsI']
+    sites = a, rc(a), b, rc(b), c, rc(c)
+    sites = a, rc(a), c, rc(c)
 
     return any(x in s for x in sites)
 
@@ -436,8 +441,9 @@ def contains_typeIIS(s):
 def count_typeIIS_sites(s):
     s = s.upper()
 
-    a, b = lasagna_enzymes['BsmBI'], lasagna_enzymes['BsaI']
+    a, b, c = lasagna_enzymes['BsmBI'], lasagna_enzymes['BsaI'], lasagna_enzymes['BbsI']
     sites = a, rc(a), b, rc(b)
+    sites = a, rc(a), c, rc(c)
 
     return sum(s.count(x) for x in sites)
 
@@ -617,3 +623,9 @@ def pair_sgRNAs_barcodes(df_sgRNAs, df_barcodes, df_layout):
     print withdrawn
     
     return oligos
+
+
+def fixed_FWD_primers(n=24):
+    bsaI_3_ = 'GGTCTCcCACCG'
+    return [adapter + bsaI_3_ for adapter, _ in dialout_primers[:n]]
+

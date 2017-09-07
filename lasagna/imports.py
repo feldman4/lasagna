@@ -2,7 +2,7 @@
 
 import os
 from natsort import natsorted
-from collections import OrderedDict, Counter
+from collections import OrderedDict, Counter, defaultdict
 from itertools import product
 from glob import glob
 from functools import partial
