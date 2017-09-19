@@ -1,5 +1,16 @@
 #!/usr/bin/env python
 
+def rc(seq):
+    return ''.join(watson_crick[x] for x in seq)[::-1]
+
+watson_crick = {'A': 'T',
+                'T': 'A',
+                'C': 'G',
+                'G': 'C',
+                'U': 'A',
+                'N': 'N'}
+watson_crick.update({k.lower(): v.lower() for k, v in watson_crick.items()})
+
 def nearest(query, database, threshold):
     """
     """
@@ -48,7 +59,8 @@ if __name__ == '__main__':
                 'sgRNA26': "ACCG(.{25,27})GTTT",
                 's1_UMI': 'CCGGT(.{19,20})TTCCCA',
                 's1_UMI_rc': 'TGGGAA(.{19,20})ACCGG',
-                'TM10': 'AGAAAT(.{32,90})GTACA'
+                'TM10': 'AGAAAT(.{32,90})GTACA',
+                'pL42': 'CATTCC(.{6,13})ACTGGC'
                 }
 
     if args.database:
@@ -69,14 +81,16 @@ if __name__ == '__main__':
                 with open(f, 'r') as fh:
                     seq = fh.read().strip()
                     seq = seq.replace('\n', '')
-                match = re.findall(pattern, seq)
-                if match:
-                    if flag:
-                        print name
-                        flag = False
-                    line = name, match[0], f
-                    if args.database:
+                for seq_ in (seq, rc(seq)):
 
-                        line += nearest(match[0], database, threshold)
+                    match = re.findall(pattern, seq_)
+                    if match:
+                        if flag:
+                            print name
+                            flag = False
+                        line = name, match[0], f
+                        if args.database:
 
-                    print '\t'.join(str(x) for x in line)
+                            line += nearest(match[0], database, threshold)
+
+                        print '\t'.join(str(x) for x in line)

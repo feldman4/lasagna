@@ -25,7 +25,8 @@ DOWNSAMPLE = 2
 
 default_intensity_features = {'mean': lambda region: region.intensity_image[region.image].mean(),
                     'median': lambda region: np.median(region.intensity_image[region.image]),
-                    'max': lambda region: region.intensity_image[region.image].max()}
+                    'max': lambda region: region.intensity_image[region.image].max(),
+                    'min': lambda region: region.intensity_image[region.image].min()}
 
 default_object_features = {
     'area':     lambda region: region.area,
@@ -210,7 +211,7 @@ class Sample(object):
         return new_img
 
 
-@lasagna.utils.sample()
+# @lasagna.utils.sample()
 def find_nuclei(dapi, radius=15, area_min=50, area_max=500, um_per_px=1., 
                 score=lambda r: r.mean_intensity,
                 threshold=skimage.filters.threshold_otsu,

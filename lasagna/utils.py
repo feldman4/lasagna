@@ -780,3 +780,9 @@ def load_ij_roi(filename):
     import ijroi
     with open(filename, "rb") as fh:
         return ijroi.read_roi(fh).astype(int)
+
+
+def int_mode(x):
+    """Works for integer arrays only."""
+    bc = np.bincount(x.flatten())
+    return np.argmax(bc)

@@ -14,7 +14,7 @@ import numpy as np
 from numpy.lib.stride_tricks import as_strided
 import regex as re
 import StringIO, pickle, zlib
-from lasagna.external.tifffile import TiffFile, imsave, imread
+from lasagna.external.tifffile_old import TiffFile, imsave, imread
 
 imagej_description = ''.join(['ImageJ=1.49v\nimages=%d\nchannels=%d\nslices=%d',
                               '\nframes=%d\nhyperstack=true\nmode=composite',
@@ -783,3 +783,13 @@ def _get_mapped_tif(filename):
     # update the memmap with adjusted strides
     return as_strided(mm, shape=shape, strides=strides)
 
+def grab_ij():
+    """Return contents of currently selected ImageJ window.
+    """
+    path = os.path.join(lasagna.config.fiji_target, 'tmp.tif')
+
+    j.ij.IJ.save(imp, path)
+    data = read(path)
+    os.remove(path)
+    
+    return data

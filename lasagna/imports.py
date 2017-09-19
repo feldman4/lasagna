@@ -23,7 +23,7 @@ np.mode = scipy.stats.mode
 import lasagna.io
 import lasagna.process
 import lasagna.utils
-from lasagna.utils import standardize
+from lasagna.utils import standardize, int_mode
 from lasagna.io import save_stack as save
 from lasagna.io import read_stack as read
 from lasagna.io import show_IJ as show
