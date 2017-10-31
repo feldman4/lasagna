@@ -5,6 +5,7 @@ from scipy.ndimage.filters import gaussian_laplace, maximum_filter
 import networkx as nx
 import skimage.measure
 import scipy.spatial
+from lasagna.utils import applyXY
 
 def register_and_offset(images, registration_images=None, verbose=False):
     if registration_images is None:
@@ -100,19 +101,6 @@ def log_ndi(data, *args, **kwargs):
     for frame in data.reshape((-1, h, w)):
         arr += [gaussian_laplace(frame, *args, **kwargs)]
     return np.array(arr).reshape(data.shape)
-
-@decorator
-def applyXY(f, arr, *args, **kwargs):   
-    """Apply a function that expects 2D input to the trailing two
-    dimensions of an array.
-    """
-    h, w = arr.shape[-2:]
-    reshaped = arr.reshape((-1, h, w))
-
-    arr_ = []
-    for frame in reshaped:
-        arr_ += [f(frame, *args, **kwargs)]
-    return np.array(arr_).reshape(arr.shape)
 
 laplace_ndi = applyXY(gaussian_laplace)
     
@@ -219,7 +207,8 @@ def unmix(arr):
     return y
 
 def find_blobs(data, threshold=500):
-    """Pass in DO. Return binary mask.
+    """Pass in DO. Return binary mask. Eliminates spurious peaks from single-
+    pixel alignment error.
     """
     from lasagna.pipelines._20170511 import find_peaks
     import skimage.morphology
@@ -236,7 +225,11 @@ def find_blobs(data, threshold=500):
     return blobs
 
 def call(data,foreground,width=5,do_threshold=10000,worst_threshold=3000):
-    """Thresholds are after contrast adjustment
+    """Decide on the dominant channel at each pixel. Filter out blobs that
+    lie outside foreground or do not have a dominant channel signal above
+    `worst_threshold` in every cycle.
+    
+    Thresholds are after contrast adjustment.
     """
     from scipy.ndimage.filters import maximum_filter
     cycles, channels, _, _ = data.shape
@@ -289,6 +282,8 @@ def pixelate(called, blobs, offset=1):
     return call2
   
 def contrast_112B(data_, fore, verbose=False):
+    """Adaptive contrast based on quantiles.
+    """
     data_ = data_.copy()
     slices =  (('contrast GFP sequencing',     np.s_[2:, 1, fore],    20)
               ,('contrast non-GFP sequencing', np.s_[1:, 2:, fore],   50)
@@ -303,6 +298,8 @@ def contrast_112B(data_, fore, verbose=False):
     return data_
 
 def contrast_112B_fixed(data, ceiling=0.25):
+    """Contrast to hard-coded ranges.
+    """
     data[0, 2]   = apply_contrast(data[0, 2],   0, 20000, ceiling)
     data[0, 3]   = apply_contrast(data[0, 3],   0, 15000, ceiling)
     data[1:, 1:] = apply_contrast(data[1:, 1:], 0, 2000, ceiling)
@@ -354,7 +351,7 @@ def call_cells(f, cycles=6, order='TGCA'):
 
     img = called.copy()
     img[:,:,blobs==0] = 0
-    lasagna.config.wtf = img.copy()
+    
     df = labels_to_barcodes(img, cells, order=order)
     df_top = (df.sort_values('count', ascending=False)
                 .groupby('label')
@@ -458,6 +455,9 @@ def extract_values(f, width=5, unmix_DO=True):
     return values, labels, stringent
 
 def filter_sequences(dataframe_or_values, first=5000, worst=500):
+    """Return a filter for sequences with first cycle (DO) above `first`
+    and worst cycle above `worst`.
+    """
     if isinstance(dataframe_or_values, pd.DataFrame):
         values = dataframe_to_values(dataframe_or_values)
     else:
@@ -485,7 +485,9 @@ def format_primary_secondary(dataframe):
     barcodes = pd.Series([''.join(x) for x in bases]
                          , index=dataframe.index
                          , name='barcode')
+    # top two values
     x = np.sort(values, axis=1)[:, [-1, -2]]
+    # second highest base
     y = np.argsort(values, axis=1)[:, [-2]]
     values_ = np.r_['1', x, y]
 
@@ -535,7 +537,6 @@ def values_to_dataframe(values):
 
     return df_v 
  
-
 def counts_per_cell(df_):
     df2 = df_.drop_duplicates('index').copy()
     df2['count_per_cell'] = (df2.groupby(['file', 'label', 'barcode_4'])['index']

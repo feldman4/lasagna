@@ -7,11 +7,12 @@ from ij.measure import Calibration
 import time, os
 from glob import glob
 
-if False:
+if True:
     # osx, unix
     filesep = '/'
     home_dir = '/broad/blainey_lab/David/lasagna/20150817 6 round/data/'
     home_dir = '/Users/feldman/Downloads/20160130_GFP_spinfection/'
+    home_dir = '/Volumes/Samsung_T5/lasagna/20171024_24W-endocytosis/MAX/'
 else:
     # windows
     home_dir = 'D:\\User Folders\\David\\lasagna\\20160428_96W-G032\\MAX\\'
@@ -29,8 +30,8 @@ else:
 #                ('Green', (400, 6000)),
 #                ('Red', (400, 4000)),
 #                ('Magenta', (400, 4000)))
-channel_luts = (('Blue', (400, 50000)),
-               ('Green', (0, 5000)))
+channel_luts = (('Green',  (400, 4000)),
+               ('Magenta', (400, 8000)))
 #channel_luts = (('Grays', (400, 40000)),)
 
 channels = len(channel_luts)
@@ -42,7 +43,7 @@ frames = 1;  # T
 #pixel_width = 0.175 * 2
 
 ##### 20X
-tiles, overlap = (4, 4), int(100 * (1. - 600. / 675))
+tiles, overlap = (11, 7), int(100 * (1. - 600. / 675))
 pixel_width = 0.35
 
 ### 4X
@@ -84,7 +85,7 @@ use_template = False
 #template = make_template('A1', '60X_scan_1')
 template = None
 
-data_dirs = ['bAct8bp_3']
+data_dirs = ['20X_BMQC-Tfn647-20min_1']
 
 # usually xyzct, except on bad days when it's xyczt(default)
 order = 'xyzct'
@@ -94,6 +95,7 @@ rows = 'ABCDEFGH'
 columns = [str(x) for x in range(1, 13)]
 
 wells = [r + c for r in rows for c in columns]
+wells = ['A1']
 
 cal = Calibration()
 cal.setUnit('um')

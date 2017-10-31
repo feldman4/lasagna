@@ -58,4 +58,4 @@ def mapping_stats(df):
 
 
 def load_info(path):
-	return pd.read_csv(path, sep='\t').set_index('well')
+	return pd.read_csv(path, sep='\t|,', engine='python').set_index('well')

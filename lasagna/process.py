@@ -17,7 +17,6 @@ from skimage.feature import peak_local_max
 from scipy import ndimage
 
 from lasagna import io
-from lasagna import config
 from lasagna.utils import Filter2D, _get_corners
 import lasagna.utils
 
@@ -26,7 +25,7 @@ DOWNSAMPLE = 2
 default_intensity_features = {'mean': lambda region: region.intensity_image[region.image].mean(),
                     'median': lambda region: np.median(region.intensity_image[region.image]),
                     'max': lambda region: region.intensity_image[region.image].max(),
-                    'min': lambda region: region.intensity_image[region.image].min()}
+                    'min': lambda region: region.intensity_image[region.image].min() }
 
 default_object_features = {
     'area':     lambda region: region.area,
@@ -37,8 +36,7 @@ default_object_features = {
     # 'label':    lambda region: np.median(region.intensity_image[region.intensity_image > 0]),
     'label':    lambda region: region.label,
     'mask':     lambda region: Mask(region.image),
-    'hash':     lambda region: hex(random.getrandbits(128))
-}
+    'hash':     lambda region: hex(random.getrandbits(128)) }
 
 
 def binary_contours(img, fix=True, labeled=False):
@@ -237,6 +235,8 @@ def find_nuclei(dapi, radius=15, area_min=50, area_max=500, um_per_px=1.,
     result = filter_by_region(nuclei, lambda r: area[0] < r.area < area[1], threshold)
     if verbose:
         return mask, labeled, nuclei, result, change
+
+    result, _, _ = skimage.segmentation.relabel_sequential(result)
     return result
 
 
@@ -521,10 +521,8 @@ def stitch_grid(arr, overlap, upsample=1):
 
 def alpha_blend(arr, positions, clip=True, edge=0.95, edge_width=0.02, subpixel=False):
     """Blend array of images, translating image coordinates according to offset matrix.
-    :param arr:
-    :param grid:
-    :param offset_matrix:
-    :return:
+    arr : N x I x J
+    positions : N x 2 (n, i, j)
     """
     
     @lasagna.utils.Memoized
@@ -549,17 +547,19 @@ def alpha_blend(arr, positions, clip=True, edge=0.95, edge_width=0.02, subpixel=
         positions = np.array(positions)
     else:
         positions = np.round(positions)
+    # convert from ij to xy
+    positions = positions[:, [1, 0]]    
 
     positions -= positions.min(axis=0)
     shapes = [a.shape for a in arr]
-    output_shape = np.ceil((shapes + positions[:,::-1]).max(axis=0))
+    output_shape = np.ceil((shapes + positions[:,::-1]).max(axis=0)).astype(int)
 
     # sum data and alpha layer separately, divide data by alpha
     output = np.zeros([2] + list(output_shape), dtype=float)
     for image, xy in zip(arr, positions):
         alpha = 100 * make_alpha(image.shape, edge=edge, edge_width=edge_width)
         if subpixel is False:
-            j, i = xy
+            j, i = np.round(xy).astype(int)
 
             output[0, i:i+image.shape[0], j:j+image.shape[1]] += image * alpha.T
             output[1, i:i+image.shape[0], j:j+image.shape[1]] += alpha.T
@@ -669,6 +669,7 @@ def align_scaled(x, y, scale, **kwargs):
     # combine images along new leading dimension
     return np.r_['0,4', x_win, y].transpose([0,3,1,2])
 
+
 def find_cells(nuclei, mask, small_holes=100, remove_boundary_cells=True):
     """Expand labeled nuclei to cells, constrained to where mask is >0. 
     Mask is divvied up by  
@@ -694,12 +695,13 @@ def find_cells(nuclei, mask, small_holes=100, remove_boundary_cells=True):
     regions = skimage.measure.regionprops(holes,
                 intensity_image=skimage.morphology.dilation(cells))
 
-    for reg in regions:
-        if reg.area < small_holes:
-            vals = reg.intensity_image[reg.intensity_image>0]
-            cells[holes == reg.label] = scipy.stats.mode(vals)[0][0]
+    # for reg in regions:
+    #     if reg.area < small_holes:
+    #         vals = reg.intensity_image[reg.intensity_image>0]
+    #         cells[holes == reg.label] = scipy.stats.mode(vals)[0][0]
 
     return cells.astype(np.uint16)
+
 
 def find_peaks(aligned, n=5):
     """At peak, max value in neighborhood and max-min

@@ -107,6 +107,8 @@ def gcm_props(region, prop='contrast'):
     return greycoprops(P, prop).flatten()
 
 def make_table(file_data, file_segment, channels):
+    """Main function to find features.
+    """
 
     index = ('channel', channels),
 

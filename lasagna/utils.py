@@ -7,6 +7,7 @@ from functools import wraps
 from inspect import getargspec, isfunction
 from itertools import izip, ifilter, starmap, product
 from collections import OrderedDict, Counter
+from decorator import decorator 
 
 
 class Memoized(object):
@@ -741,6 +742,7 @@ def import_facs(files, drop=lambda s: '-A$' in s):
     df = pd.concat(arr)
     return df.drop([c for c in df.columns if drop(c)], axis=1)
 
+
 def to_row_col(s):
     pat = '([A-Z])([0-9]+)'
     match = re.findall(pat, s)
@@ -786,3 +788,19 @@ def int_mode(x):
     """Works for integer arrays only."""
     bc = np.bincount(x.flatten())
     return np.argmax(bc)
+ 
+@decorator
+def applyXY(f, arr, *args, **kwargs):   
+    """Apply a function that expects 2D input to the trailing two
+    dimensions of an array.
+    """
+    h, w = arr.shape[-2:]
+    reshaped = arr.reshape((-1, h, w))
+
+    arr_ = []
+    for frame in reshaped:
+        arr_ += [f(frame, *args, **kwargs)]
+    return np.array(arr_).reshape(arr.shape)
+
+def concatMap(f, xs):
+    return sum(map(f, xs), [])

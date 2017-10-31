@@ -1,8 +1,9 @@
+from lasagna.imports import *
+
 from itertools import product
 import skimage.morphology
 from lasagna import config
 import lasagna.utils
-from glob import glob
 import pandas
 import struct
 import os
@@ -166,13 +167,35 @@ def montage(arr, shape=None):
     return M
 
 
+def tile(arr, n, m, pad=None):
+    """Divide a stack of images into tiles of size m x n. If m or n is between 
+    0 and 1, it specifies a fraction of the input size. If pad is specified, the
+    value is used to fill in edges, otherwise the tiles may not be equally sized.
+    Tiles are returned in a list.
+    """
+    assert arr.ndim > 1
+    h, w = arr.shape[-2:]
+    # convert to number of tiles
+    m = np.ceil(h / m) if m >= 1 else np.round(1 / m)
+    n = np.ceil(w / n) if n >= 1 else np.round(1 / n)
+    m, n = int(m), int(n)
+
+    if pad is not None:
+        pad_width = (arr.ndim - 2) * ((0, 0),) + ((0, -h % m), (0, -w % n))
+        arr = np.pad(arr, pad_width, 'constant', constant_values=pad)
+        print arr.shape
+
+    tiled = np.array_split(arr, m, axis=-2)
+    tiled = lasagna.utils.concatMap(lambda x: np.array_split(x, n, axis=-1), tiled)
+    return tiled
+
+
 @lasagna.utils.Memoized
 def _get_stack(name):
     data = imread(config.paths.full(name), multifile=False)
     while data.shape[0] == 1:
         data = np.squeeze(data, axis=(0,))
     return data
-
 
 
 # TODO fix extension of luts and display_ranges when not provided
@@ -314,7 +337,6 @@ def parse_MM(s):
         raise ValueError('Filename %s does not match MM pattern' % s)
     
 
-
 def subimage(stack, bbox, pad=0):
     """Index rectangular region from [...xYxX] stack with optional constant-width padding.
     Boundary is supplied as (min_row, min_col, max_row, max_col).
@@ -336,7 +358,6 @@ def subimage(stack, bbox, pad=0):
 
     sub[s] = stack[..., i0_:i1_, j0_:j1_]
     return sub
-
 
 
 def offset(stack, offsets):
@@ -387,7 +408,6 @@ def grid_view(files, bounds, padding=40, with_mask=False):
         return pile(arr), pile(arr_m)
 
     return pile(arr)
-
 
 
 default_dirs = {'raw': 'raw',
@@ -654,9 +674,11 @@ def read_lut(name):
         values = [line[:-1].split() for line in lines]
     return [int(y) for x in zip(*values) for y in x]
 
-
+# DEPRECATED
 def read_registered(path):
-    """Reads output of Fiji Grid/Collection stitching (TileConfiguration.registered.txt),
+    """DEPRECATED
+
+    Reads output of Fiji Grid/Collection stitching (TileConfiguration.registered.txt),
     returns list of tile coordinates.
     :param path:
     :return:
@@ -744,7 +766,7 @@ def read_stack(filename, memmap=False, copy=True):
             data = np.squeeze(data, axis=(0,))
     return data
 
-@lasagna.utils.Memoized
+# @lasagna.utils.Memoized
 def _imread(filename, dummy, copy=True):
     """Call TiffFile imread. Dummy arg to separately memoize calls.
     """
@@ -783,13 +805,20 @@ def _get_mapped_tif(filename):
     # update the memmap with adjusted strides
     return as_strided(mm, shape=shape, strides=strides)
 
-def grab_ij():
+def grab_image():
     """Return contents of currently selected ImageJ window.
     """
     path = os.path.join(lasagna.config.fiji_target, 'tmp.tif')
 
-    j.ij.IJ.save(imp, path)
-    data = read(path)
+    imp = lasagna.config.j.ij.IJ.getImage()
+    lasagna.config.j.ij.IJ.save(imp, path)
+    data = lasagna.io.read_stack(path, memmap=True)
     os.remove(path)
     
+    # title = imp.getTitle()
+    # if title:
+    #     print 'grabbed image "%s"' % title
+
+    if data.dtype == np.dtype('>u2'):
+        data = data.astype(np.uint16)
     return data

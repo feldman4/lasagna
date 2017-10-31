@@ -107,22 +107,22 @@ default_layouts = \
 
 
 
-def load_tables():
-    brunello = load_brunello()
-    mitosis = load_cheese_sgRNAs()
-    GFP_TM = load_GFP_TM_sgRNAs()
-    benchling = load_benchling()
-    controls = load_nontargeting_sgRNAs()
+def load_tables(path=''):
+    brunello = load_brunello(path=path)
+    mitosis = load_cheese_sgRNAs(path=path)
+    GFP_TM = load_GFP_TM_sgRNAs(path=path)
+    benchling = load_benchling(path=path)
+    controls = load_nontargeting_sgRNAs(path=path)
     # patch brunello with ECRISP and Wang sgRNAs to get 3 non-typeIIS / gene
     # selection order is brunello > ECRISP > Wang
-    ecrisp = load_ecrisp()
-    wang = load_wang()
+    ecrisp = load_ecrisp(path=path)
+    wang = load_wang(path=path)
 
     include = [mitosis, GFP_TM, controls, brunello, wang, ecrisp, benchling]
     df_sgRNAs = (pd.concat(include).reset_index(drop=True)).drop_duplicates('sgRNA')
 
     # add # of GO terms for each gene ID
-    df_go = pd.read_csv('go_entrez.tsv', sep='\t').dropna()
+    df_go = pd.read_csv(path + 'go_entrez.tsv', sep='\t').dropna()
     df_go = df_go.rename(columns={'NCBI gene ID': 'gene_id'})
     df_go['gene_id'] = df_go['gene_id'].astype(int)
 
@@ -140,10 +140,10 @@ def load_tables():
 
     # add shitty ENCODE GAII RNAseq from 2011
     # weak correlation with GO annotations
-    enst_ncbi = load_enst_ncbi()
+    enst_ncbi = load_enst_ncbi(path=path)
     s = enst_ncbi.set_index('Transcript stable ID')['gene_id']
 
-    hela_rnaseq = pd.read_csv('HeLa_RNAseq/ENCFF000DMU/abundance.tsv', sep='\t')
+    hela_rnaseq = pd.read_csv(path + 'HeLa_RNAseq/ENCFF000DMU/abundance.tsv', sep='\t')
     hela_rnaseq = (hela_rnaseq.join(s, on='target_id')
                 .dropna()
                 .groupby('gene_id')['tpm'].sum())
@@ -154,8 +154,8 @@ def load_tables():
     return df_sgRNAs, df_go
 
 
-def load_brunello():
-    brunello = pd.read_csv('brunello_SuppTables/STable 21 Brunello.csv')
+def load_brunello(path=''):
+    brunello = pd.read_csv(path + 'brunello_SuppTables/STable 21 Brunello.csv')
 
     columns = {'Target Gene ID': 'gene_id'
               ,'Target Transcript': 'transcript'
@@ -171,11 +171,11 @@ def load_brunello():
     return brunello
 
 
-def load_mckinley():
+def load_mckinley(path=''):
     """from McKinley 2017, sgRNA sequences standardized
     """
     columns = {'Gene': 'gene_symbol', 'Guide sequence': 'sgRNA'}
-    df_mckinley = (pd.read_excel('mitosis/2017 McKinley_2017_STable1.xls')
+    df_mckinley = (pd.read_excel(path + 'mitosis/2017 McKinley_2017_STable1.xls')
                      .rename(columns=columns))
     f = lambda x: x[4:].replace('g', '')
     # 5' G from old U6 rule
@@ -187,30 +187,30 @@ def load_mckinley():
     g = lambda x: weird.get(x, x)
     df_mckinley['sgRNA'] = df_mckinley['sgRNA'].apply(f).apply(g)
     
-    df_cheese = load_cheese()
+    df_cheese = load_cheese(path=path)
     df_mckinley['cheese'] = df_mckinley['gene_symbol'].isin(df_cheese['gene_symbol'])
     return df_mckinley
 
 
-def load_cheese():
+def load_cheese(path=''):
     """76 genes suggested by Iain Cheeseman
     """
     # SGO1 not in brunello (why?)
     # KNL1 in brunello with symbol CASC5
     columns = {'Gene Target': 'gene_symbol'}
-    df_cheese = pd.read_excel('Cheeseman_sgRNAs_20170710.xlsx')
+    df_cheese = pd.read_excel(path + 'Cheeseman_sgRNAs_20170710.xlsx')
     df_cheese = df_cheese.rename(columns=columns)
     return df_cheese
 
 
-def load_cheese_sgRNAs():
+def load_cheese_sgRNAs(path=''):
     """cut down to 2 sgRNAs (some have 4 sgRNAs)
     """
-    df_mckinley = load_mckinley()
+    df_mckinley = load_mckinley(path=path)
     df_mckinley = (df_mckinley[df_mckinley['cheese']]
                         .groupby('gene_symbol').head(2))
 
-    enst_ncbi = (load_enst_ncbi()
+    enst_ncbi = (load_enst_ncbi(path=path)
                   .drop_duplicates(['gene_symbol', 'gene_id']))
 
     symbols = df_mckinley['gene_symbol'].tolist()
@@ -223,13 +223,13 @@ def load_cheese_sgRNAs():
     return df_mckinley[columns]
 
 
-def load_wang():
+def load_wang(path=''):
     columns = {'sgRNA sequence':'sgRNA'
           ,'Symbol': 'gene_symbol'}
-    df_wang = (pd.read_csv('Wang_2015_supplement/Wang_2015_STable1.csv')
+    df_wang = (pd.read_csv(path + 'Wang_2015_supplement/Wang_2015_STable1.csv')
                  .rename(columns=columns)[columns.values()])
 
-    enst_ncbi = (load_enst_ncbi()
+    enst_ncbi = (load_enst_ncbi(path=path)
                   .drop_duplicates(['gene_symbol', 'gene_id'])
                   .set_index('gene_symbol'))
     df_wang = df_wang.join(enst_ncbi['gene_id'], on='gene_symbol')
@@ -245,16 +245,16 @@ def load_enst_ncbi(path=''):
     return enst_ncbi
 
 
-def load_ecrisp():
+def load_ecrisp(path=''):
     """Not in use.
     """
-    enst_ncbi = load_enst_ncbi()
+    enst_ncbi = load_enst_ncbi(path=path)
     enst_ncbi = (enst_ncbi.drop_duplicates('Gene stable ID')
                           .set_index('Gene stable ID')['gene_id']
                           .to_dict())
 
     columns = {'Nucleotide sequence': 'sgRNA'}
-    df_ecrisp = (pd.read_csv('ECRISPED.tsv', sep='\t')
+    df_ecrisp = (pd.read_csv(path + 'ECRISPED.tsv', sep='\t')
                    .rename(columns=columns))
 
     df_ecrisp['sgRNA'] = df_ecrisp['sgRNA'].apply(lambda x: x[:20])
@@ -265,7 +265,7 @@ def load_ecrisp():
     scores = ['S-Score', 'A-Score', 'E-Score']
     df_ecrisp['ecrisp_score'] = df_ecrisp[scores].sum(axis=1)
 
-    symbols = (load_enst_ncbi().drop_duplicates(['gene_symbol', 'gene_id'])
+    symbols = (load_enst_ncbi(path=path).drop_duplicates(['gene_symbol', 'gene_id'])
                                  .set_index('gene_id')['gene_symbol'])
     df_ecrisp = df_ecrisp.join(symbols, on='gene_id')
     df_ecrisp['source'] = 'ECRISP'
@@ -274,15 +274,15 @@ def load_ecrisp():
     return df_ecrisp[columns]
 
 
-def load_benchling():
-    df_benchling = pd.read_csv('benchling_sgRNAs.tsv', sep='\t')
+def load_benchling(path=''):
+    df_benchling = pd.read_csv(path + 'benchling_sgRNAs.tsv', sep='\t')
     df_benchling['source'] = 'zBenchling'
     return df_benchling
 
 
-def load_GFP_TM_sgRNAs():
+def load_GFP_TM_sgRNAs(path=''):
     columns = {'Sequence': 'sgRNA'}
-    GFP_TM = (pd.read_csv('GFP_TM_sgRNAs.tsv', '\t')
+    GFP_TM = (pd.read_csv(path + 'GFP_TM_sgRNAs.tsv', '\t')
                 .rename(columns=columns))
     GFP_TM['source'] = 'GFP_TM'
     GFP_TM['tag'] = 'GFP_TM'
@@ -290,8 +290,8 @@ def load_GFP_TM_sgRNAs():
     return GFP_TM[columns]
 
 
-def load_nontargeting_sgRNAs():
-    controls = pd.read_csv('nontargeting_sgRNAs.tsv', header=None)
+def load_nontargeting_sgRNAs(path=''):
+    controls = pd.read_csv(path + 'nontargeting_sgRNAs.tsv', header=None)
     controls.columns = 'sgRNA', 
     controls['source'] = 'CRISPOR'
     controls['tag'] = 'nontargeting'
@@ -556,7 +556,7 @@ def pair_sgRNAs_barcodes(df_sgRNAs, df_barcodes, df_layout):
                          .groupby('gene_id').head(n))
 
     def patched_Cheeseman(df_sgRNAs):
-        cheeseman_ids = load_cheese_sgRNAs()['gene_id']
+        cheeseman_ids = load_cheese_sgRNAs(path=path)['gene_id']
 
         filt = df_sgRNAs['tag'].isin(['Cheeseman', 'brunello'])
         filt &= df_sgRNAs['gene_id'].isin(cheeseman_ids)

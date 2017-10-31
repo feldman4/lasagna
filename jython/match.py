@@ -18,6 +18,7 @@ default_pattern_name = 'match'
 patterns = {
 		'pool0': 'GGTCTCCACCG(.*)GTTT.GAGACG(.*)CGTCTC.TTCC(.*)ACTGC',
 		'pool1': 'CCACCG(.*)GTTT..GTCTTC(.*)GAAGAC..TTCC(.*)ACTGGC' 
+		'all': '(.*)'
            }
 
 
