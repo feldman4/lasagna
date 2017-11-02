@@ -748,7 +748,7 @@ def to_row_col(s):
     match = re.findall(pat, s)
     if match:
         row, col = match[0][0], int(match[0][1])
-        return row, col
+        return row, col + 100
     else:
         raise ValueError('%s not a well' % s)
 
