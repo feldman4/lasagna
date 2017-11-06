@@ -37,7 +37,10 @@ def tag_extractor(filename):
 
 def make_tagger(home, ext='tif'):
     def tagger(group_id, tag):
-        return name(dict(group_id), home=home, tag=tag, ext=ext)
+        group_id = dict(group_id)
+        group_id['dataset'] = '20171031'
+        group_id['subdir'] = 'process'
+        return name(group_id, home=home, tag=tag, ext=ext)
     return tagger
 
 def name(description, ext='tif', **kwargs):
@@ -136,14 +139,27 @@ def validate_cycles(good_cycles):
         return inputs2
     return validator
 
+def check_compressibility(data, window=1000):
+    midpoint = int(data.size / 2)
+    left = int(max(midpoint - window/2, 0))
+    right = int(min(midpoint + window/2, data.size))
+    return compressibility(data.flat[left:right])
+    
+def compressibility(x):
+    import zlib
+    compressed = zlib.compress(x)
+    return len(x) / float(len(compressed))
+
 def dump_tif_or_dataframe(f, data):
     if isinstance(data, pd.DataFrame):
         data.to_pickle(f)
     else:
-        lasagna.io.save_stack(f, data)
+        compress = 0
+        # compress = 1 if compressibility(data) > 3 else 0
+        lasagna.io.save_stack(f, data, compress=compress)
 
 def read_pickle(filename):
-    tags = iiparse_filename(filename)
+    tags = parse_filename(filename)
     df = pd.read_pickle(filename)
     for tag, value in tags.items():
         if value is not None:
@@ -190,7 +206,13 @@ def laplacian_of_gaussian(data):
 def align(data):
     """Align data using DAPI.
     """
-    data = np.array(data)
+    arr = []
+    for d in data:
+        # DO
+        if d.shape[0] == 3:
+            d = np.insert(d, [1, 2], 0, axis=0)
+        arr.append(d)
+    data = np.array(arr)
     dapi = data[:,0]
     return lasagna.bayer.register_and_offset(data, registration_images=data[:, 0])
 
@@ -198,7 +220,7 @@ def align(data):
 def align_phenotype(data_DO, data_phenotype):
     _, offset = register_images([data_DO[0], data_phenotype[0]])
     return lasagna.io.offset(data_phenotype, offset)
-    
+   
 @identity
 def segment_nuclei(data, nuclei_threshold=5000, nuclei_area_max=1000):
     """Find nuclei from DAPI. Find cell foreground from aligned but unfiltered 
@@ -214,7 +236,6 @@ def segment_cells(aligned_data, nuclei, threshold=750):
     """Segment cells from aligned data. To use less than full cycles for 
     segmentation, filter the input files.
     """
-    return fake(nuclei)
     data = np.array(aligned_data)
     # no DAPI, min over cycles, mean over channels
     mask = data[:, 1:].min(axis=0).mean(axis=0)
@@ -225,19 +246,24 @@ def segment_cells(aligned_data, nuclei, threshold=750):
     return cells
 
 @identity
-def find_peaks(data):
-    return fake(data)
+def find_peaks(data, cutoff=50):
     peaks = [lasagna.process.find_peaks(x) 
                 if x.max() > 0 else x 
-                for x in data[0]]
+                for x in data]
+    peaks = np.array(peaks)
+    peaks[peaks < cutoff] = 0 # for compression
     return peaks
     
 @identity
-def calculate_phenotypes(data, nuclei):
+def calculate_phenotypes(data_DO, data_phenotype, nuclei):
     def correlate_dapi_myc(region):
         dapi, fitc, myc = region.intensity_image_full
 
         filt = dapi > 0
+        if filt.sum() == 0:
+            assert False
+            return np.nan
+
         dapi = dapi[filt]
         myc  = myc[filt]
         corr = (dapi - dapi.mean()) * (myc - myc.mean()) / (dapi.std() * myc.std())
@@ -253,11 +279,106 @@ def calculate_phenotypes(data, nuclei):
     }
 
     from lasagna.pipelines._20170914_endo import feature_table_stack
+    dapi = data_DO[0]
+    data = np.array([dapi] + list(data_phenotype[1:]))
     table = feature_table_stack(data, nuclei, features)
     return table
-        
-def call_barcodes():
-    pass
+       
+@identity 
+def max_filter(data, width=5):
+    maxed = scipy.ndimage.filters.maximum_filter(data, size=(1, 1, width, width))
+    maxed[:, 0] = data[:, 0] # DAPI
+    return maxed
+
+    # assign barcode identities in the next step
+    # threshold DO => matrix processing
+    # values = (ID, cycles, channels)
+    # positions = (ID, i, j)
+    # features = (ID, num_features)
+
+@identity
+def extract_barcodes(peaks, data_max, cells, threshold_DO, index_DO, cycles):
+    data_max = data_max[:, 1:] # no DAPI
+    blob_mask = (peaks[index_DO] > threshold_DO) & (cells > 0)
+    values = data_max[:, :, blob_mask].transpose([2, 0, 1])
+    labels = cells[blob_mask]
+    positions = np.array(np.where(blob_mask)).T
+
+    index = ('cycle', cycles), ('channel', list('TGCA'))
+    df = lasagna.utils.ndarray_to_dataframe(values, index)
+
+    df_positions = pd.DataFrame(positions, columns=['position_i', 'position_j'])
+    return (df.stack(['cycle', 'channel'])
+        .reset_index()
+        .rename(columns={0:'intensity', 'level_0': 'blob'})
+        .join(pd.Series(labels, name='cell'), on='blob')
+        .join(df_positions, on='blob')
+        )
+
+def call_bases(df):
+    cols = ['well', 'tile', 'blob', 'cycle']
+    df2 = df.pivot_table(index=cols, columns='channel', values='intensity')
+
+    channels = sorted(set(df['channel'])) # in alphabetical order
+    call = np.argmax(np.array(df2), axis=1)
+    call = np.array(channels)[call]
+    s = pd.Series(call, index=df2.index, name='call')
+    df = df.join(s, on=cols)
+    
+    cols = ['well', 'tile', 'blob']
+    df2 = df.pivot_table(index=cols, columns='cycle', values='call', aggfunc=lambda x: x.iat[0])
+
+    name = 'barcode_in_situ'
+    barcodes = [''.join(x) for x in np.array(df2)]
+    s = pd.Series(barcodes, index=df2.index, name=name)
+    df = df.join(s, on=cols)
+
+    return df
+
+def call_cells(df):
+    cols = ['well', 'tile', 'cell']
+    s = (df.drop_duplicates(['well', 'tile', 'blob'])
+       .groupby(cols)['barcode_in_situ']
+       .value_counts()
+       .rename('count')
+       .sort_values(ascending=False)
+       .reset_index('barcode_in_situ')
+       .groupby(cols)
+        )
+
+    df2 = \
+    (df.join(s.nth(0)['barcode_in_situ'].rename('barcode_in_situ_0'), on=cols)
+       .join(s.nth(0)['count']          .rename('barcode_count_0'), on=cols)
+       .join(s.nth(1)['barcode_in_situ'].rename('barcode_in_situ_1'), on=cols)
+       .join(s.nth(1)['count']          .rename('barcode_count_1'), on=cols)
+    )
+    return df2
+
+def call(df):
+    df = call_bases(df)
+    mask = filter_intensity(df, lambda x: x > 5000)
+    df = df[mask]
+    df = call_cells(df)
+    return df
+
+def categorize(df):
+    from pandas.api.types import is_object_dtype
+    for col in df:
+        if is_object_dtype(df[col].dtype):
+            df[col] = df[col].astype('category')
+    return df
+
+def filter_intensity(df, filt_func, cycle=0, base=1):
+
+    cycles = df['cycle'].value_counts()
+    assert len(set(cycles)) == 1
+    n_cycles = len(cycles)
+    x = np.array(df['intensity']).reshape(-1, n_cycles, 4)
+
+    mask = np.zeros(x.shape, dtype=bool)
+    mask[...] = filt_func(x[:,cycle,base])[:, None, None]
+    mask = mask.flatten()
+    return mask
 
 ### dataset-specific
 
@@ -276,7 +397,9 @@ tasker.load_data = lasagna.io.read_stack
 tasker.dump_data = dump_tif_or_dataframe
 
 def find_files():
-    return glob(os.path.join(home, '20171031/*.tif'))
+    ome_inputs = glob(os.path.join(home, '20171018_6W-G126A/MAX/*/*ome.tif'))
+    process_inputs = glob(os.path.join(home, '20171031/process/*.tif'))
+    return ome_inputs + process_inputs + glob(os.path.join(home, '20171031/*.tif'))
 
 def task_stitch(grid_shape, tile_shape):
     """custom hasher for site info
@@ -316,12 +439,25 @@ def task_segment_cells(cycles_cell):
 
 def task_find_peaks():
     hasher = make_hasher(common_fields)
-    return tagged(['aligned'], ['peaks'], hasher)(find_peaks())
+    stitched_tag = ('stitched', validate_cycles(['c0-DO']))
+    return tagged([stitched_tag], ['peaks'], hasher)(find_peaks())
 
 def task_calculate_phenotypes():
     tagger = make_tagger(home, ext='pkl')
     hasher = make_hasher(common_fields)
-    return tagged(['aligned_phenotype', 'nuclei'], ['phenotype'], hasher, tagger=tagger)(calculate_phenotypes())
+    stitched_tag = ('stitched', validate_cycles(['c0-DO']))
+    return (tagged([stitched_tag, 'aligned_phenotype', 'nuclei'], ['phenotype'], hasher, tagger=tagger)
+                    (calculate_phenotypes()))
+
+def task_max_filter(width):
+    hasher = make_hasher(common_fields)
+    return tagged(['aligned'], ['max%d' % width], hasher=hasher)(max_filter())
+
+def task_extract_barcodes():
+    tagger = make_tagger(home, ext='pkl')
+    hasher = make_hasher(common_fields)
+    return (tagged(['peaks', 'max5', 'cells'], ['barcodes'], hasher, tagger=tagger)
+             (extract_barcodes()))
 
 def tasks():
     """
@@ -340,29 +476,27 @@ def tasks():
     """
     # make task generators
     cycles_cell = ['c1-5B1', 'c3-5B3']
-    cycles_seq = ['c0-DO', 'c1-5B1', 'c3-5B3'] #, 'c5-3B2', 'c6-3B3', 'c8-5B2']
+    cycles_seq = ['c0-DO', 'c1-5B1', 'c3-5B3', 'c5-3B2', 'c6-3B3', 'c8-5B2']
 
-    search = os.path.join(home, '20171031/MAX/*/*TileConfig*registered.txt')
+    search = os.path.join(home, '20171031/*TileConfig*registered.txt')
     tile_config = glob(search)[0]
     grid_shape = (15, 15)
     tile_shape = (0.333, 0.333)
-
-    
+    index_DO, threshold_DO = 1, 500 # can threshold DO further later on
 
     # parameterize task generator, then supply non-data arguments
     return [task_stitch(grid_shape, tile_shape)(tile_config, backdoor=None),
-            
             task_align_phenotype()(),
-            task_calculate_phenotypes()(),
             task_segment_nuclei()(),
+            task_calculate_phenotypes()(),
 
             task_LoG(cycles_seq)(), 
-
             task_align(cycles_seq)(),
-            task_segment_cells(cycles_cell)()]
+            task_segment_cells(cycles_cell)(),
+            task_find_peaks()(),
 
-
-
+            task_max_filter(width=5)(),
+            task_extract_barcodes()(threshold_DO, index_DO, cycles_seq)]
 
 
 # custom hasher for site info

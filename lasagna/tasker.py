@@ -176,11 +176,14 @@ def run(home, function, inputs, outputs, group_id):
     """
     
     function()
-    
+
     inputs = flatten(inputs)
+    entries = []
     for output in outputs:   
-        entry = make_entry(function, inputs, output, group_id)
-        add_entry(home, entry)
+        entries.append(make_entry(function, inputs, output, group_id))
+
+    return entries
+    
 
 def make_entry(function, inputs, output, group_id):
     """
@@ -243,53 +246,29 @@ def check_all_entries(home, function, inputs, output, entries):
             return True
     return False
 
-def add_entry(home, entry):
-    entries = load_entries(home)
-    create_entries(home, [entry] + entries)
+def add_entries(home, entries):
+    old_entries = load_entries(home)
+    create_entries(home, list(entries) + list(old_entries))
 
 def delete_entries(home):
     f = os.path.join(home, '.tasker')
     os.remove(f)
-        
+    
 def create_entries(home, entries):
     f = os.path.join(home, '.tasker')
+    s = pickle.dumps(entries)
     with open(f, 'w') as fh:
-        pickle.dump(entries, fh)
+        fh.write(s)
         
 def load_entries(home):
     f = os.path.join(home, '.tasker')
     with open(f, 'r') as fh:
         return pickle.load(fh)    
 
-
 def make_flash(f):
-    """Don't even bother hashing. Can look at function code later if 
-    we really want to?
+    """If we don't bother hashing, can we look at function code later?
     """
     return hashlib.md5(cloudpickle.dumps(f)).hexdigest()
-
-def complete_garbage2(f):
-    g = types.FunctionType(f.func_code, f.func_globals, name=f.func_name,
-                           argdefs=f.func_defaults,
-                           closure=f.func_closure)
-    return f.func_globals
-
-def complete_garbage(f):
-    import types
-    codes = {}
-    arr = list(f.func_closure)
-    while arr:
-        c = arr.pop().cell_contents
-        if not isinstance(c, types.FunctionType):
-            continue
-        if c.func_name in codes:
-            continue
-        codes[c.func_name] = c.func_code.co_code
-        try:
-            arr.extend(c.func_closure)
-        except:
-            pass
-    return codes
 
 def partial(f, *args, **kwargs):
     g = functools.partial(f, *args, **kwargs)
@@ -334,16 +313,39 @@ def find_files(home):
 
 # SCHEDULER
 
-def loop_schedule(home, file_finder, tasks, n):
+def loop_schedule(home, file_finder, tasks, n, pool=None):
+    from multiprocess import Pool
+    if pool:
+        p = Pool(pool)
+
     for i in range(n):
         files = file_finder()
-        jobs = [job for task in tasks for job in task(files)]
-        available_jobs = len(jobs)
         entries = load_entries(home)
-        jobs = [job for job in jobs if not is_cached(home, *job, entries=entries)]
+        # only take jobs from one task
+        for task in tasks:
+            jobs = task(files)
+            jobs = [job for job in jobs if not is_cached(home, *job, entries=entries)]
+            if jobs:
+                break
+
+        available_jobs = len(jobs)
+        
+        
         if len(jobs) == 0:
             break
         print  'run %d with %d/%d jobs, checked %d entries' % (i, len(jobs), available_jobs, len(entries))
         job = jobs[0]
         print '=>', job[2]
-        run(home, *job)
+        if pool:
+            def runner(job):
+                import lasagna.io
+                lasagna.io._get_stack._reset()
+                return run(home, *job)
+            new_entries = p.map(runner, jobs[:pool])
+            new_entries = flatten(new_entries)
+            for entry, job in zip(new_entries, jobs):
+                entry['flash'] = make_flash(job.function)
+            add_entries(home, new_entries)
+        else:
+            new_entries = run(home, *job)
+            add_entries(home, new_entries)

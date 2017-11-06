@@ -574,3 +574,4 @@ def narrow_design(df_design, cycles):
     filt = list(filt[filt].index)
     df_design['ambiguous'] = df_design['barcode_in_situ'].isin(filt)
     return df_design
+

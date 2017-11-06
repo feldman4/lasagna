@@ -804,3 +804,9 @@ def applyXY(f, arr, *args, **kwargs):
 
 def concatMap(f, xs):
     return sum(map(f, xs), [])
+
+def ndarray_to_dataframe(values, index):
+    names, levels  = zip(*index)
+    columns = pd.MultiIndex.from_product(levels, names=names)
+    df = pd.DataFrame(values.reshape(values.shape[0], -1), columns=columns)
+    return df
