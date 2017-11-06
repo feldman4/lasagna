@@ -7,7 +7,7 @@ from ij.measure import Calibration
 import time, os
 from glob import glob
 
-if True:
+if False:
     # osx, unix
     filesep = '/'
     home_dir = '/broad/blainey_lab/David/lasagna/20150817 6 round/data/'
@@ -15,23 +15,23 @@ if True:
     home_dir = '/Volumes/Samsung_T5/lasagna/20171024_24W-endocytosis/MAX/'
 else:
     # windows
-    home_dir = 'D:\\User Folders\\David\\lasagna\\20160428_96W-G032\\MAX\\'
-    home_dir = 'D:\\User Folders\\anja\\160504\\MAX\\'
+    home_dir = 'D:\\David\\lasagna\\20171029_6W-G128B\\MAX\\'
     # home_dir = '\\\\neon-cifs\\blainey_lab\\David\\lasagna\\20150817 6 round\\analysis\\calibrated\\raw\\'
     filesep = '\\'
 
 # C
 ##channel_luts = (('Grays', (400, 8000)),)
-#channel_luts = (('Blue', (400, 50000)),
-#                ('Green', (2000, 8000)),
-#                ('Red', (800, 8000)),
-#                ('Magenta', (800, 8000)))
+channel_luts = (('Grays', (400, 50000)),
+                ('Cyan',  (1000, 8000)),
+                ('Green', (1000, 8000)),
+                ('Red',   (1000, 8000)),
+                ('Magenta', (800, 8000)))
 #channel_luts = (('Blue', (400, 40000)),
 #                ('Green', (400, 6000)),
 #                ('Red', (400, 4000)),
 #                ('Magenta', (400, 4000)))
-channel_luts = (('Green',  (400, 4000)),
-               ('Magenta', (400, 8000)))
+#channel_luts = (('Green',  (400, 4000)),
+#               ('Magenta', (400, 8000)))
 #channel_luts = (('Grays', (400, 40000)),)
 
 channels = len(channel_luts)
@@ -43,8 +43,8 @@ frames = 1;  # T
 #pixel_width = 0.175 * 2
 
 ##### 20X
-tiles, overlap = (11, 7), int(100 * (1. - 600. / 675))
-pixel_width = 0.35
+tiles, overlap = (15, 15), int(100 * (1. - 600. / 675))
+pixel_width = 0.35 * 2
 
 ### 4X
 #tiles, overlap = (3, 3), int(100*(1. - 1800./3379))
@@ -81,11 +81,10 @@ def make_template(well, data_dir):
 # uses tile offsets from a template file. default behavior is to generate the template from
 # first well stitched. to use a specific file as template, stitch it separately and 
 # call template=make_template(well, data_dir) here.
-use_template = False
-#template = make_template('A1', '60X_scan_1')
-template = None
+use_template = True
+template = None # or make_template('A1', '60X_scan_1')
 
-data_dirs = ['20X_BMQC-Tfn647-20min_1']
+data_dirs = ['20X_c7-3B2_2']
 
 # usually xyzct, except on bad days when it's xyczt(default)
 order = 'xyzct'
@@ -95,7 +94,7 @@ rows = 'ABCDEFGH'
 columns = [str(x) for x in range(1, 13)]
 
 wells = [r + c for r in rows for c in columns]
-wells = ['A1']
+wells = ['B2']
 
 cal = Calibration()
 cal.setUnit('um')

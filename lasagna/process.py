@@ -16,7 +16,7 @@ import skimage.measure
 from skimage.feature import peak_local_max
 from scipy import ndimage
 
-from lasagna import io
+import lasagna.io
 from lasagna.utils import Filter2D, _get_corners
 import lasagna.utils
 
@@ -297,7 +297,7 @@ def apply_watershed(img, smooth=4):
 
 def get_blobs(row, pad=(3, 3), threshold=0.01, method='dog'):
     channels = [x for x in row.index.levels[0] if x != 'all']
-    I = io.get_row_stack(row, pad=pad)
+    I = lasagna.io.get_row_stack(row, pad=pad)
     blobs_all = []
     for channel, img in zip(channels, I):
         if channel == 'DAPI':
@@ -312,12 +312,12 @@ def get_blobs(row, pad=(3, 3), threshold=0.01, method='dog'):
 
 
 spectral_order = ['empty', 'Atto488', 'Cy3', 'A594', 'Cy5', 'Atto647']
-spectral_luts = {'empty': io.GRAY,
-                 'Atto488': io.CYAN,
-                 'Cy3': io.GREEN,
-                 'A594': io.RED,
-                 'Cy5': io.MAGENTA,
-                 'Atto647': io.MAGENTA}
+spectral_luts = {'empty':   lasagna.io.GRAY,
+                 'Atto488': lasagna.io.CYAN,
+                 'Cy3':     lasagna.io.GREEN,
+                 'A594':    lasagna.io.RED,
+                 'Cy5':     lasagna.io.MAGENTA,
+                 'Atto647': lasagna.io.MAGENTA}
 
 
 class Calibration(object):
@@ -353,7 +353,7 @@ class Calibration(object):
     def update_dead_pixels(self, null_pixels=10):
         """Pick a threshold so # of background pixels above threshold is about `null_pixels`.
         """
-        self.dead_pixels = io.read_stack(self.dead_pixels_file)
+        self.dead_pixels = lasagna.io.read_stack(self.dead_pixels_file)
         sigma_factor = np.log(self.dead_pixels.size/null_pixels)
         self.dead_pixels_std = (self.dead_pixels[self.dead_pixels < self.dead_pixels.mean()]).std()
         # empirical adjustment
@@ -364,12 +364,12 @@ class Calibration(object):
         self.files = defaultdict(list)
         for f in os.walk(self.path).next()[2]:
             if '.tif' in f:
-                _, _, well, site = io.parse_MM(f)
+                _, _, well, site = lasagna.io.parse_MM(f)
                 channel = self.info['wells'][well]
                 self.files[channel] += [os.path.join(self.path, f)]
 
     def update_background(self):
-        self.background = np.median([io.read_stack(f) for f in self.files['empty']], axis=0)
+        self.background = np.median([lasagna.io.read_stack(f) for f in self.files['empty']], axis=0)
 
     def fix_dead_pixels(self, frame):
         """Replace dead pixels with average of 4 nearest neighbors.
@@ -386,7 +386,7 @@ class Calibration(object):
         self.calibration = pd.DataFrame()
         channels = self.info['channels']
         for dye, files in self.files.items():
-            data = np.array([io.read_stack(f) for f in files])
+            data = np.array([lasagna.io.read_stack(f) for f in files])
             for frame, channel in zip(np.median(data, axis=0), channels):
                 # pandas doesn't like initializing with array-like
                 self.calibration.loc[channel, dye] = 'x'
@@ -414,9 +414,9 @@ class Calibration(object):
 
         # dump illumination stack
         stack = np.array([self.illumination_mean] + list(self.illumination))
-        luts = [io.GRAY] + [spectral_luts[dye] for dye in self.calibration.columns if dye != 'empty']
+        luts = [lasagna.io.GRAY] + [spectral_luts[dye] for dye in self.calibration.columns if dye != 'empty']
         save_name = os.path.join(os.path.dirname(self.path), 'illumination_correction_%s.tif' % self.name)
-        io.save_stack(save_name, 10000 * stack, luts=luts)
+        lasagna.io.save_stack(save_name, 10000 * stack, luts=luts)
 
     def fix_illumination(self, frame, channel=None):
         """Apply background subtraction and illumination correction. If no channel is provided and input

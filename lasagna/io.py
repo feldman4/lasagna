@@ -1,5 +1,3 @@
-from lasagna.imports import *
-
 from itertools import product
 import skimage.morphology
 from lasagna import config

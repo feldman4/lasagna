@@ -1,0 +1,146 @@
+from glob import glob
+import firesnake
+import json
+import uuid
+
+PYTHON2 = 'C:\ProgramData\Anaconda2\python.exe'
+
+WELLS = ['B2']
+TILES = ['2', '3', '4']
+TILES = map(str, range(4, 10))
+CYCLES = ['c6-5B2', 'c7-3B2'] # temporary
+CYCLE_PHENOTYPE = ['HA-Myc']
+
+DATASETS = ["20171029_6W-G128B"]
+CYCLES_SEQ = ['c0-DO', 'c1-5B1', 'c3-5B3', 'c5-3B2', 'c6-3B3', 'c8-5B2']
+CYCLES_SEQ = CYCLES # temporary
+CYCLES_SEGMENT_CELL = ['c1-5B1', 'c3-5B3']
+TILE_CONFIG = 'TileConfiguration_20X_c7-3B2_2_B2.registered.txt'
+SITE_SHAPE = (15, 15)
+TILE_SHAPE = (5, 5)
+INDEX_DO = 1
+THRESHOLD_DO = 500 # can threshold DO more stringently after barcodes are extracted
+DISPLAY_RANGES=((500, 50000), 
+                (500, 10000), 
+                (500, 10000), 
+                (500, 10000), 
+                (500, 10000))
+  
+
+wildcard_constraints:
+    cycle = 'c\d-[a-zA-Z0-9]+'
+    # can't add more constraints? SyntaxError
+
+def stitch_input(wildcards):
+    # doesn't respect wildcard constraints
+    format_ = 'MAX/{cycle}/20X_{cycle}_{well}-Site_{site}.max.tif'
+    inputs = firesnake.stitch_input(wildcards, format_, site_shape=SITE_SHAPE, tile_shape=TILE_SHAPE)
+    return inputs
+
+def dump_json(input, **info):
+    name = 'json/input_%s.json' % uuid.uuid4()
+    info = info.copy()
+    info.update({'input': input, 'display_ranges': DISPLAY_RANGES})
+    with open(name, 'w') as fh:
+        json.dump(info, fh)
+    return name
+
+def call_firesnake(input, output, method, cmds=None, **info):
+    json_name = dump_json(input, **info)
+    from subprocess import call
+    cmd = [PYTHON2, 'firesnake.py', method, 
+            '--input_json', json_name,
+            '--output', output]
+    if cmds:
+        cmd += cmds
+    call(cmd)
+
+
+rule all:
+    input:
+        # expand("process/20X_{well}_Tile-{tile}.aligned.tif", well=WELLS, tile=TILES)
+        # expand('process/20X_{well}_Tile-{tile}.nuclei.tif', well=WELLS, tile=TILES)
+        # expand('process/20X_{well}_Tile-{tile}.cells.tif', well=WELLS, tile=TILES)
+        # expand('process/20X_{well}_Tile-{tile}.maxed.tif', well=WELLS, tile=TILES)
+        expand('process/20X_{well}_Tile-{tile}.barcodes.pkl', well=WELLS, tile=TILES)
+
+rule stitch:
+    input: 
+        stitch_input
+    output:
+        "process/20X_{cycle}_{well}_Tile-{tile}.stitched.tif"
+    run:
+        call_firesnake(input, output, 'stitch', tile_config=TILE_CONFIG)
+
+rule align_barcodes:
+    input:
+        expand("process/20X_{cycle}_{{well}}_Tile-{{tile}}.stitched.tif", cycle=CYCLES_SEQ)
+    output:
+        "process/20X_{well}_Tile-{tile}.aligned.tif"
+    run:
+        call_firesnake(input, output, 'align')
+
+rule segment_nuclei:
+    input:
+        'process/20X_{cycle}_{{well}}_Tile-{{tile}}.stitched.tif'.format(cycle=CYCLES[0]) # DO
+    output:
+        "process/20X_{well}_Tile-{tile}.nuclei.tif"
+    run:
+        call_firesnake(input, output, 'segment_nuclei')
+
+rule segment_cells:
+    input:
+        'process/20X_{well}_Tile-{tile}.aligned.tif',
+        'process/20X_{well}_Tile-{tile}.nuclei.tif'
+    output:
+        'process/20X_{well}_Tile-{tile}.cells.tif'
+    run:
+        call_firesnake(input, output, 'segment_cells')
+
+rule transform_LoG:
+    input:
+        'process/20X_{well}_Tile-{tile}.aligned.tif'
+    output:
+        'process/20X_{well}_Tile-{tile}.log.tif'
+    run:
+        call_firesnake(input, output, 'transform_LoG')
+
+rule find_peaks:
+    input:
+        'process/20X_{cycle}_{{well}}_Tile-{{tile}}.stitched.tif'.format(cycle=CYCLES[0]) # DO
+    output:
+        'process/20X_{well}_Tile-{tile}.peaks.tif'
+    run:
+        call_firesnake(input, output, 'find_peaks') 
+
+rule max_filter:
+    input:
+        'process/20X_{well}_Tile-{tile}.log.tif'
+    output:
+        'process/20X_{well}_Tile-{tile}.maxed.tif'
+    run:
+        call_firesnake(input, output, 'max_filter') 
+
+rule extract_barcodes:
+    input:
+        'process/20X_{well}_Tile-{tile}.peaks.tif',
+        'process/20X_{well}_Tile-{tile}.maxed.tif',
+        'process/20X_{well}_Tile-{tile}.cells.tif'
+    output:
+        'process/20X_{well}_Tile-{tile}.barcodes.pkl'
+    run:
+        call_firesnake(input, output, 'extract_barcodes', wildcards=dict(wildcards),
+            cycles=CYCLES_SEQ, threshold_DO=THRESHOLD_DO, index_DO=INDEX_DO) 
+
+# rule align_phenotype:
+
+rule extract_phenotypes:
+    input:
+        'process/20X_{cycle}_{{well}}_Tile-{{tile}}.stitched.tif'.format(cycle=CYCLES[0]),
+        'process/20X_{cycle}_{{well}}_Tile-{{tile}}.phenotype_aligned.tif'.format(cycle=CYCLE_PHENOTYPE),
+        'process/20X_{well}_Tile-{tile}.nuclei.tif'
+    output:
+        'process/20X_{well}_Tile-{tile}.phenotype.pkl'
+    run:
+        call_firesnake(input, output, 'extract_phenotypes', wildcards=dict(wildcards))
+
