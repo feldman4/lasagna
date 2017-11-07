@@ -8,12 +8,11 @@ PYTHON2 = 'C:\ProgramData\Anaconda2\python.exe'
 WELLS = ['B2']
 TILES = ['2', '3', '4']
 TILES = map(str, range(4, 10))
-CYCLES = ['c6-5B2', 'c7-3B2'] # temporary
 CYCLE_PHENOTYPE = ['HA-Myc']
 
-DATASETS = ["20171029_6W-G128B"]
+DATASETS = ['20171029_6W-G128B']
 CYCLES_SEQ = ['c0-DO', 'c1-5B1', 'c3-5B3', 'c5-3B2', 'c6-3B3', 'c8-5B2']
-CYCLES_SEQ = CYCLES # temporary
+CYCLES_SEQ = ['c6-5B2', 'c7-3B2'] # temporary
 CYCLES_SEGMENT_CELL = ['c1-5B1', 'c3-5B3']
 TILE_CONFIG = 'TileConfiguration_20X_c7-3B2_2_B2.registered.txt'
 SITE_SHAPE = (15, 15)
@@ -58,7 +57,7 @@ def call_firesnake(input, output, method, cmds=None, **info):
 
 rule all:
     input:
-        # expand("process/20X_{well}_Tile-{tile}.aligned.tif", well=WELLS, tile=TILES)
+        # expand('process/20X_{well}_Tile-{tile}.aligned.tif', well=WELLS, tile=TILES)
         # expand('process/20X_{well}_Tile-{tile}.nuclei.tif', well=WELLS, tile=TILES)
         # expand('process/20X_{well}_Tile-{tile}.cells.tif', well=WELLS, tile=TILES)
         # expand('process/20X_{well}_Tile-{tile}.maxed.tif', well=WELLS, tile=TILES)
@@ -68,23 +67,23 @@ rule stitch:
     input: 
         stitch_input
     output:
-        "process/20X_{cycle}_{well}_Tile-{tile}.stitched.tif"
+        'process/20X_{cycle}_{well}_Tile-{tile}.stitched.tif'
     run:
         call_firesnake(input, output, 'stitch', tile_config=TILE_CONFIG)
 
 rule align_barcodes:
     input:
-        expand("process/20X_{cycle}_{{well}}_Tile-{{tile}}.stitched.tif", cycle=CYCLES_SEQ)
+        expand('process/20X_{cycle}_{{well}}_Tile-{{tile}}.stitched.tif', cycle=CYCLES_SEQ)
     output:
-        "process/20X_{well}_Tile-{tile}.aligned.tif"
+        'process/20X_{well}_Tile-{tile}.aligned.tif'
     run:
         call_firesnake(input, output, 'align')
 
 rule segment_nuclei:
     input:
-        'process/20X_{cycle}_{{well}}_Tile-{{tile}}.stitched.tif'.format(cycle=CYCLES[0]) # DO
+        'process/20X_{cycle}_{{well}}_Tile-{{tile}}.stitched.tif'.format(cycle=CYCLES_SEQ[0]) # DO
     output:
-        "process/20X_{well}_Tile-{tile}.nuclei.tif"
+        'process/20X_{well}_Tile-{tile}.nuclei.tif'
     run:
         call_firesnake(input, output, 'segment_nuclei')
 
@@ -107,7 +106,7 @@ rule transform_LoG:
 
 rule find_peaks:
     input:
-        'process/20X_{cycle}_{{well}}_Tile-{{tile}}.stitched.tif'.format(cycle=CYCLES[0]) # DO
+        'process/20X_{cycle}_{{well}}_Tile-{{tile}}.stitched.tif'.format(cycle=CYCLES_SEQ[0]) # DO
     output:
         'process/20X_{well}_Tile-{tile}.peaks.tif'
     run:
@@ -132,15 +131,21 @@ rule extract_barcodes:
         call_firesnake(input, output, 'extract_barcodes', wildcards=dict(wildcards),
             cycles=CYCLES_SEQ, threshold_DO=THRESHOLD_DO, index_DO=INDEX_DO) 
 
-# rule align_phenotype:
-
-rule extract_phenotypes:
+rule align_phenotype:
     input:
-        'process/20X_{cycle}_{{well}}_Tile-{{tile}}.stitched.tif'.format(cycle=CYCLES[0]),
-        'process/20X_{cycle}_{{well}}_Tile-{{tile}}.phenotype_aligned.tif'.format(cycle=CYCLE_PHENOTYPE),
+        'process/20X_{cycle}_{{well}}_Tile-{{tile}}.stitched.tif'.format(cycle=CYCLES_SEQ[0]),
+        'process/20X_{cycle}_{{well}}_Tile-{{tile}}.stitched.tif'.format(cycle=CYCLE_PHENOTYPE)
+    output:
+        'process/20X_{well}_Tile-{tile}.phenotype_aligned.tif'
+    run:
+        call_firesnake(input, output, 'align_phenotype')
+
+rule extract_phenotype:
+    input:
+        'process/20X_{well}_Tile-{tile}.phenotype_aligned.tif',
         'process/20X_{well}_Tile-{tile}.nuclei.tif'
     output:
         'process/20X_{well}_Tile-{tile}.phenotype.pkl'
     run:
-        call_firesnake(input, output, 'extract_phenotypes', wildcards=dict(wildcards))
+        call_firesnake(input, output, 'extract_phenotype', wildcards=dict(wildcards))
 

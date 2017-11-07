@@ -174,9 +174,8 @@ class Snake():
             df[k] = v
         df.to_pickle(output)
 
-
     @staticmethod
-    def extract_phenotypes():
+    def extract_phenotype():
         def correlate_dapi_myc(region):
             dapi, fitc, myc = region.intensity_image_full
 
@@ -203,16 +202,30 @@ class Snake():
             inputs = json.load(fh)
         files, display_ranges = inputs['input'], inputs['display_ranges']
 
-        data_DO, data_phenotype, nuclei = [read(f) for f in files]
+        data_phenotype, nuclei = [read(f) for f in files]
 
         from lasagna.pipelines._20170914_endo import feature_table_stack
-        dapi = data_DO[0]
-        data = np.array([dapi] + list(data_phenotype[1:]))
-        df = feature_table_stack(data, nuclei, features)
+        df = feature_table_stack(data_phenotype, nuclei, features)
 
         for k,v in inputs['wildcards'].items():
             df[k] = v
         df.to_pickle(output)
+
+    @staticmethod
+    def align_phenotype(input_json=None, output=None):
+        """Align using DAPI.
+        """
+        with open(input_json, 'r') as fh:
+            inputs = json.load(fh)
+        files = inputs['input']
+
+        data_DO, data_phenotype = [read(f) for f in files]
+
+        _, offset = register_images([data_DO[0], data_phenotype[0]])
+        aligned = lasagna.io.offset(data_phenotype, offset)
+
+        save(output, aligned)
+
 
 
 ###
