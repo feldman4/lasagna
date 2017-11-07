@@ -230,7 +230,7 @@ class Snake():
 
 ###
 
-def stitch_input(wildcards, format_, site_shape, tile_shape):
+def stitch_input_sites(tile, site_shape, tile_shape):
     """Map tile ID onto site IDs. Fill in wildcards ourselves.
     """
 
@@ -238,13 +238,9 @@ def stitch_input(wildcards, format_, site_shape, tile_shape):
     d2 = defaultdict(list)
     [d2[v].append(k) for k, v in d.items()]
 
-    sites = d2[int(wildcards['tile'])]
+    sites = d2[int(tile)]
     
-    arr = []
-    for site in sites:
-        arr.append(format_.format(site=site, **wildcards))
-
-    return arr
+    return sites
 
 def site_to_tile(site_shape, tile_shape):
         """Create dictionary from site number to tile number.

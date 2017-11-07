@@ -3,18 +3,21 @@ import firesnake
 import json
 import uuid
 
+import snakemake
+snakemake.ignore_missing = True
+
 PYTHON2 = 'C:\ProgramData\Anaconda2\python.exe'
 
-WELLS = ['B2']
-TILES = ['2', '3', '4']
-TILES = map(str, range(4, 10))
+
+WELLS = ['B2', 'B3', 'B6', 'B7', 'C2', 'C3', 'C6', 'C7']
+TILES = map(str, range(25))
+
 CYCLE_PHENOTYPE = ['HA-Myc']
 
 DATASETS = ['20171029_6W-G128B']
-CYCLES_SEQ = ['c0-DO', 'c1-5B1', 'c3-5B3', 'c5-3B2', 'c6-3B3', 'c8-5B2']
-CYCLES_SEQ = ['c6-5B2', 'c7-3B2'] # temporary
-CYCLES_SEGMENT_CELL = ['c1-5B1', 'c3-5B3']
-TILE_CONFIG = 'TileConfiguration_20X_c7-3B2_2_B2.registered.txt'
+CYCLES_SEQ = ['c0-DO', 'c1-5B1', 'c2-5B4', 'c3-3B4', 'c4-5B3', 'c5-3B3', 'c6-5B2', 'c7-3B2', 'c8-3B1']
+CYCLES_SEGMENT_CELL = ['c6-5B2', 'c7-3B2']
+TILE_CONFIG = (('c6-5B2', 'c7-3B2', 'c8-3B1'), 'TileConfiguration_20X_c7-3B2_2_B2.registered.txt'),
 SITE_SHAPE = (15, 15)
 TILE_SHAPE = (5, 5)
 INDEX_DO = 1
@@ -26,14 +29,22 @@ DISPLAY_RANGES=((500, 50000),
                 (500, 10000))
   
 
+TILES = ['0', '1']
+WELLS = ['B2']
+CYCLES_SEQ = ['c6-5B2', 'c7-3B2']
+
+
 wildcard_constraints:
     cycle = 'c\d-[a-zA-Z0-9]+'
     # can't add more constraints? SyntaxError
 
 def stitch_input(wildcards):
     # doesn't respect wildcard constraints
-    format_ = 'MAX/{cycle}/20X_{cycle}_{well}-Site_{site}.max.tif'
-    inputs = firesnake.stitch_input(wildcards, format_, site_shape=SITE_SHAPE, tile_shape=TILE_SHAPE)
+    format_ = 'MAX/{cycle}/20X_{cycle}_{well}-Site_{{site}}.max.tif'.format(**wildcards)
+    sites = firesnake.stitch_input_sites(wildcards['tile'], site_shape=SITE_SHAPE, tile_shape=TILE_SHAPE)
+    inputs = []
+    for site in sites:
+        inputs.append(format_.format(site=site))
     return inputs
 
 def dump_json(input, **info):
@@ -54,14 +65,22 @@ def call_firesnake(input, output, method, cmds=None, **info):
         cmd += cmds
     call(cmd)
 
-
 rule all:
     input:
-        # expand('process/20X_{well}_Tile-{tile}.aligned.tif', well=WELLS, tile=TILES)
+        # expand('process/20X_{cycle}_{well}_Tile-{tile}.stitched.tif', cycle=CYCLES_SEQ, well=WELLS, tile=TILES)
+        expand('process/20X_{well}_Tile-{tile}.aligned.tif', well=WELLS, tile=TILES)
         # expand('process/20X_{well}_Tile-{tile}.nuclei.tif', well=WELLS, tile=TILES)
         # expand('process/20X_{well}_Tile-{tile}.cells.tif', well=WELLS, tile=TILES)
         # expand('process/20X_{well}_Tile-{tile}.maxed.tif', well=WELLS, tile=TILES)
-        expand('process/20X_{well}_Tile-{tile}.barcodes.pkl', well=WELLS, tile=TILES)
+        # expand('process/20X_{well}_Tile-{tile}.barcodes.pkl', well=WELLS, tile=TILES)
+
+rule all1:
+    input:
+        'process/20X_c5-3B3_B2_Tile-0.stitched.tif'
+
+rule all2:
+    input:
+        'process/20X_c6-5B2_B2_Tile-0.stitched.tif'
 
 rule stitch:
     input: 
@@ -69,11 +88,16 @@ rule stitch:
     output:
         'process/20X_{cycle}_{well}_Tile-{tile}.stitched.tif'
     run:
-        call_firesnake(input, output, 'stitch', tile_config=TILE_CONFIG)
+        for cycles, tile_config in TILE_CONFIG:
+            if wildcards.cycle in cycles:
+                break
+        else:
+            raise IndexError('no tile config for cycle {cycle}'.format(cycle=wildcards.cycle))
+        call_firesnake(input, output, 'stitch', tile_config=tile_config)
 
 rule align_barcodes:
     input:
-        expand('process/20X_{cycle}_{{well}}_Tile-{{tile}}.stitched.tif', cycle=CYCLES_SEQ)
+        expand('process/20X_{cycle}_{{well}}_Tile-{{tile}}.stitched.tif', cycle=CYCLES_SEQ[-3:-1])
     output:
         'process/20X_{well}_Tile-{tile}.aligned.tif'
     run:
