@@ -33,6 +33,10 @@ class Snake():
             positions += [ij[site]]
     
         data = np.array([read(file) for file in files])
+        # GOT FUCKED UP IN NOTEBOOK MAX PROJECT
+        if 'c0-DO' in file:
+            data[:, 2] = data[:, 3]
+            data[:, [1, 3]] = 0
         # lasagna.io._imread._reset()
 
         arr = []
@@ -51,7 +55,12 @@ class Snake():
             inputs = json.load(fh)
         files, display_ranges = inputs['input'], inputs['display_ranges']
 
-        data = np.array([read(file) for file in files])
+        # might be stitched with different configs
+        # keep shape consistent with DO
+        data = [read(file) for file in files]
+        shape = data[0].shape
+        data = lasagna.io.pile(data)
+        data = data[..., :shape[-2], :shape[-1]]
 
         arr = []
         for d in data:
@@ -110,7 +119,7 @@ class Snake():
 
         data = read(files[0])
         loged = lasagna.bayer.log_ndi(data)
-        loged[:,0] = data[:,0]
+        loged[..., 0, :, :] = data[..., 0, :, :] # DAPI
 
         save(output, loged, display_ranges=display_ranges)
     
@@ -175,13 +184,13 @@ class Snake():
         df.to_pickle(output)
 
     @staticmethod
-    def extract_phenotype():
+    def extract_phenotype(input_json=None, output=None):
         def correlate_dapi_myc(region):
             dapi, fitc, myc = region.intensity_image_full
 
             filt = dapi > 0
             if filt.sum() == 0:
-                assert False
+                # assert False
                 return np.nan
 
             dapi = dapi[filt]
@@ -207,6 +216,13 @@ class Snake():
         from lasagna.pipelines._20170914_endo import feature_table_stack
         df = feature_table_stack(data_phenotype, nuclei, features)
 
+        from lasagna.process import feature_table, default_object_features
+
+        features = default_object_features.copy()
+        features['cell'] = features.pop('label')
+        df2 = feature_table(nuclei, nuclei, )
+        df = df.join(df2.set_index('cell'), on='cell')
+
         for k,v in inputs['wildcards'].items():
             df[k] = v
         df.to_pickle(output)
@@ -221,7 +237,7 @@ class Snake():
 
         data_DO, data_phenotype = [read(f) for f in files]
 
-        _, offset = register_images([data_DO[0], data_phenotype[0]])
+        _, offset = lasagna.process.register_images([data_DO[0], data_phenotype[0]])
         aligned = lasagna.io.offset(data_phenotype, offset)
 
         save(output, aligned)

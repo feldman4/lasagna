@@ -4,38 +4,45 @@ import json
 import uuid
 
 import snakemake
-snakemake.ignore_missing = True
+
+# snakemake.ignore_missing = True
 
 PYTHON2 = 'C:\ProgramData\Anaconda2\python.exe'
 
 
 WELLS = ['B2', 'B3', 'B6', 'B7', 'C2', 'C3', 'C6', 'C7']
 TILES = map(str, range(25))
-
-CYCLE_PHENOTYPE = ['HA-Myc']
+# WELLS = ['C2']
+TILES = ['15', '16', '20', '21']
 
 DATASETS = ['20171029_6W-G128B']
 CYCLES_SEQ = ['c0-DO', 'c1-5B1', 'c2-5B4', 'c3-3B4', 'c4-5B3', 'c5-3B3', 'c6-5B2', 'c7-3B2', 'c8-3B1']
-CYCLES_SEGMENT_CELL = ['c6-5B2', 'c7-3B2']
-TILE_CONFIG = (('c6-5B2', 'c7-3B2', 'c8-3B1'), 'TileConfiguration_20X_c7-3B2_2_B2.registered.txt'),
+CYCLES_PHENOTYPE = ['c9-HA-Myc']
+CYCLES = CYCLES_SEQ + CYCLES_PHENOTYPE
+CYCLES = CYCLES_PHENOTYPE
+TILE_CONFIG = (
+               (('c0-DO' ,), 'registered/TileConfiguration_20X_c0-DO_1_B2.registered (2).txt' ),
+               (('c1-5B1',), 'registered/TileConfiguration_20X_c1-5B1_1_B2.registered.txt'),
+               (('c2-5B4',), 'registered/TileConfiguration_20X_c2-5B4_1_B2.registered.txt'),
+               (('c3-3B4',), 'registered/TileConfiguration_20X_c3-3B4_1_B2.registered.txt'),
+               (('c4-5B3',), 'registered/TileConfiguration_20X_c4-5B3_1_B2.registered.txt'),
+               (('c5-3B3',), 'registered/TileConfiguration_20X_c5-3B3_3_B2.registered.txt'),
+               (('c6-5B2', 'c7-3B2', 'c8-3B1', 'c9-HA-Myc'), 'registered/TileConfiguration_20X_c7-3B2_2_B2.registered.txt'),
+              )
+
 SITE_SHAPE = (15, 15)
 TILE_SHAPE = (5, 5)
-INDEX_DO = 1
 THRESHOLD_DO = 500 # can threshold DO more stringently after barcodes are extracted
-DISPLAY_RANGES=((500, 50000), 
+INDEX_DO = 2 # out of 5 channels
+DISPLAY_RANGES=((500, 60000), 
                 (500, 10000), 
-                (500, 10000), 
-                (500, 10000), 
-                (500, 10000))
-  
-
-TILES = ['0', '1']
-WELLS = ['B2']
-CYCLES_SEQ = ['c6-5B2', 'c7-3B2']
+                (500, 15000), 
+                (500, 5000), 
+                (500, 25000))
 
 
-wildcard_constraints:
-    cycle = 'c\d-[a-zA-Z0-9]+'
+# wildcard_constraints:
+#     cycle = 'c\d-[a-zA-Z0-9]+'
     # can't add more constraints? SyntaxError
 
 def stitch_input(wildcards):
@@ -67,20 +74,13 @@ def call_firesnake(input, output, method, cmds=None, **info):
 
 rule all:
     input:
-        # expand('process/20X_{cycle}_{well}_Tile-{tile}.stitched.tif', cycle=CYCLES_SEQ, well=WELLS, tile=TILES)
-        expand('process/20X_{well}_Tile-{tile}.aligned.tif', well=WELLS, tile=TILES)
+        # expand('process/20X_{cycle}_{well}_Tile-{tile}.stitched.tif', cycle=CYCLES, well=WELLS, tile=TILES)
+        # expand('process/20X_{well}_Tile-{tile}.aligned.tif', well=WELLS, tile=TILES)
         # expand('process/20X_{well}_Tile-{tile}.nuclei.tif', well=WELLS, tile=TILES)
         # expand('process/20X_{well}_Tile-{tile}.cells.tif', well=WELLS, tile=TILES)
         # expand('process/20X_{well}_Tile-{tile}.maxed.tif', well=WELLS, tile=TILES)
-        # expand('process/20X_{well}_Tile-{tile}.barcodes.pkl', well=WELLS, tile=TILES)
-
-rule all1:
-    input:
-        'process/20X_c5-3B3_B2_Tile-0.stitched.tif'
-
-rule all2:
-    input:
-        'process/20X_c6-5B2_B2_Tile-0.stitched.tif'
+        expand('process/20X_{well}_Tile-{tile}.barcodes.pkl', well=WELLS, tile=TILES) +
+        expand('process/20X_{well}_Tile-{tile}.phenotype.pkl', well=WELLS, tile=TILES)
 
 rule stitch:
     input: 
@@ -97,7 +97,7 @@ rule stitch:
 
 rule align_barcodes:
     input:
-        expand('process/20X_{cycle}_{{well}}_Tile-{{tile}}.stitched.tif', cycle=CYCLES_SEQ[-3:-1])
+        expand('process/20X_{cycle}_{{well}}_Tile-{{tile}}.stitched.tif', cycle=CYCLES_SEQ)
     output:
         'process/20X_{well}_Tile-{tile}.aligned.tif'
     run:
@@ -158,7 +158,7 @@ rule extract_barcodes:
 rule align_phenotype:
     input:
         'process/20X_{cycle}_{{well}}_Tile-{{tile}}.stitched.tif'.format(cycle=CYCLES_SEQ[0]),
-        'process/20X_{cycle}_{{well}}_Tile-{{tile}}.stitched.tif'.format(cycle=CYCLE_PHENOTYPE)
+        'process/20X_{cycle}_{{well}}_Tile-{{tile}}.stitched.tif'.format(cycle=CYCLES_PHENOTYPE[0])
     output:
         'process/20X_{well}_Tile-{tile}.phenotype_aligned.tif'
     run:

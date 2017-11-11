@@ -15,17 +15,17 @@ if False:
     home_dir = '/Volumes/Samsung_T5/lasagna/20171024_24W-endocytosis/MAX/'
 else:
     # windows
-    home_dir = 'D:\\David\\lasagna\\20171029_6W-G128B\\MAX\\'
+    home_dir = 'D:\\David\\lasagna\\20171109_24W_5min\\'
     # home_dir = '\\\\neon-cifs\\blainey_lab\\David\\lasagna\\20150817 6 round\\analysis\\calibrated\\raw\\'
     filesep = '\\'
 
 # C
-##channel_luts = (('Grays', (400, 8000)),)
-channel_luts = (('Grays', (400, 50000)),
-                ('Cyan',  (1000, 8000)),
-                ('Green', (1000, 8000)),
-                ('Red',   (1000, 8000)),
-                ('Magenta', (800, 8000)))
+channel_luts = (('Grays', (400, 8000)),)
+#channel_luts = (('Grays', (400, 50000)),
+#                ('Cyan',  (1000, 8000)),
+#                ('Green', (1000, 8000)),
+#                ('Red',   (1000, 8000)),
+#                ('Magenta', (800, 8000)))
 #channel_luts = (('Blue', (400, 40000)),
 #                ('Green', (400, 6000)),
 #                ('Red', (400, 4000)),
@@ -41,14 +41,14 @@ frames = 1;  # T
 ##### 40X
 #tiles, overlap = (4, 4), int(100 * (1. - 300. / 350))
 #pixel_width = 0.175 * 2
-
+rows = 'ABCDEFGH'
 ##### 20X
-tiles, overlap = (15, 15), int(100 * (1. - 600. / 675))
-pixel_width = 0.35 * 2
-
+#tiles, overlap = (15, 15), int(100 * (1. - 600. / 675))
+#pixel_width = 0.35 * 24X_DAPI_14X_DAPI_1
+#
 ### 4X
-#tiles, overlap = (3, 3), int(100*(1. - 1800./3379))
-#pixel_width = 1.64
+tiles, overlap = (5, 5), int(100*(1. - 3000./3379))
+pixel_width = 1.64
 
 ### 100X
 #tiles, overlap = (7, 7), int(100*(1. - 100./135))
@@ -84,16 +84,24 @@ def make_template(well, data_dir):
 use_template = True
 template = None # or make_template('A1', '60X_scan_1')
 
-data_dirs = ['20X_c7-3B2_2']
+data_dirs = ['4X_DAPI_1']
 
 # usually xyzct, except on bad days when it's xyczt(default)
 order = 'xyzct'
-#order = 'xyczt(default)'
-
-rows = 'ABCDEFGH'
+#order = 'xyczt(default)'rows = 'ABCDEFGH'
 columns = [str(x) for x in range(1, 13)]
 
+
+#rows = 'ABCDEFGH'
+#columns = [str(x) for x in range(1, 13)]
+
+rows = 'ABCD'
+columns = [str(x) for x in range(1, 7)]
+
+
 wells = [r + c for r in rows for c in columns]
+rows = 'ABCDEFGH'
+columns = [str(x) for x in range(1, 13)]
 wells = ['B2']
 
 cal = Calibration()
@@ -132,7 +140,7 @@ def stitch_from_file_cmd(layout_file_path):
     computation_parameters=[Save computation time (but use more RAM)] 
     image_output=[Fuse and display]"""
     return s % (os.path.dirname(layout_file_path) + '\\', os.path.basename(layout_file_path))
-        
+        rows = 'ABCDEFGH'rows = 'ABCDEFGH'
 ### MAIN LOOP ###
 
 for data_dir in data_dirs:
