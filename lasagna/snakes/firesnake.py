@@ -73,21 +73,60 @@ class Snake():
         aligned = lasagna.bayer.register_and_offset(data, registration_images=data[:, 0])
 
         save(output, aligned, display_ranges=display_ranges)
+
+
+    @staticmethod
+    def align2(input_json=None, output=None):
+        """Align data using 2nd channel. Align internal channels to 2nd channel.
+        """
+        with open(input_json, 'r') as fh:
+            inputs = json.load(fh)
+        files, display_ranges = inputs['input'], inputs['display_ranges']
+
+        # might be stitched with different configs
+        # keep shape consistent with DO
+        data = [read(file) for file in files]
+        shape = data[0].shape
+        data = lasagna.io.pile(data)
+        # TODO: crop zeros at boundaries
+        data = data[..., :shape[-2], :shape[-1]]
+
+        # align within rounds
+        fwd = [1, 0, 2, 3, 4]
+        rev = [1, 0, 2, 3, 4]
+        arr = []
+        for data_ in data:
+            # stupid DO hack.
+            if data_[1].sum() == 0:
+                x = data_[2].copy()
+                data_[1] = x
+
+            data_ = data_[fwd]
+            data_ = lasagna.bayer.register_and_offset(data_)
+            data_ = data_[rev]
+            arr += [data_]
+        data = np.array(arr)
+
+        aligned = lasagna.bayer.register_and_offset(data, registration_images=data[:, 1])
+
+        save(output, aligned, display_ranges=display_ranges)
     
     @staticmethod
-    def segment_nuclei(input_json=None, output=None, nuclei_threshold=5000, nuclei_area_max=1000):
+    def segment_nuclei(input_json=None, output=None):
         """Find nuclei from DAPI. Find cell foreground from aligned but unfiltered 
         data. Expects data to have shape C x I x J.
         """
         with open(input_json, 'r') as fh:
             inputs = json.load(fh)
-        files = inputs['input']
+        files = inputs.pop('input')
+        threshold = 5000
+        if 'threshold' in inputs:
+            threshold = inputs.pop('threshold')
 
         data = read(files[0])
-
+        print('kwargs', inputs)
         nuclei = lasagna.process.find_nuclei(data[0], 
-                                area_max=nuclei_area_max, 
-                                threshold=lambda x: nuclei_threshold)
+                                threshold=lambda x: threshold, **inputs)
         nuclei = nuclei.astype(np.uint16)
         save(output, nuclei)
     
@@ -112,7 +151,7 @@ class Snake():
         save(output, cells)
     
     @staticmethod
-    def transform_LoG(input_json=None, output=None):
+    def transform_LoG(input_json=None, bsub=False, output=None):
         with open(input_json, 'r') as fh:
             inputs = json.load(fh)
         files, display_ranges = inputs['input'], inputs['display_ranges']
@@ -120,6 +159,10 @@ class Snake():
         data = read(files[0])
         loged = lasagna.bayer.log_ndi(data)
         loged[..., 0, :, :] = data[..., 0, :, :] # DAPI
+
+        if bsub:
+            loged = loged - np.sort(loged, axis=0)[-2].astype(float)
+            loged[loged < 0] = 0
 
         save(output, loged, display_ranges=display_ranges)
     

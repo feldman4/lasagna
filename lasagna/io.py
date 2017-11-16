@@ -174,8 +174,8 @@ def tile(arr, n, m, pad=None):
     assert arr.ndim > 1
     h, w = arr.shape[-2:]
     # convert to number of tiles
-    m = np.ceil(h / m) if m >= 1 else np.round(1 / m)
-    n = np.ceil(w / n) if n >= 1 else np.round(1 / n)
+    m = m if m >= 1 else np.round(1 / m)
+    n = n if n >= 1 else np.round(1 / n)
     m, n = int(m), int(n)
 
     if pad is not None:

@@ -4,6 +4,7 @@ import json
 import uuid
 
 import snakemake
+from firesnake3 import call_firesnake
 
 # snakemake.ignore_missing = True
 
@@ -53,24 +54,6 @@ def stitch_input(wildcards):
     for site in sites:
         inputs.append(format_.format(site=site))
     return inputs
-
-def dump_json(input, **info):
-    name = 'json/input_%s.json' % uuid.uuid4()
-    info = info.copy()
-    info.update({'input': input, 'display_ranges': DISPLAY_RANGES})
-    with open(name, 'w') as fh:
-        json.dump(info, fh)
-    return name
-
-def call_firesnake(input, output, method, cmds=None, **info):
-    json_name = dump_json(input, **info)
-    from subprocess import call
-    cmd = [PYTHON2, 'firesnake.py', method, 
-            '--input_json', json_name,
-            '--output', output]
-    if cmds:
-        cmd += cmds
-    call(cmd)
 
 rule all:
     input:

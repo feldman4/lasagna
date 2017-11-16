@@ -57,31 +57,6 @@ def align_(data, verbose=False):
     
     return data2
 
-def concatMap(f, xs):
-    return sum(map(f, xs), [])
-
-def tile(arr, n, m, pad=None):
-    """Divide a stack of images into tiles of size m x n. If m or n is between 
-    0 and 1, it specifies a fraction of the input size. If pad is specified, the
-    value is used to fill in edges, otherwise the tiles may not be equally sized.
-    Tiles are returned in a list.
-    """
-    assert arr.ndim > 1
-    h, w = arr.shape[-2:]
-    # convert to number of tiles
-    m = np.ceil(h / m) if m >= 1 else np.round(1 / m)
-    n = np.ceil(w / n) if n >= 1 else np.round(1 / n)
-    m, n = int(m), int(n)
-
-    if pad is not None:
-        pad_width = (arr.ndim - 2) * ((0, 0),) + ((0, -h % m), (0, -w % n))
-        arr = np.pad(arr, pad_width, 'constant', constant_values=pad)
-        print arr.shape
-
-    tiled = np.array_split(arr, m, axis=-2)
-    tiled = concatMap(lambda x: np.array_split(x, n, axis=-1), tiled)
-    return tiled
-
 def laplace_only(data, *args, **kwargs):
     from skimage.filters import laplace
     h, w = data.shape[-2:]
