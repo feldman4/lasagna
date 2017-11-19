@@ -28,11 +28,13 @@ class Snake():
         _, ij = load_tile_configuration(tile_config)
         positions = []
         for file in files:
-            site = re.findall('Site_(\d+)', file)[0]
+            site = re.findall('Site[-_](\d+)', file)[0]
             site = int(site)
             positions += [ij[site]]
     
         data = np.array([read(file) for file in files])
+        if data.ndim == 3:
+            data = data[:, None]
         # GOT FUCKED UP IN NOTEBOOK MAX PROJECT
         if 'c0-DO' in file:
             data[:, 2] = data[:, 3]
@@ -124,7 +126,6 @@ class Snake():
             threshold = inputs.pop('threshold')
 
         data = read(files[0])
-        print('kwargs', inputs)
         nuclei = lasagna.process.find_nuclei(data[0], 
                                 threshold=lambda x: threshold, **inputs)
         nuclei = nuclei.astype(np.uint16)
@@ -142,8 +143,12 @@ class Snake():
         data = read(files[0])
         nuclei = read(files[1])
 
-        # no DAPI, min over cycles, mean over channels
-        mask = data[:, 1:].min(axis=0).mean(axis=0)
+        if data.ndim == 4:
+            # no DAPI, min over cycles, mean over channels
+            mask = data[:, 1:].min(axis=0).mean(axis=0)
+        else:
+            mask = data[1:].mean(axis=0)
+
         mask = mask > threshold
 
         cells = lasagna.process.find_cells(nuclei, mask)

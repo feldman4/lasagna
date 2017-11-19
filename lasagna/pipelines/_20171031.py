@@ -100,7 +100,7 @@ def load_tile_configuration(filename):
     files = [f for (f, _, _) in coordinates]
     ij = np.array([[y, x] for (_, x, y) in coordinates])
 
-    sites = [re.findall('Site_(.*?)\.', f) for (f, _, _) in coordinates]
+    sites = [re.findall('Site[_-](.*?)\.', f) for (f, _, _) in coordinates]
     sites = [int(x[0]) for x in sites]
 
     return files, ij

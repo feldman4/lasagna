@@ -408,162 +408,6 @@ def grid_view(files, bounds, padding=40, with_mask=False):
     return pile(arr)
 
 
-default_dirs = {'raw': 'raw',
-                'data': 'data',
-                'analysis': 'analysis',
-                'nuclei': 'analysis/nuclei',
-                'stitch': 'stitch',
-                'calibration': 'calibration',
-                'export': 'export'}
-
-default_file_pattern = \
-        r'(?P<dataset>(?P<date>[0-9]{8}).*)[\/\\]' + \
-        r'(?P<mag>[0-9]+X).' + \
-        r'(?:(?P<cycle>[^_\.]*).*?(?:.*MMStack)?.)?' + \
-        r'(?P<well>[A-H]([0-9]|[[01][012]))' + \
-        r'(?:\.(?P<tag>.*))*\.tif'
-
-
-default_file_pattern_old = '(data)/((([0-9]*X).*round([0-9]))*.*)/(((.*_([A-Z][0-9]))-Site_([0-9]*)).ome.tif)'
-default_file_groups = 'data', 'set', '', 'mag', 'round', 'file', 'file_well_site', 'file_well', 'well', 'site'
-default_path_formula = {'raw': '[data]/[set]/[file]',
-                        'calibrated': '[data]/[set]/[file_well_site].calibrated.tif',
-                        'stitched': '[data]/[set]/[file_well].stitched.tif',
-                        'aligned': '[data]/aligned/[mag]/[well].aligned.tif',
-                        'aligned_FFT': '[data]/aligned/[mag]/[well].aligned.FFT.tif',
-                        'nuclei': '[data]/aligned/[mag]/[well].aligned.nuclei.tif',
-                        }
-default_table_index = {'mag': str,
-                       'round': float,
-                       'set': str,
-                       'well': str,
-                       'site': int}
-
-
-class Paths(object):
-    def __init__(self, dataset, lasagna_path='/broad/blainey_lab/David/lasagna',
-                 sub_dirs=None):
-        """Store file paths relative to lasagna_path, allowing dataset to be loaded in different
-        absolute locations. Retrieve raw files, stitched files, and nuclei. Pass stitch name and
-        get nuclei name. Store path to calibration information.
-
-        Path information stored in DataFrame paths.table, e.g.,
-        paths.table.find(mag='60X', round=1)
-
-        :param dataset:
-        :param lasagna_path:
-        :return:
-        """
-        self.calibrations = []
-        self.datafiles = []
-        self.dirs = default_dirs if sub_dirs is None else sub_dirs
-        self.table = None
-        self.dataset = dataset
-        # resolve path, strip trailing slashes
-        self.lasagna_path = os.path.abspath(lasagna_path)
-
-        self.update_datafiles()
-        self.update_table()
-        self.update_calibration()
-
-    def full(self, *args):
-        """Prepend dataset location, multiple arguments are joined. If given an absolute
-        path, just return it..
-        :param args:
-        :return:
-        """
-        if args and os.path.isabs(args[0]):
-            return args[0]
-        return os.path.join(self.lasagna_path, self.dataset, *args)
-
-    def export(self, *args):
-        """Shortcut to export directory.
-        :param args:
-        :return:
-        """
-        return self.full(self.dirs['export'], *args)
-
-    def relative(self, s):
-        """Convert absolute paths to relative paths within dataset.
-        :param s:
-        :return:
-        """
-        return s.replace(self.full() + '/', '')
-
-    def parent(self, s):
-        """Shortcut to name of parent directory of file or directory.
-        :param s:
-        :return:
-        """
-        return os.path.basename(os.path.dirname(s))
-
-    def update_datafiles(self):
-        self.datafiles = []
-        for dirpath, dirnames, filenames in os.walk(self.full(self.dirs['data'])):
-            self.datafiles += [os.path.join(dirpath, f) for f in filenames]
-
-    def update_table(self, file_pattern=default_file_pattern_old, groups=default_file_groups,
-                     path_formula=default_path_formula, table_index=default_table_index):
-
-        """Match pattern to find original files in dataset. For each raw file, apply patterns in
-        self.dirs to generate new file names and add to self.table if file exists (else nan).
-
-        E.g., raw file 'data/set/set_A1-Site1.ome.tif' is captured as ('set', 'Site1'). Pattern-matching yields:
-         'aligned': '[data]/aligned/[set]/[file_well].aligned.tif'
-         ==> data/aligned/set/set_A1.tif
-         'calibrated': '[data]/[set]/[file_well_site].calibrated.tif'
-         ==> data/set/set_A1-Site1.calibrated.tif
-
-        """
-
-        # one dict per raw data file, keys are regex groups and patterns after substitution
-        d = []
-        for f in self.datafiles:
-            m = re.match(file_pattern, self.relative(f))
-            if m:
-                d += [{k: v for k, v in zip(groups, m.groups())}]
-        for entry in d:
-            for key, pattern in path_formula.items():
-                for group, value in entry.items():
-                    pattern = pattern.replace('[%s]' % group, str(value))
-                entry.update({key: pattern})
-
-        self.table = lasagna.utils.DataFrameFind(d)
-        # skip if empty
-        if d:
-            for k, v in table_index.items():
-                self.table[k] = self.table[k].astype(v)
-
-            self.table.set_index(table_index.keys(), inplace=True)
-            self.table.sortlevel(inplace=True)
-
-    def update_calibration(self):
-        calibration_dir = self.full(self.dirs['calibration'])
-        if os.path.isdir(calibration_dir):
-            _, calibrations, _ = os.walk(calibration_dir).next()
-            self.calibrations = [os.path.join(self.dirs['calibration'], c) for c in calibrations]
-
-    def make_dirs(self, files):
-        """Create sub-directories for files in column, if they don't exist.
-        :return:
-        """
-        for f in files:
-            if pandas.notnull(f):
-                d = self.full(os.path.dirname(f))
-                if not os.path.exists(d):
-                    os.makedirs(d)
-                    print 'created directory', d
-
-    def lookup(self, column, **kwargs):
-        """Convenient search.
-            :param column: column to return item from
-            :param kwargs: search_column=value
-            :return:
-            """
-        source, value = kwargs.items()[0]
-        return self.table[self.table[source] == value][column][0]
-
-
 def watermark(shape, text, spacing=1, corner='top left'):
     """ Add rasterized text to empty 2D numpy array.
     :param shape: (height, width)
@@ -820,3 +664,66 @@ def grab_image():
     if data.dtype == np.dtype('>u2'):
         data = data.astype(np.uint16)
     return data
+
+file_pattern = [
+        r'((?P<home>.*)\/)?',
+        r'(?P<dataset>(?P<date>[0-9]{8}).*?)\/',
+        r'(?P<subdir>.*\/)*',
+        r'(MAX_)?(?P<mag>[0-9]+X).',
+        r'(?:(?P<cycle>[^_\.]*).*?(?:.*MMStack)?.)?',
+        r'(?P<well>[A-H][0-9]*)',
+        r'(?:[_-]Site[_-](?P<site>([0-9]+)))?',
+        r'(?:_Tile-(?P<tile>([0-9]+)))?',
+        r'(?:\.(?P<tag>.*))*\.(tif|pkl)']
+
+file_pattern_abs = ''.join(file_pattern)
+file_pattern_rel = ''.join(file_pattern[2:])
+        
+
+def parse_filename(filename):
+    """Parse filename into dictionary. Some entries in dictionary optional, e.g., cycle and tile.
+    """
+    filename = os.path.normpath(filename)
+    filename = filename.replace('\\', '/')
+    if os.path.isabs(filename):
+        pattern = file_pattern_abs
+    else:
+        pattern = file_pattern_rel
+
+    match = re.match(pattern, filename)
+    try:
+        result = {k:v for k,v in match.groupdict().items() if v is not None}
+        return result
+    except AttributeError:
+        raise ValueError('failed to parse filename: %s' % filename)
+
+
+def name(description, ext='tif', **more_description):
+    """Name a file from a dictionary of filename parts. Can override dictionary with keyword arguments.
+    """
+    d = dict(description)
+    d.update(more_description)
+
+    assert 'tag' in d
+
+    if 'cycle' in d:
+        a = '%s_%s_%s' % (d['mag'], d['cycle'], d['well'])
+    else:
+        a = '%s_%s' % (d['mag'], d['well'])
+
+    # only one
+    if 'tile' in d:
+        b = 'Tile-%s' % d['tile']
+    elif 'site' in d:
+        b = 'Site-%s' % d['site']
+    else:
+        b = None
+
+    if b:
+        basename = '%s_%s.%s.%s' % (a, b, d['tag'], ext)
+    else:
+        basename = '%s.%s.%s' % (a, d['tag'], ext)
+    
+    optional = lambda x: d.get(x, '')
+    filename = os.path.join(optional('home'), optional('dataset'), optional('subdir'), basename)
+    return os.path.normpath(filename)

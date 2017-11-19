@@ -26,6 +26,8 @@ from lasagna.io import show_IJ as show
 from lasagna.io import grab_image as grab
 from lasagna.io import BLUE, GREEN, RED, MAGENTA, GRAY, CYAN, GLASBEY 
 from lasagna.io import pile, montage, grid_view, tile
+from lasagna.io import parse_filename as parse
+from lasagna.io import name
 from lasagna.process import register_images
 import lasagna.config as config
 from lasagna.utils import start_client
