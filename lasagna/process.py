@@ -744,3 +744,46 @@ def peak_to_region(peak, data, threshold=2000, n=5):
     labeled[labeled>0] = rev[labeled[labeled>0] - 1]
 
     return labeled
+
+def inscribe(mask):
+    """Guess the largest axis-aligned rectangle inside mask. 
+    Assumes positive values are in the center and zeros are at 
+    the edges. Shrinks the rectangle's most egregious edge at 
+    each iteration.
+    """
+    mask = mask == 0
+    h, w = mask.shape
+    i_0, i_1 = 0, h - 1
+    j_0, j_1 = 0, w - 1
+    
+    def edge_costs(i_0, i_1, j_0, j_1):
+        a = mask[i_0, j_0:j_1].sum()
+        b = mask[i_1, j_0:j_1].sum()
+        c = mask[i_0:i_1, j_0].sum()
+        d = mask[i_0:i_1, j_1].sum()        
+        return a,b,c,d
+    
+    def area(i_0, i_1, j_0, j_1):
+        return (i_1 - i_0) * (j_1 - j_0)
+    
+    coords = [i_0, i_1, j_0, j_1]
+    while area(*coords) > 0:
+        costs = edge_costs(*coords)
+        if sum(costs) == 0:
+            return coords
+        worst = costs.index(max(costs))
+        coords[worst] += 1 if worst in (0, 2) else -1
+    return
+    
+def coords_to_slice(i_0, i_1, j_0, j_1):
+    return slice(i_0, i_1), slice(j_0, j_1)
+
+def trim(arr):
+    """Remove i,j area that overlaps a zero value in any leading
+    dimension. Trims stitched and piled images.
+    """
+    leading_dims = tuple(range(arr.ndim)[:-2])
+    mask = (arr > 0).any(axis=leading_dims)
+    coords = inscribe(mask)
+    sl = (Ellipsis,) + coords_to_slice(*coords)
+    return arr[sl]

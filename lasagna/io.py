@@ -668,7 +668,7 @@ def grab_image():
 file_pattern = [
         r'((?P<home>.*)\/)?',
         r'(?P<dataset>(?P<date>[0-9]{8}).*?)\/',
-        r'(?P<subdir>.*\/)*',
+        r'(?:(?P<subdir>.*)\/)*',
         r'(MAX_)?(?P<mag>[0-9]+X).',
         r'(?:(?P<cycle>[^_\.]*).*?(?:.*MMStack)?.)?',
         r'(?P<well>[A-H][0-9]*)',
