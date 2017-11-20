@@ -747,20 +747,19 @@ def peak_to_region(peak, data, threshold=2000, n=5):
 
 def inscribe(mask):
     """Guess the largest axis-aligned rectangle inside mask. 
-    Assumes positive values are in the center and zeros are at 
-    the edges. Shrinks the rectangle's most egregious edge at 
-    each iteration.
+    Rectangle must exclude zero values. Assumes zeros are at the 
+    edges, there are no holes, etc. Shrinks the rectangle's most 
+    egregious edge at each iteration.
     """
-    mask = mask == 0
     h, w = mask.shape
     i_0, i_1 = 0, h - 1
     j_0, j_1 = 0, w - 1
     
     def edge_costs(i_0, i_1, j_0, j_1):
-        a = mask[i_0, j_0:j_1].sum()
-        b = mask[i_1, j_0:j_1].sum()
-        c = mask[i_0:i_1, j_0].sum()
-        d = mask[i_0:i_1, j_1].sum()        
+        a = mask[i_0, j_0:j_1 + 1].sum()
+        b = mask[i_1, j_0:j_1 + 1].sum()
+        c = mask[i_0:i_1 + 1, j_0].sum()
+        d = mask[i_0:i_1 + 1, j_1].sum()        
         return a,b,c,d
     
     def area(i_0, i_1, j_0, j_1):
@@ -778,12 +777,14 @@ def inscribe(mask):
 def coords_to_slice(i_0, i_1, j_0, j_1):
     return slice(i_0, i_1), slice(j_0, j_1)
 
-def trim(arr):
+def trim(arr, return_slice=False):
     """Remove i,j area that overlaps a zero value in any leading
     dimension. Trims stitched and piled images.
     """
     leading_dims = tuple(range(arr.ndim)[:-2])
-    mask = (arr > 0).any(axis=leading_dims)
+    mask = (arr == 0).any(axis=leading_dims)
     coords = inscribe(mask)
     sl = (Ellipsis,) + coords_to_slice(*coords)
+    if return_slice:
+        return sl
     return arr[sl]
