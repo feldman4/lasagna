@@ -28,11 +28,11 @@ from lasagna.io import BLUE, GREEN, RED, MAGENTA, GRAY, CYAN, GLASBEY
 from lasagna.io import pile, montage, grid_view, tile
 from lasagna.io import parse_filename as parse
 from lasagna.io import name
-from lasagna.process import register_images
+from lasagna.process import register_images, trim
 import lasagna.config as config
 from lasagna.utils import start_client
 
-
+from lasagna.bayer import register_and_offset
 
 
 
