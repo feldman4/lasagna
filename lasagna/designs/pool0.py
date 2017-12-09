@@ -241,6 +241,7 @@ def load_wang(path=''):
 def load_enst_ncbi(path=''):
     columns = {'NCBI gene ID': 'gene_id', 'Gene name': 'gene_symbol'}
     enst_ncbi = (pd.read_csv(path + 'ENS_to_NCBI.tsv', sep='\t')
+    enst_ncbi = (pd.read_csv(path, sep='\t')
                    .rename(columns=columns))
     return enst_ncbi
 
