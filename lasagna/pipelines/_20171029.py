@@ -74,7 +74,7 @@ def call_cells(df):
     )
     return df2
 
-def dataframe_to_values(df, value='intensity'):
+def dataframe_to_values(df, value='intensity', adapters='TCGA'):
     """Dataframe must be sorted on [cycles, channels]. 
     Returns N x cycles x channels.
     """

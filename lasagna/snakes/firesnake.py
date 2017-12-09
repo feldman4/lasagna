@@ -126,7 +126,10 @@ class Snake():
         files = inputs['input']
 
         data = read(files[0])
-        consensus = np.std(data[:, 1:], axis=(0, 1))
+        if data.ndim == 4:
+            consensus = np.std(data[:, 1:], axis=(0, 1))
+        elif data.ndim == 3:
+            consensus = np.std(data[1:], axis=0)
 
         save(output, consensus)
     
@@ -182,6 +185,8 @@ class Snake():
         files, display_ranges = inputs['input'], inputs['display_ranges']
 
         data = read(files[0])
+        if data.ndim == 3:
+            data = data[None]
         loged = lasagna.bayer.log_ndi(data)
         loged[..., 0, :, :] = data[..., 0, :, :] # DAPI
 
@@ -220,6 +225,8 @@ class Snake():
             width = 5
 
         data = read(files[0])
+        if data.ndim == 3:
+            data = data[None]
         maxed = np.zeros_like(data)
         maxed[:, 1:] = scipy.ndimage.filters.maximum_filter(data[:,1:], size=(1, 1, width, width))
         maxed[:, 0] = data[:, 0] # DAPI
@@ -238,6 +245,9 @@ class Snake():
 
         peaks, data_max, cells = [read(f) for f in files]
         
+        if data_max.ndim == 3:
+            data_max = data_max[None]
+
         data_max = data_max[:, 1:] # no DAPI
         blob_mask = (peaks[index_DO] > threshold_DO) & (cells > 0)
         values = data_max[:, :, blob_mask].transpose([2, 0, 1])

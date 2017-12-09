@@ -32,8 +32,6 @@ from lasagna.process import register_images, trim
 import lasagna.config as config
 from lasagna.utils import start_client
 
-from lasagna.bayer import register_and_offset
-
 
 
 
