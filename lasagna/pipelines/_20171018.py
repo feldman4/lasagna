@@ -153,28 +153,6 @@ def well_center(well, plate='6'):
     i, j = np.array(ij).mean(axis=0)
     return i, j
 
-def plate_coordinate(well, site, grid_shape=(15, 15), offset=(0, 0), mag='20X'):
-    spacing_96w = 9000
-    if mag == '20X':
-        delta = 600
-    else:
-        raise ValueError('mag')
-
-    row, col = well_to_row_col(well)
-    i, j = row * spacing_96w, col * spacing_96w
-
-    height, width = grid_shape
-    i += delta * int(site / width)
-    j += delta * (site % width)
-    
-    i -= delta * (height / 2) 
-    j -= delta * (width  / 2)
-
-    i += offset[0]
-    j += offset[1]
-
-    return i, j
-
 def name(description, **kwargs):
     d = dict(description)
     d.update(kwargs)
@@ -182,35 +160,6 @@ def name(description, **kwargs):
     basename = '%s_%s_%s-Tile_%s.%s.tif' % (d['mag'], d['cycle'], d['well'], d['tile'], d['tag'])
     subdir = d['subdir'] if d['subdir'] else ''
     return os.path.join(d['home'], d['dataset'], subdir, basename)
-
-def microwells(base=(8, 12), downsample=((2, 2), (4, 4))):
-    width = int(np.ceil(base[1] / 10))
-    ds = downsample
-    
-    rows, cols = np.meshgrid(range(base[0]), range(base[1]))
-
-    a, b = base
-    base_rows = pd.Series(rows.flatten(), name='%s_row' % (a*b)).astype(int)
-    base_cols = pd.Series(cols.flatten(), name='%s_col' % (a*b)).astype(int)
-    base_wells = [row_col_to_well(r, c, width=width) for r,c in zip(base_rows, base_cols)]
-    base_wells = pd.Series(base_wells, name='%d_well' % (a*b))
-
-    arr = [base_rows, base_cols, base_wells]
-    for i, j in ds:
-        rows = (base_rows / i).astype(int)
-        cols = (base_cols / j).astype(int)
-        wells = [row_col_to_well(r, c, width=width) for r,c in zip(rows, cols)]
-        wells = pd.Series(wells)
-
-        a = base[0] / i
-        b = base[1] / j
-        rows.name  = '%d_row'  % (a*b)
-        cols.name  = '%d_col'  % (a*b)
-        wells.name = '%d_well' % (a*b)
-
-        arr += [rows, cols, wells]
-
-    return pd.concat(arr, axis=1)
 
 def row_col_to_well(row, col, width=1):
     import string

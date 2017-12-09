@@ -5,6 +5,7 @@ from lasagna.design import rc, generate_sequence
 from Levenshtein import distance
 from collections import Counter
 import regex as re
+import os
 
 lasagna_enzymes = {
  'AgeI': 'ACCGGT',
@@ -239,8 +240,8 @@ def load_wang(path=''):
 
 
 def load_enst_ncbi(path=''):
+    path = os.path.join(path, 'ENS_to_NCBI.tsv')
     columns = {'NCBI gene ID': 'gene_id', 'Gene name': 'gene_symbol'}
-    enst_ncbi = (pd.read_csv(path + 'ENS_to_NCBI.tsv', sep='\t')
     enst_ncbi = (pd.read_csv(path, sep='\t')
                    .rename(columns=columns))
     return enst_ncbi

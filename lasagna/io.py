@@ -697,7 +697,6 @@ def parse_filename(filename):
     except AttributeError:
         raise ValueError('failed to parse filename: %s' % filename)
 
-
 def name(description, ext='tif', **more_description):
     """Name a file from a dictionary of filename parts. Can override dictionary with keyword arguments.
     """
@@ -727,3 +726,4 @@ def name(description, ext='tif', **more_description):
     optional = lambda x: d.get(x, '')
     filename = os.path.join(optional('home'), optional('dataset'), optional('subdir'), basename)
     return os.path.normpath(filename)
+
