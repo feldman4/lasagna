@@ -34,6 +34,13 @@ rule all:
     input:
         expand('process/20X_{well}.log.tif', well=WELLS)
 
+rule stitch:
+    input: 
+        stitch_input
+    output:
+        'process/20X_{well}.stitched.tif'
+    run:
+        call_firesnake(input, output, 'stitch', tile_config=TILE_CONFIG, display_ranges=DISPLAY_RANGES)
 
 rule transform_LoG:
     input:
@@ -42,11 +49,3 @@ rule transform_LoG:
         'process/20X_{well}.log.tif'
     run:
         call_firesnake(input, output, 'transform_LoG', display_ranges=DISPLAY_RANGES)
-
-rule stitch:
-    input: 
-        stitch_input
-    output:
-        'process/20X_{well}.stitched.tif'
-    run:
-        call_firesnake(input, output, 'stitch', tile_config=TILE_CONFIG, display_ranges=DISPLAY_RANGES)
