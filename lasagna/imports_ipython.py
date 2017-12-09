@@ -1,5 +1,7 @@
 from lasagna.imports import *
 
+from Levenshtein import distance
+
 import IPython
 IPython.get_ipython().magic('matplotlib inline')
 IPython.get_ipython().magic('load_ext autoreload')
