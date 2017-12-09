@@ -51,7 +51,7 @@ class Snake():
 
     @staticmethod
     def align(input_json=None, output=None):
-        """Align data using DAPI.
+        """Align data using DAPI. Optional channel offset.
         """
         with open(input_json, 'r') as fh:
             inputs = json.load(fh)
@@ -73,6 +73,11 @@ class Snake():
         data = np.array(arr)
         dapi = data[:,0]
         aligned = lasagna.bayer.register_and_offset(data, registration_images=data[:, 0])
+
+        try:
+            aligned = fix_channel_offsets(aligned, inputs['channel_offsets'])
+        except KeyError:
+            pass
 
         save(output, aligned, display_ranges=display_ranges)
 
@@ -135,6 +140,19 @@ class Snake():
 
     
     @staticmethod
+    def consensus_DO(input_json=None, output=None):
+        """Use variance to estimate DO.
+        """
+        with open(input_json, 'r') as fh:
+            inputs = json.load(fh)
+        files = inputs['input']
+
+        data = read(files[0])
+        consensus = np.std(data[:, 1:], axis=(0, 1))
+
+        save(output, consensus)
+    
+    @staticmethod
     def segment_nuclei(input_json=None, output=None):
         """Find nuclei from DAPI. Find cell foreground from aligned but unfiltered 
         data. Expects data to have shape C x I x J.
@@ -160,8 +178,9 @@ class Snake():
         with open(input_json, 'r') as fh:
             inputs = json.load(fh)
         files = inputs['input']
-        threshold = inputs['threshold']
-
+        threshold = 750
+        if 'threshold' in inputs:
+            threshold = inputs['threshold']
 
         data = read(files[0])
         nuclei = read(files[1])
@@ -200,6 +219,8 @@ class Snake():
         files, display_ranges = inputs['input'], inputs['display_ranges']
 
         data = read(files[0])
+        if data.ndim == 2:
+            data = [data]
         peaks = [lasagna.process.find_peaks(x) 
                     if x.max() > 0 else x 
                     for x in data]
@@ -209,11 +230,15 @@ class Snake():
         save(output, peaks, display_ranges=display_ranges)
     
     @staticmethod
-    def max_filter(input_json=None, output=None, width=5):
+    def max_filter(input_json=None, output=None):
         import scipy.ndimage.filters
         with open(input_json, 'r') as fh:
             inputs = json.load(fh)
         files, display_ranges = inputs['input'], inputs['display_ranges']
+        if 'width' in inputs:
+            width = inputs['width']
+        else:
+            width = 5
 
         data = read(files[0])
         maxed = np.zeros_like(data)
@@ -227,9 +252,10 @@ class Snake():
 
         with open(input_json, 'r') as fh:
             inputs = json.load(fh)
-        files, display_ranges = inputs['input'], inputs['display_ranges']
+        files = inputs['input']
         threshold_DO, index_DO, cycles = [inputs[k] for k in ('threshold_DO', 'index_DO', 'cycles')]
-
+        if index_DO is None:
+            index_DO = Ellipsis
 
         peaks, data_max, cells = [read(f) for f in files]
         
@@ -315,6 +341,12 @@ class Snake():
 
 
 ###
+
+def fix_channel_offsets(data, channel_offsets):
+    d = data.transpose([1, 0, 2, 3])
+    x = [lasagna.io.offset(a, b) for a,b in zip(d, channel_offsets)]
+    x = np.array(x).transpose([1, 0, 2, 3])
+    return x
 
 def stitch_input_sites(tile, site_shape, tile_shape):
     """Map tile ID onto site IDs. Fill in wildcards ourselves.
