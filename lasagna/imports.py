@@ -30,9 +30,7 @@ from lasagna.io import parse_filename as parse
 from lasagna.io import name
 from lasagna.process import register_images, trim
 import lasagna.config as config
-from lasagna.utils import start_client
-
-from lasagna.bayer import register_and_offset
+from lasagna.utils import start_client, categorize, uncategorize
 
 
 

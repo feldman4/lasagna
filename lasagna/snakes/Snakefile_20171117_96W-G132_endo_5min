@@ -2,13 +2,10 @@ from glob import glob
 import firesnake
 import json
 
-
 import snakemake
-from firesnake3 import call_firesnake
+from firesnake3 import call_firesnake, find_python2
 
 # snakemake.ignore_missing = True
-
-PYTHON2 = 'C:\ProgramData\Anaconda2\python.exe'
 
 WELLS = ['B2', 'B3', 'B4', 'B5', 'B6', 'B7', 'C2', 'C3']
 WELLS = [r + c for r in 'BCDEFG' for c in '234567']
@@ -22,13 +19,14 @@ SITES = map(str, range(SITE_SHAPE[0] * SITE_SHAPE[1]))
 
 TILE_CONFIG = 'registered/TileConfiguration_batch_B2.registered.txt'
 
-DISPLAY_RANGES=((1200, 4000), 
-                (3500, 30000), 
-                (1000, 30000), 
-                (1000, 20000), 
-                (500, 5000))
+DISPLAY_RANGES_PHENOTYPE = (
+    (1200, 4000), 
+    (3500, 30000), 
+    (1000, 30000), 
+    (1000, 20000), 
+    (500, 5000))
 
-
+DISPLAY_RANGES = ((500, 65000),) + DISPLAY_RANGES_PHENOTYPE
 
 def stitch_input(wildcards):
     # doesn't respect wildcard constraints
@@ -39,12 +37,20 @@ def stitch_input(wildcards):
         inputs.append(format_.format(site=site))
     return inputs
 
+def existing(tag):
+    files = glob('process/20X_BFP*stitched.tif')
+    to_aligned = lambda f: f.replace('_' + PHENOTYPE, '').replace('stitched', tag)
+    files = [to_aligned(f) for f in files]
+    return files
+
 
 rule all:
     input:
-        expand('process/20X_{cycle}_{well}_Tile-{tile}.stitched.tif', cycle=DAPI, well=WELLS, tile=TILES)
-        # expand('process/20X_{well}_Tile-{tile}.nuclei.tif'. well=WELLS, tile=TILES)
-
+        # expand('process/20X_{cycle}_{well}_Tile-{tile}.stitched.tif', cycle=DAPI, well=WELLS, tile=TILES)
+        # expand('process/20X_{well}_Tile-{tile}.nuclei.tif', well=WELLS, tile=TILES)
+        # expand('process/20X_{well}_Tile-{tile}.aligned.tif', well=WELLS, tile=TILES)
+        existing('cells')
+        # 'process/20X_B2_Tile-7.aligned.tif'
 
 rule stitch:
     input: 
@@ -52,16 +58,25 @@ rule stitch:
     output:
         'process/20X_{cycle}_{well}_Tile-{tile}.stitched.tif'
     run:
-        call_firesnake(input, output, 'stitch', tile_config=TILE_CONFIG, display_ranges=DISPLAY_RANGES)
+        call_firesnake(input, output, 'stitch', tile_config=TILE_CONFIG, display_ranges=None)
 
+rule align:
+    input:
+        expand('process/20X_{cycle}_{{well}}_Tile-{{tile}}.stitched.tif', cycle=[DAPI, PHENOTYPE])
+
+    output:
+        'process/20X_{well}_Tile-{tile}.aligned.tif'
+
+    run:
+        call_firesnake(input, output, 'align_DAPI_H2B', display_ranges=DISPLAY_RANGES)
 
 rule segment_nuclei:
     input:
-        'process/20X_{cycle}_{{well}}_Tile-{{tile}}.stitched.tif'.format(cycle=PHENOTYPE) # DO
+        'process/20X_{well}_Tile-{tile}.aligned.tif'
     output:
         'process/20X_{well}_Tile-{tile}.nuclei.tif'
     run:
-        call_firesnake(input, output, 'segment_nuclei', threshold=1500, area_min=250, area_max=800)
+        call_firesnake(input, output, 'segment_nuclei', threshold=5000, area_min=200, area_max=1000)
 
 rule segment_cells:
     input:
@@ -70,4 +85,4 @@ rule segment_cells:
     output:
         'process/20X_{well}_Tile-{tile}.cells.tif'
     run:
-        call_firesnake(input, output, 'segment_cells')
+        call_firesnake(input, output, 'segment_cells', threshold=1700)

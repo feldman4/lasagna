@@ -76,7 +76,6 @@ class Snake():
 
         save(output, aligned, display_ranges=display_ranges)
 
-
     @staticmethod
     def align2(input_json=None, output=None):
         """Align data using 2nd channel. Align internal channels to 2nd channel.
@@ -112,6 +111,28 @@ class Snake():
         aligned = lasagna.bayer.register_and_offset(data, registration_images=data[:, 1])
 
         save(output, aligned, display_ranges=display_ranges)
+
+    @staticmethod
+    def align_DAPI_H2B(input_json=None, output=None):
+        with open(input_json, 'r') as fh:
+            inputs = json.load(fh)
+        files, display_ranges = inputs['input'], inputs['display_ranges']
+
+        # align DAPI and rearrange channels
+        # DAPI, CH1-4, CH0 (H2B)
+        dapi = read(files[0])
+        data = read(files[1])
+        data_reg = data.mean(axis=0).astype(np.uint16)
+
+        xs = lasagna.bayer.register_and_offset([data_reg, dapi])
+        dapi_ = xs[1]
+        sl = lasagna.process.trim(xs, return_slice=True)
+
+        aligned = np.array([dapi_] + list(data[[1, 2, 3, 4, 0]]))
+        aligned = aligned[sl]
+
+        save(output, aligned, display_ranges=display_ranges)
+
     
     @staticmethod
     def segment_nuclei(input_json=None, output=None):
@@ -132,13 +153,15 @@ class Snake():
         save(output, nuclei)
     
     @staticmethod
-    def segment_cells(input_json=None, output=None, threshold=750):
+    def segment_cells(input_json=None, output=None):
         """Segment cells from aligned data. To use less than full cycles for 
         segmentation, filter the input files.
         """
         with open(input_json, 'r') as fh:
             inputs = json.load(fh)
         files = inputs['input']
+        threshold = inputs['threshold']
+
 
         data = read(files[0])
         nuclei = read(files[1])
@@ -147,10 +170,9 @@ class Snake():
             # no DAPI, min over cycles, mean over channels
             mask = data[:, 1:].min(axis=0).mean(axis=0)
         else:
-            mask = data[1:].mean(axis=0)
+            mask = np.median(data[1:], axis=0)
 
         mask = mask > threshold
-
         cells = lasagna.process.find_cells(nuclei, mask)
 
         save(output, cells)

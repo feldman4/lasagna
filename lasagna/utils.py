@@ -810,3 +810,17 @@ def ndarray_to_dataframe(values, index):
     columns = pd.MultiIndex.from_product(levels, names=names)
     df = pd.DataFrame(values.reshape(values.shape[0], -1), columns=columns)
     return df
+
+def categorize(df):
+    from pandas.api.types import is_object_dtype
+    for col in df:
+        if is_object_dtype(df[col].dtype):
+            df[col] = df[col].astype('category')
+    return df
+
+def uncategorize(df):
+    """Pivot and concat are weird with categories.
+    """
+    for col in df.select_dtypes(include=['category']).columns:
+        df[col] = df[col].astype('object')
+    return df

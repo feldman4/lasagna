@@ -29,7 +29,6 @@ default_layouts.update(more_layouts)
 default_parts.update(more_parts)
 
 
-
 def prepare_barcodes():
     """Top level
     """

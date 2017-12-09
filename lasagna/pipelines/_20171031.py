@@ -361,13 +361,6 @@ def call(df):
     df = call_cells(df)
     return df
 
-def categorize(df):
-    from pandas.api.types import is_object_dtype
-    for col in df:
-        if is_object_dtype(df[col].dtype):
-            df[col] = df[col].astype('category')
-    return df
-
 def filter_intensity(df, filt_func, cycle=0, base=1):
 
     cycles = df['cycle'].value_counts()

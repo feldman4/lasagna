@@ -33,11 +33,18 @@ def call(df, DO_threshold=[0, 5000, 0, 0]):
 
     return df
 
-def call_bases(df):
-    """Makes cycles_in_situ. Includes DO.
+def call_bases_fast(values, bases='ACGT'):
+    assert values.ndim == 3
+    assert values.shape[2] == 4
+    calls = values.argmax(axis=2)
+    calls = np.array(list(bases))[calls]
+    return [''.join(x) for x in calls]
+
+def call_bases(df, value='intensity'):
+    """Makes cycles_in_situ. Includes DO. Does nice things with dataframe.
     """
     cols = ['well', 'tile', 'blob', 'cycle']
-    df2 = df.pivot_table(index=cols, columns='channel', values='intensity')
+    df2 = df.pivot_table(index=cols, columns='channel', values=value)
 
     channels = sorted(set(df['channel'])) # in alphabetical order
     call = np.argmax(np.array(df2), axis=1)
@@ -46,6 +53,7 @@ def call_bases(df):
     df = df.join(s, on=cols)
     
     cols = ['well', 'tile', 'blob']
+    lasagna.df2 = df2
     df2 = df.pivot_table(index=cols, columns='cycle', values='call', aggfunc='first')
 
     name = 'cycles_in_situ'
@@ -69,6 +77,7 @@ def call_cells(df):
     df2 = (df
       .join(s.nth(0)['barcode_in_situ'].rename('barcode_in_situ_0'), on=cols)
       .join(s.nth(0)['count']          .rename('barcode_count_0'), on=cols)
+      # .join(s.nth())
       .join(s.nth(1)['barcode_in_situ'].rename('barcode_in_situ_1'), on=cols)
       .join(s.nth(1)['count']          .rename('barcode_count_1'), on=cols)
     )
@@ -82,10 +91,9 @@ def dataframe_to_values(df, value='intensity'):
     assert len(set(cycles)) == 1
     n_cycles = len(cycles)
     x = np.array(df[value]).reshape(-1, n_cycles, 4)
-    base_order = np.argsort(np.argsort(list(adapters)))
-    x = x[:, :, base_order]
+    # base_order = np.argsort(np.argsort(list(adapters)))
+    # x = x[:, :, base_order]
     return x
-
 
 def filter_intensity(df, filt_func):
     """Filter function acts on array of shape N x cycles x channels.
@@ -94,7 +102,6 @@ def filter_intensity(df, filt_func):
     mask = np.zeros(values.shape, dtype=bool)
     mask[...] = filt_func(values)[:, None, None]
     return mask.flatten()
-
 
 def load_phenotype(home):
     search = os.path.join(home, 'process/*phenotype.pkl')

@@ -1,8 +1,9 @@
 #python3
 import uuid
 import json
+import shutil
 
-PYTHON2 = 'C:\ProgramData\Anaconda2\python.exe'
+WIN_PYTHON2 = 'C:\ProgramData\Anaconda2\python.exe'
 FIRESNAKE2 = __file__.replace('firesnake3', 'firesnake')
 
 def stitch_input(wildcards):
@@ -25,9 +26,15 @@ def dump_json(input, **info):
 def call_firesnake(input, output, method, cmds=None, **info):
     json_name = dump_json(input, **info)
     from subprocess import call
-    cmd = [PYTHON2, FIRESNAKE2, method, 
+    cmd = [find_python2(), FIRESNAKE2, method, 
             '--input_json', json_name,
-            '--output', output]
+            '--output', str(output)]
     if cmds:
         cmd += cmds
     call(cmd)
+
+def find_python2():
+    python2 = shutil.which('python2')
+    if python2 is None:
+        return WIN_PYTHON2
+    return python2
