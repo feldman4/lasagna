@@ -3,6 +3,7 @@ from pool0 import *
 from collections import defaultdict
 from lasagna.parts import *
 
+
 def prepare_barcodes():
     """Top level
     """

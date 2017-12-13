@@ -77,13 +77,12 @@ def call_cells(df):
     df2 = (df
       .join(s.nth(0)['barcode_in_situ'].rename('barcode_in_situ_0'), on=cols)
       .join(s.nth(0)['count']          .rename('barcode_count_0'), on=cols)
-      # .join(s.nth())
       .join(s.nth(1)['barcode_in_situ'].rename('barcode_in_situ_1'), on=cols)
       .join(s.nth(1)['count']          .rename('barcode_count_1'), on=cols)
     )
     return df2
 
-def dataframe_to_values(df, value='intensity'):
+def dataframe_to_values(df, value='intensity', adapters='TCGA'):
     """Dataframe must be sorted on [cycles, channels]. 
     Returns N x cycles x channels.
     """
