@@ -15,17 +15,17 @@ if False:
     home_dir = '/Volumes/Samsung_T5/lasagna/20171024_24W-endocytosis/MAX/'
 else:
     # windows
-    home_dir = 'D:\\David\\lasagna\\20171109_24W_5min\\'
+    home_dir = 'D:\\David\lasagna\\20180120_24W-G141A\\MAX\\'
     # home_dir = '\\\\neon-cifs\\blainey_lab\\David\\lasagna\\20150817 6 round\\analysis\\calibrated\\raw\\'
     filesep = '\\'
 
 # C
-channel_luts = (('Grays', (400, 8000)),)
-#channel_luts = (('Grays', (400, 50000)),
-#                ('Cyan',  (1000, 8000)),
-#                ('Green', (1000, 8000)),
+#channel_luts = (('Grays', (400, 8000)),)
+channel_luts = (('Grays', (400, 12000)),
+                ('Cyan',  (1000, 8000)),
+#                ('Green', (400, 2500)),
 #                ('Red',   (1000, 8000)),
-#                ('Magenta', (800, 8000)))
+                ('Magenta', (400, 2500)))
 #channel_luts = (('Blue', (400, 40000)),
 #                ('Green', (400, 6000)),
 #                ('Red', (400, 4000)),
@@ -35,22 +35,23 @@ channel_luts = (('Grays', (400, 8000)),)
 #channel_luts = (('Grays', (400, 40000)),)
 
 channels = len(channel_luts)
-slices = 1;  # Z
+slices = 1;  # Z20180120_24W-G141A20180120_24W-G141A
 frames = 1;  # T
 
 ##### 40X
 #tiles, overlap = (4, 4), int(100 * (1. - 300. / 350))
 #pixel_width = 0.175 * 2
-rows = 'ABCDEFGH'
+#
+
 ##### 20X
-#tiles, overlap = (15, 15), int(100 * (1. - 600. / 675))
-#pixel_width = 0.35 * 24X_DAPI_14X_DAPI_1
+tiles, overlap = (5, 5), int(100 * (1. - 600. / 675))
+pixel_width = 0.35 * 2
 #
 ### 4X
-tiles, overlap = (5, 5), int(100*(1. - 3000./3379))
-pixel_width = 1.64
+#tiles, overlap = (5, 5), int(100*(1. - 3000./3379))
+#pixel_width = 1.64
 
-### 100X
+### 100X20X_TF_EGF_1
 #tiles, overlap = (7, 7), int(100*(1. - 100./135))
 #pixel_width = 0.066 * 2
 
@@ -73,6 +74,7 @@ def make_template(well, data_dir):
         txt = template.replace(well, new_well).replace(data_dir, new_data_dir)
         txt_path = template_path.replace(well, new_well).replace(data_dir, new_data_dir)
         fh = open(txt_path, 'w')
+
         fh.write(txt)
         fh.close()
         return txt_path
@@ -82,27 +84,17 @@ def make_template(well, data_dir):
 # first well stitched. to use a specific file as template, stitch it separately and 
 # call template=make_template(well, data_dir) here.
 use_template = True
-template = None # or make_template('A1', '60X_scan_1')
+template = None #or make_template('A4', '20X_transferrin_EGF')
 
-data_dirs = ['4X_DAPI_1']
+data_dirs = ['20X_TF_EGF_1']
 
 # usually xyzct, except on bad days when it's xyczt(default)
 order = 'xyzct'
-#order = 'xyczt(default)'rows = 'ABCDEFGH'
-columns = [str(x) for x in range(1, 13)]
-
-
-#rows = 'ABCDEFGH'
-#columns = [str(x) for x in range(1, 13)]
-
-rows = 'ABCD'
-columns = [str(x) for x in range(1, 7)]
-
-
-wells = [r + c for r in rows for c in columns]
+#order = 'xyczt(default)'
 rows = 'ABCDEFGH'
 columns = [str(x) for x in range(1, 13)]
-wells = ['B2']
+wells = [row + column for row in rows for column in columns]
+
 
 cal = Calibration()
 cal.setUnit('um')
@@ -140,18 +132,23 @@ def stitch_from_file_cmd(layout_file_path):
     computation_parameters=[Save computation time (but use more RAM)] 
     image_output=[Fuse and display]"""
     return s % (os.path.dirname(layout_file_path) + '\\', os.path.basename(layout_file_path))
-        rows = 'ABCDEFGH'rows = 'ABCDEFGH'
+        
+
 ### MAIN LOOP ###
 
 for data_dir in data_dirs:
     print home_dir + data_dir + filesep + '*.tif'
     files = glob(home_dir + data_dir + filesep + '*.tif')
+
     #    print files
     this_wells = [w for w in wells if any(w in x for x in files)]
     print 'wells to stitch:', this_wells
     for well in this_wells:
         print sorted(files)[0]
-        file_pattern = [f for f in files if well + '-Site_0' in f][0].replace('Site_0', 'Site_{i}')
+        try:
+            file_pattern = [f for f in files if well + '-Site_0' in f][0].replace('Site_0', 'Site_{i}')
+        except:
+            file_pattern = [f for f in files if well + '_Site-0' in f][0].replace('Site-0', 'Site-{i}')
         print file_pattern
         file_pattern = file_pattern.split(filesep)[-1]
         print file_pattern

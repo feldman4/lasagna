@@ -37,8 +37,9 @@ rule all:
     input:
         # expand('process/10X_{well}_Tile-{tile}.maxed.tif', well=WELLS, tile=RANGE(TILES))
         # expand('process/10X_{well}_Tile-{tile}.nuclei.tif', well=WELLS, tile=TILES)
-        # 'process/10X_B11_Tile-0.phenotype_aligned.tif'
-        expand('process/10X_{well}_Tile-{tile}.barcodes.pkl', well=WELLS, tile=RANGE(TILES))
+        # expand('process/10X_{well}_Tile-{tile}.log.tif', well=WELLS, tile=['20', '22', '24', '26'])
+        # expand('process/10X_{well}_Tile-{tile}.barcodes.pkl', well=WELLS, tile=RANGE(TILES))
+        'process/10X_B6_Tile-0.log.tif'
 
 rule align:
     priority: -1
@@ -53,7 +54,7 @@ rule transform_LoG:
     input:
         'process/10X_{well}_Tile-{tile}.aligned.tif'
     output:
-        temp('process/10X_{well}_Tile-{tile}.log.tif')
+        'process/10X_{well}_Tile-{tile}.log.tif'
     run:
         call_firesnake(input, output, 'transform_LoG', display_ranges=DISPLAY_RANGES)
 
@@ -121,7 +122,6 @@ rule segment_cells:
 
 
 rule align_phenotype:
-    priority: 100
     input:
         'process/10X_{cycle}/10X_{cycle}_{{well}}_Site-{{tile}}.max.tif'.format(cycle=CYCLES[0]),
         'process/10X_{cycle}/10X_{cycle}_{{well}}_Site-{{tile}}.max.tif'.format(cycle=CYCLE_PHENOTYPE)
