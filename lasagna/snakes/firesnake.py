@@ -275,7 +275,7 @@ class Snake():
         labels = cells[blob_mask]
         positions = np.array(np.where(blob_mask)).T
 
-        index = ('cycle', cycles), ('channel', list('TGCA'))
+        index = ('cycle', cycles), ('channel', list('GTAC'))
         df = lasagna.utils.ndarray_to_dataframe(values, index)
 
         df_positions = pd.DataFrame(positions, columns=['position_i', 'position_j'])
@@ -292,7 +292,7 @@ class Snake():
     @staticmethod
     def extract_phenotype(input_json=None, output=None):
         def correlate_dapi_myc(region):
-            dapi, fitc, myc = region.intensity_image_full
+            dapi, myc, bkgd = region.intensity_image_full
 
             filt = dapi > 0
             if filt.sum() == 0:
@@ -308,14 +308,14 @@ class Snake():
         features = {
             'corr'       : correlate_dapi_myc,
             'dapi_median': lambda r: np.median(r.intensity_image_full[0]),
-            'fitc_median': lambda r: np.median(r.intensity_image_full[1]),
+            'bkgd_median': lambda r: np.median(r.intensity_image_full[1]),
             'myc_median' : lambda r: np.median(r.intensity_image_full[2]),
             'cell'       : lambda r: r.label
         }
 
         with open(input_json, 'r') as fh:
             inputs = json.load(fh)
-        files, display_ranges = inputs['input'], inputs['display_ranges']
+        files = inputs['input']
 
         data_phenotype, nuclei = [read(f) for f in files]
 
@@ -326,7 +326,7 @@ class Snake():
 
         features = default_object_features.copy()
         features['cell'] = features.pop('label')
-        df2 = feature_table(nuclei, nuclei, )
+        df2 = feature_table(nuclei, nuclei, features)
         df = df.join(df2.set_index('cell'), on='cell')
 
         for k,v in inputs['wildcards'].items():

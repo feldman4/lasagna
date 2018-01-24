@@ -824,3 +824,15 @@ def uncategorize(df):
     for col in df.select_dtypes(include=['category']).columns:
         df[col] = df[col].astype('object')
     return df
+
+def base_repr(x, n, width, to_str=True):
+    x = int(x)
+    arr = []
+    for i in range(width)[::-1]:
+        y = x // n**i
+        arr.append(y)
+        x -= n**i * y
+    assert x == 0
+    if to_str:
+        return ''.join(str(y) for y in arr)
+    return arr

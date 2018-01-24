@@ -22,8 +22,10 @@ def do_barcode_map(df, Y):
     for i in range(len(Q[0])):
         df2['Q_%d' % i] = Q[:,i]
 
-    f = '/Users/feldman/lasagna/libraries/Feldman_12K_Array_pool1_table.pkl'
-    df_pool1 = pd.read_pickle(f).drop_duplicates('barcode')
+    f = '/Users/feldman/lasagna/libraries/Feldman_12K_Array_pool1_table.csv'
+    if not os.path.exists(f):
+        f = 'D:/David/lasagna/libraries/Feldman_12K_Array_pool1_table.csv'
+    df_pool1 = pd.read_csv(f).drop_duplicates('barcode')
     df_pool1['cycles_in_situ'] = df_pool1['barcode']
 
     n = 12
@@ -52,14 +54,16 @@ def quality(X):
     return Q
 
 def pairplot(X, labels=None):
+    import seaborn as sns
     bases = list('ACGT')
+    palette=['magenta', 'blue', 'green', 'red']
     a = pd.DataFrame(X.reshape(-1, 4), columns=list('ACGT'))
     if labels is None:
         a['call'] = np.array(bases)[X.argmax(axis=1)]
     else:
         a['call'] = labels
         bases = None
-    return sns.pairplot(a, hue='call', hue_order=bases, 
+    return sns.pairplot(a, hue='call', hue_order=bases, palette=palette,
                         vars=bases, plot_kws={'s': 10})
 
 def cleanup(X, dec, n=1e4):
@@ -286,7 +290,6 @@ def plot_quality(df3, quality_column):
     ax = a.plot.scatter(x='tile_x', y='tile_y', c='mean', vmin=0, vmax=20)
     ax.axis('equal')
     return ax
-
 
 def plot_oversampling():
     def sampler(x, dropout=0.05, cutoff=50):
