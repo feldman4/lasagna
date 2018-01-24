@@ -1,7 +1,5 @@
 from lasagna.pipelines._20171015_NGS import *
 
-get_well = lambda x: re.findall('_([ABCDEFGH]..)_', x)[0]
-
 
 def load_samples(home):
     f = os.path.join(home, 'samples.tsv')
@@ -54,15 +52,14 @@ def analyze_sgRNAs(df, df_design, df_sgRNAs):
     s = df_sgRNAs.set_index('sgRNA')[cols]
 
     cols = ['well', 'count', 'sgRNA', 'source', 'tag', 'gene_symbol']
-    df_sg.join(s, on='sgRNA').groupby('well').head(2)[cols]
 
     x = df_design[['sgRNA', 'design']].drop_duplicates().set_index('sgRNA')
 
-    df_sg2 = df_sg.join(x, on='sgRNA').dropna()
+    df_sg2 = df_sg.join(x, on='sgRNA')#.dropna()
 
-    # require match to +/- control
-    filt = df_sg2['design'].isin(['FR_GFP_TM', 'nontargeting controls'])
-    df_sg2 = df_sg2[filt]
+    # # require match to +/- control
+    # filt = df_sg2['design'].isin(['FR_GFP_TM', 'nontargeting controls'])
+    # df_sg2 = df_sg2[filt]
 
     df_sg2['fraction'] = df_sg2.groupby('well')['count'].transform(lambda x: x/x.sum())
 

@@ -1,7 +1,7 @@
 import pool0
 from pool0 import *
 from collections import defaultdict
-from lasagna.parts import *
+from lasagna.designs.parts import *
 
 
 def prepare_barcodes():

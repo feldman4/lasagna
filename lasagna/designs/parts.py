@@ -1,4 +1,6 @@
 from lasagna.design import rc
+import re
+
 
 lasagna_enzymes = {
  'AgeI': 'ACCGGT',
@@ -88,10 +90,19 @@ default_parts = \
     ,'padding': 'CGCTACAAACTTCTCTCTGCTGAAACAAGCCGGTGACGTCGAAGAGAA'
 
     ,'BbsI': 'GAAGAC'
-	, 'BbsI_rc': 'GTCTTC'
-	, 'gibson_U6_5': 'TGGAAAGGACGAAACACCG'
-	, 'gibson_P42_3': 'ACTGGCTATTCATTCGCCC'
+	  ,'BbsI_rc': 'GTCTTC'
+	  ,'gibson_U6_5': 'TGGAAAGGACGAAACACCG'
+	  ,'gibson_P42_3': 'ACTGGCTATTCATTCGCCC'
+
+    ,'pL30_5': 'TGTTCAATCAACATTCC' 
+    ,'pL30_3': 'ACTGGCTATTCATTCGC'
+    ,'pL30_3_extended': 'actggctattcattcgcCTCCTGTTCG' 
 }
+
+
+oligos = {'Pd_pL30_short': 'actggctattcattcgcCTCCTGTTCGACAGTCAGCCGCATCTGCGTCTATTTAGTGGAGCCCTTGtgttcaatcaacattcc'
+}
+
 
 default_layouts = \
           { 'pL42': 
@@ -122,3 +133,17 @@ default_layouts = \
           }
 
 
+iupac = {'R': 'AG'
+        ,'Y': 'CT'
+        ,'S': 'GC'
+        ,'W': 'AT'
+        ,'K': 'GT'
+        ,'M': 'AC'
+        ,'B': 'CGT'
+        ,'D': 'AGT'
+        ,'H': 'ACT'
+        ,'V': 'ACG'
+        ,'N': 'ACGT'
+        }
+
+iupac_re = re.compile('(%s)' % '|'.join(iupac.keys()))

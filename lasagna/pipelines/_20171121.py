@@ -41,16 +41,6 @@ def do_mean_quality(df3, df2):
     df3 = df3.drop(Qs, axis=1).join(mean_quality, on=cols)
     return df3
 
-def quality(X):
-    """
-    """
-    X = np.sort(X, axis=-1).astype(float)
-    # P = np.percentile()
-    P = 5000
-    Q = (X[..., -1] - X[..., -2]) / P
-    Q = Q.clip(min=0.0, max=1.0)
-    return Q
-
 def pairplot(X, labels=None):
     bases = list('ACGT')
     a = pd.DataFrame(X.reshape(-1, 4), columns=list('ACGT'))
@@ -106,63 +96,6 @@ def q_to_alpha(Q):
     Q2 = ((1 - Q) * 26).astype(int)
     return [''.join(x) for x in A[Q2]]
 
-def reads_to_fastq(df, dataset):
-    a = '@MN2157:%s:FCFU' % dataset 
-    b = ':{well}:{well_tile}:{cell}:{blob}'
-    c = ':{position_i}:{position_j}'
-    d = ' 1:N:0:NN'
-    e = '\n{barcode_in_situ}\n+\n{phred}'
-    fmt = a + b + c + e
-    
-
-    wells = list(lasagna.plates.microwells()['96_well'])
-    it = zip(df['well'], df['tile'])
-    tile_spacing = df['tile'].astype(int).max()
-    tile_spacing = ((tile_spacing + 100) // 100)*100
-    tile_spacing = 1000
-    df['well_tile'] = [wells.index(w) * tile_spacing + int(t) for w, t in it]
-    fields = ['well', 'well_tile', 'blob',
-              'position_i', 'position_j', 
-              'barcode_in_situ', 'cell']
-    
-    Q = df.filter(like='Q_').as_matrix()
-    
-    reads = []
-    for i, row in enumerate(df[fields].as_matrix()):
-        d = dict(zip(fields, row))
-        d['phred'] = ''.join(phred(q) for q in Q[i])
-        reads.append(fmt.format(**d))
-    
-    return reads
-    
-def dataframe_to_fastq(df, file, dataset):
-    s = '\n'.join(reads_to_fastq(df, dataset))
-    with open(file, 'w') as fh:
-        fh.write(s)
-        fh.write('\n')
-
-def phred(q):
-    """Convert 0...1 to 0...30
-    No ":".
-    No "@".
-    No "+".
-    """
-    n = int(q * 30 + 33)
-    if n == 43:
-        n += 1
-    if n == 58:
-        n += 1
-    return chr(n)
-
-def unphred_string(phred):
-    """Convert 0...30 to 0...1
-    """
-    arr = [(ord(c) - 33) / 30. for c in phred]
-    return arr
-        
-def unphred_array(phred):
-    return (phred - 33) #/ 30.
-
 def load_barcode_table(files, n_cells=None):
     """Load tables, optionally subsampling cells.
     """
@@ -195,84 +128,6 @@ def clean_barcode_table(df):
     df = df.reset_index(drop=True)
     return df
 
-def make_reference_fasta():
-    f = '/Users/feldman/lasagna/libraries/Feldman_12K_Array_pool1_table.pkl'
-    df_pool1 = pd.read_pickle(f).drop_duplicates('barcode')
-
-    import random
-    random.seed(0)
-    def shuffle(s):
-        s = list(s)
-        random.shuffle(s)
-        return ''.join(s)
-
-    fmt = '>pool1_{subpool}_{barcode}\n{barcode}'
-    reference = [fmt.format(**row) for _, row in df_pool1.iterrows()]
-    reference = '\n'.join(reference)
-    with open('/Users/feldman/transfer/pool1.fa', 'w') as fh:
-        fh.write(reference)
-
-    # scrambled
-    fmt = '>pool1_{subpool}_{scrambled}_shuffled\n{scrambled}'
-    df_pool1['scrambled'] = df_pool1['barcode'].apply(shuffle)
-    reference = [fmt.format(**row) for _, row in df_pool1.iterrows()]
-    reference = '\n'.join(reference)
-    with open('/Users/feldman/transfer/pool1_shuffled.fa', 'w') as fh:
-        fh.write(reference)
-
-def get_medians(X):
-    arr = []
-    for i in range(X.shape[1]):
-        arr += [np.median(X[X.argmax(axis=1) == i], axis=0)]
-    M = np.array(arr)
-    return M
-
-def transform_medians(X):
-    """Y = W * X
-    """
-    W = np.eye(4)
-    M = get_medians(X).T
-    M = M / M.sum(axis=0)
-    W = np.linalg.inv(M)
-    Y = W.dot(X.T).T.astype(int)
-    return Y, W
-
-def table_to_dataframe(file):
-    """ no good ideas for out-of-core operation
-    would like to be able to 
-    - filter tiles
-    - subsample cells
-
-    cat run.fastq  | sed 'N;N;N;s/\n/ /g' | rg "@" --replace "" | rg "[:\+]" --replace " " | rg "\s+" --replace " " > run.table
-    """
-    columns = ['instrument', 'dataset', 'flowcell', 'well', 
-           'well_tile', 'cell', 'blob', 'position_i', 'position_j',
-           'read', 'quality']
-
-    columns_drop = ['instrument', 'flowcell', 'dataset', 'well_tile']
-
-    df = pd.read_csv(file, sep='\s+', header=None, quoting=3)
-    df.columns = columns
-    df['tile'] = df['well_tile'] % 1000
-    df = df.drop(columns_drop, axis=1)
-    return df
-
-def convert_quality(quality_series):
-    for x in quality_series:
-        n = len(x)
-        break
-
-    s = ''.join(quality_series)
-    t = np.fromstring(s, dtype=np.uint8)
-    q_shape = len(quality_series), n
-    columns = ['Q_%02d' % i for i in range(n)]
-    x = pd.DataFrame(t.view(np.uint8).reshape(q_shape), columns=columns)
-    x = unphred_array(x)
-    return x
-
-def locate(well, tile):
-    i, j = lasagna.plates.plate_coordinate(well, tile, grid_shape=(7,7), mag='10X')
-    return i,j
 
 def plot_quality(df3, quality_column):
     a = (df3.groupby(['well', 'tile'])[quality_column]
@@ -286,7 +141,6 @@ def plot_quality(df3, quality_column):
     ax = a.plot.scatter(x='tile_x', y='tile_y', c='mean', vmin=0, vmax=20)
     ax.axis('equal')
     return ax
-
 
 def plot_oversampling():
     def sampler(x, dropout=0.05, cutoff=50):

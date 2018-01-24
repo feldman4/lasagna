@@ -1,7 +1,7 @@
 from lasagna.imports import *
 from lasagna.designs import pool1
 
-get_well = lambda x: re.findall('_([ABCD]..)_', x)[0]
+get_well = lambda x: re.findall('_([ABCDEFGH]..)_', x)[0]
 get_pattern = lambda x: re.findall('grep.(.*).hist', x)[0]
 
 samples = ['A01' ,'A02' ,'A03' ,'A04' ,'A05' ,'A06' ,'A07' ,'A08' ,
@@ -89,7 +89,7 @@ def analyze_sgRNAs(df, df_design, df_sgRNAs):
     df_sg2 = df_sg.join(x, on='sgRNA').dropna()
 
     # require match to +/- control
-    filt = df_sg2['design'].isin(['FR_GFP_TM', 'nontargeting controls'])
+    filt = df_sg2['design'].isin(['FR_GFP_TM', 'LG_TM', 'nontargeting controls'])
     df_sg2 = df_sg2[filt]
 
     df_sg2['fraction'] = df_sg2.groupby('well')['count'].transform(lambda x: x/x.sum())

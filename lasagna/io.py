@@ -165,7 +165,7 @@ def montage(arr, shape=None):
     return M
 
 
-def tile(arr, n, m, pad=None):
+def tile(arr, m, n, pad=None):
     """Divide a stack of images into tiles of size m x n. If m or n is between 
     0 and 1, it specifies a fraction of the input size. If pad is specified, the
     value is used to fill in edges, otherwise the tiles may not be equally sized.
@@ -174,17 +174,19 @@ def tile(arr, n, m, pad=None):
     assert arr.ndim > 1
     h, w = arr.shape[-2:]
     # convert to number of tiles
-    m = m if m >= 1 else np.round(1 / m)
-    n = n if n >= 1 else np.round(1 / n)
-    m, n = int(m), int(n)
+    m_ = h / m if m >= 1 else int(np.round(1 / m))
+    n_ = w / n if n >= 1 else int(np.round(1 / n))
 
     if pad is not None:
         pad_width = (arr.ndim - 2) * ((0, 0),) + ((0, -h % m), (0, -w % n))
         arr = np.pad(arr, pad_width, 'constant', constant_values=pad)
         print arr.shape
 
-    tiled = np.array_split(arr, m, axis=-2)
-    tiled = lasagna.utils.concatMap(lambda x: np.array_split(x, n, axis=-1), tiled)
+    h_ = int(int(h / m) * m)
+    w_ = int(int(w / n) * n)
+
+    tiled = np.array_split(arr[:h_, :w_], m_, axis=-2)
+    tiled = lasagna.utils.concatMap(lambda x: np.array_split(x, n_, axis=-1), tiled)
     return tiled
 
 

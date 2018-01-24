@@ -8,10 +8,15 @@ import regex as re
 import os
 from lasagna.designs.parts import *
 
+
+GFP_TM_SGRNAS = 'FR_GFP_TM_sgRNAs.tsv'
+LG_SGRNAS  = 'LG_sgRNAs.tsv'
+
 def load_tables(path=''):
     brunello = load_brunello(path=path)
     mitosis = load_cheese_sgRNAs(path=path)
     GFP_TM = load_GFP_TM_sgRNAs(path=path)
+    LG_TM = load_LG_TM_sgRNAs(path=path)
     benchling = load_benchling(path=path)
     controls = load_nontargeting_sgRNAs(path=path)
     # patch brunello with ECRISP and Wang sgRNAs to get 3 non-typeIIS / gene
@@ -19,7 +24,7 @@ def load_tables(path=''):
     ecrisp = load_ecrisp(path=path)
     wang = load_wang(path=path)
 
-    include = [mitosis, GFP_TM, controls, brunello, wang, ecrisp, benchling]
+    include = [mitosis, GFP_TM, LG_TM, controls, brunello, wang, ecrisp, benchling]
     df_sgRNAs = (pd.concat(include).reset_index(drop=True)).drop_duplicates('sgRNA')
 
     # add # of GO terms for each gene ID
@@ -44,19 +49,20 @@ def load_tables(path=''):
     enst_ncbi = load_enst_ncbi(path=path)
     s = enst_ncbi.set_index('Transcript stable ID')['gene_id']
 
-    hela_rnaseq = pd.read_csv(path + 'HeLa_RNAseq/ENCFF000DMU/abundance.tsv', sep='\t')
-    hela_rnaseq = (hela_rnaseq.join(s, on='target_id')
-                .dropna()
-                .groupby('gene_id')['tpm'].sum())
-    hela_rnaseq.index = hela_rnaseq.index.astype(int)
-    hela_rnaseq.name = 'hela_tpm'
-    df_sgRNAs = df_sgRNAs.join(hela_rnaseq, on='gene_id')
+    # hela_rnaseq = pd.read_csv(path + 'HeLa_RNAseq/ENCFF000DMU/abundance.tsv', sep='\t')
+    # hela_rnaseq = (hela_rnaseq.join(s, on='target_id')
+    #             .dropna()
+    #             .groupby('gene_id')['tpm'].sum())
+    # hela_rnaseq.index = hela_rnaseq.index.astype(int)
+    # hela_rnaseq.name = 'hela_tpm'
+    # df_sgRNAs = df_sgRNAs.join(hela_rnaseq, on='gene_id')
 
     return df_sgRNAs, df_go
 
 
 def load_brunello(path=''):
-    brunello = pd.read_csv(path + 'brunello_SuppTables/STable 21 Brunello.csv')
+    f = os.path.join(path, 'brunello_SuppTables/STable 21 Brunello.csv')
+    brunello = pd.read_csv(f)
 
     columns = {'Target Gene ID': 'gene_id'
               ,'Target Transcript': 'transcript'
@@ -127,7 +133,8 @@ def load_cheese_sgRNAs(path=''):
 def load_wang(path=''):
     columns = {'sgRNA sequence':'sgRNA'
           ,'Symbol': 'gene_symbol'}
-    df_wang = (pd.read_csv(path + 'Wang_2015_supplement/Wang_2015_STable1.csv')
+    f = os.path.join(path, 'Wang_2015_supplement/Wang_2015_STable1.csv')
+    df_wang = (pd.read_csv(f)
                  .rename(columns=columns)[columns.values()])
 
     enst_ncbi = (load_enst_ncbi(path=path)
@@ -156,7 +163,8 @@ def load_ecrisp(path=''):
                           .to_dict())
 
     columns = {'Nucleotide sequence': 'sgRNA'}
-    df_ecrisp = (pd.read_csv(path + 'ECRISPED.tsv', sep='\t')
+    f = os.path.join(path, 'ECRISPED.tsv')
+    df_ecrisp = (pd.read_csv(f, sep='\t')
                    .rename(columns=columns))
 
     df_ecrisp['sgRNA'] = df_ecrisp['sgRNA'].apply(lambda x: x[:20])
@@ -183,14 +191,27 @@ def load_benchling(path=''):
 
 
 def load_GFP_TM_sgRNAs(path=''):
-    columns = {'Sequence': 'sgRNA'}
-    GFP_TM = (pd.read_csv(path + 'GFP_TM_sgRNAs.tsv', '\t')
+    columns = {0: 'name', 1: 'sgRNA'}
+    f = os.path.join(path, GFP_TM_SGRNAS)
+    GFP_TM = (pd.read_csv(f, '\t', header=None)
                 .rename(columns=columns))
     GFP_TM['source'] = 'GFP_TM'
     GFP_TM['tag'] = 'GFP_TM'
     columns = ['sgRNA', 'source', 'tag']
     return GFP_TM[columns]
 
+def load_LG_TM_sgRNAs(path=''):
+    columns = {0: 'name', 1: 'sgRNA'}
+    f = os.path.join(path, LG_SGRNAS)
+    LG_TM = (pd.read_csv(f, '\t', header=None)
+                .rename(columns=columns))
+    LG_TM['source'] = 'LG_TM'
+    LG_TM['tag'] = 'LG_TM'
+    columns = ['sgRNA', 'source', 'tag']
+
+    filt = LG_TM['name'].str.contains('^LG_sg\d+_mut$')
+
+    return LG_TM.loc[filt, columns]
 
 def load_nontargeting_sgRNAs(path=''):
     controls = pd.read_csv(path + 'nontargeting_sgRNAs.tsv', header=None)

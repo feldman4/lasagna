@@ -33,12 +33,6 @@ def call(df, DO_threshold=[0, 5000, 0, 0]):
 
     return df
 
-def call_bases_fast(values, bases='ACGT'):
-    assert values.ndim == 3
-    assert values.shape[2] == 4
-    calls = values.argmax(axis=2)
-    calls = np.array(list(bases))[calls]
-    return [''.join(x) for x in calls]
 
 def call_bases(df, value='intensity'):
     """Makes cycles_in_situ. Includes DO. Does nice things with dataframe.
@@ -62,37 +56,6 @@ def call_bases(df, value='intensity'):
     df = df.join(s, on=cols)
 
     return df
-
-def call_cells(df):
-    cols = ['well', 'tile', 'cell']
-    s = (df.drop_duplicates(['well', 'tile', 'blob'])
-       .groupby(cols)['barcode_in_situ']
-       .value_counts()
-       .rename('count')
-       .sort_values(ascending=False)
-       .reset_index('barcode_in_situ')
-       .groupby(cols)
-        )
-
-    df2 = (df
-      .join(s.nth(0)['barcode_in_situ'].rename('barcode_in_situ_0'), on=cols)
-      .join(s.nth(0)['count']          .rename('barcode_count_0'), on=cols)
-      .join(s.nth(1)['barcode_in_situ'].rename('barcode_in_situ_1'), on=cols)
-      .join(s.nth(1)['count']          .rename('barcode_count_1'), on=cols)
-    )
-    return df2
-
-def dataframe_to_values(df, value='intensity', adapters='TCGA'):
-    """Dataframe must be sorted on [cycles, channels]. 
-    Returns N x cycles x channels.
-    """
-    cycles = df['cycle'].value_counts()
-    assert len(set(cycles)) == 1
-    n_cycles = len(cycles)
-    x = np.array(df[value]).reshape(-1, n_cycles, 4)
-    # base_order = np.argsort(np.argsort(list(adapters)))
-    # x = x[:, :, base_order]
-    return x
 
 def filter_intensity(df, filt_func):
     """Filter function acts on array of shape N x cycles x channels.
