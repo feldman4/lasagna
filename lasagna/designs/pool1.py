@@ -1,33 +1,7 @@
 import pool0
 from pool0 import *
 from collections import defaultdict
-  
-more_layouts = \
-		  { 'pL42-BbsI':
-	          ('dialout_5', 'BsmBI', 'C', 
-	          'sticky_U6', 'G', 'sgRNA', 
-	          'sticky_scaffold', 'NN', 'BbsI_rc', 'spacer', 'BbsI', 'NN',
-	          'sticky_Pd42_5', 'barcode', 
-	          'sticky_Pd42_3', 'C', 'BsmBI_rc', 'dialout_3_rc')
-          , 'pL42-gibson':
-	          ('dialout_5', 
-	           'gibson_U6_5',
-	           'sgRNA',
-	           'sticky_scaffold', 'N', 'BsmBI_rc', 'spacer', 'BsmBI', 'N', 'sticky_Pd42_5', 
-	           'barcode',
-	           'gibson_P42_3',
-	           'dialout_3_rc')
-          }
-
-more_parts = { 'BbsI': 'GAAGAC'
-			 , 'BbsI_rc': 'GTCTTC'
-			 , 'gibson_U6_5': 'TGGAAAGGACGAAACACCG'
-			 , 'gibson_P42_3': 'ACTGGCTATTCATTCGCCC'
-			 }
-
-default_layouts.update(more_layouts)
-default_parts.update(more_parts)
-
+from lasagna.parts import *
 
 
 def prepare_barcodes():

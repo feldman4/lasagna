@@ -66,7 +66,7 @@ def khash(s, k):
     arr = []
     for i in range(n):
         # arr += [s[i:i+window]]
-        for j in (-1, 0, 1):
+        for j in (0, 1):
             arr += [((i + j) % n, s[i:i+window])]
     return arr
 
@@ -93,7 +93,7 @@ def build_khash2(xs, k):
     return sorted(set(arr))
 
 def sparse_dist(D, threshold, D2=None):
-    """Entries less than threshold only.
+    """Entries less than or equal to threshold only.
     """
     if D2 is None:
         D2 = defaultdict(int)
@@ -134,7 +134,7 @@ def test_khash(xs, D2, attempts=1e6):
 def array_to_str(arr):
     """14e6 in 60s
     """
-    arr = (np.array(arr) + 48).view(dtype='S1')
+    arr = (np.array(arr).astype(np.uint8) + 48).view(dtype='S1')
     return [''.join(x) for x in arr]
 
 
@@ -185,3 +185,54 @@ def maxy_clique(cm, start=None):
         ix = np.argmin(cm[unused, :][:, unused].sum(axis=0))
         arr.append(unused.pop(ix))
         assert cm[arr, :][:, arr].sum() == 0
+
+
+
+def maxy_clique2(cm, start=None):
+    """sparse matrix of missing edges (1 - adjacency)
+    """
+    # combine things not in the graph
+    n, m = cm.shape
+    assert n == m
+    flatten = lambda x: np.array(x)[0]
+
+    if start is None:
+        arr = [np.random.randint(n)]
+        arr = [0]
+    else:
+        arr = start
+
+    unused = np.ones(n, dtype=bool)
+    unused[arr] = False
+
+    # indices, best to worst
+    # total = flatten(cm.sum(axis=0))
+    # total = np.argsort(total)
+
+    last_added = arr[0]
+
+    r = np.arange(n)
+    last_printed = 0
+    while True:
+        if len(arr) % 100 == 0:
+            x = unused.sum()
+            delta = last_printed - x
+            print len(arr), 'barcodes;', x, 'remaining; +%d' % delta
+            last_printed = x
+        # just the neighbors of the last added barcode
+        nix_these = cm[last_added, :][:, unused].indices
+        
+        # remove the useless
+        ix = np.where(unused)[0][nix_these]
+        unused[ix] = False
+
+        if unused.sum() == 0:
+            return arr
+
+        # even less smart...
+        # better to take barcode with lowest edit distance/most at 3...
+        w = np.where(unused)[0]
+        last_added = w[0]
+        unused[last_added] = 0
+        arr.append(last_added)
+        # assert cm[arr, :][:, arr].sum() == 0
