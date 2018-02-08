@@ -3,6 +3,8 @@ import os
 import pandas as pd
 import lasagna.designs.pool1
 import Levenshtein
+import matplotlib.pyplot as plt
+import numpy as np
 
 oligo_arrays = {'pool1': 'Feldman_12K_Array_pool1_table.csv', 
                 'pool2': '20171211_Feldman_90K_Array_pool2.csv'}
@@ -40,7 +42,7 @@ def analyze_sgRNAs(df, df_design, df_sgRNAs, nearest=0):
     include within edit distance < nearest. 
     """
     # df_sg = df.query('pattern == "sg"').copy()
-    df_sg = df.copy()
+    df_sg = df.copy().rename(columns={'seq': 'sgRNA'})
 
     cols = ['source', 'tag', 'gene_symbol', 'gene_id']
     s = df_sgRNAs.set_index('sgRNA')[cols]

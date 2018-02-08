@@ -2,7 +2,7 @@ import sys
 sys.path.append('C:/Users/LabAdmin/Documents/GitHub/lasagna')
 import json
 import re
-
+import inspect
 import fire
 from collections import defaultdict
 
@@ -15,6 +15,127 @@ if sys.version_info.major == 2:
     import lasagna.io
     read = lasagna.io.read_stack
     save = lasagna.io.save_stack 
+
+def load_csv(f):
+    with open(f, 'r') as fh:
+        txt = fh.readline()
+    sep = ',' if ',' in txt else '\s+'
+    return pd.read_csv(f, sep=sep)
+
+
+def load_pkl(f):
+    return pd.read_pickle(f)
+
+
+def load_tif(f):
+    return read(f)
+
+
+def save_csv(f, df):
+    df.to_csv(f, index=None)
+
+
+def save_pkl(f, df):
+    df.to_pickle(f)
+
+
+def save_tif(f, img, **kwargs):
+    # restrict keyword arguments
+    save_kwargs = {k: kwargs[k] for k in get_kwarg_defaults(f).keys()}
+    save(f, img, **save_kwargs)
+
+
+def load_file(f):
+    if not os.path.isfile(f):
+        return
+    if f.endswith('.tif'):
+        return load_tif(f)
+    elif f.endswith('.pkl'):
+        return load_pkl(f)
+    elif if.endswith('.csv'):
+        return load_csv(f)
+
+
+def load_arg(x):
+    one_file = load_file
+    many_files = lambda x: map(load_file, x)
+    
+    for f in one_file, many_files:
+        try:
+            return f(x)
+        except:
+            pass
+    else:
+        return x
+
+
+def save_output(f, x, input):
+    """Saves a single output file. Can extend to list if needed.
+    Saving .tif might use kwargs (luts, ...) from input.
+    """
+    if f.endswith('.tif'):
+        return save_tif(f, x, **input)
+    elif f.endswith('.pkl'):
+        return save_pkl(f, x)
+    elif if.endswith('.csv'):
+        return save_csv(f, x)
+    else:
+        raise ValueError('not a recognized filetype: ' + f)
+
+
+def get_arg_names(f):
+    argspec = inspect.getargspec(f)
+    n = len(argspec.defaults)
+    return argspec.args[:n]
+
+
+def get_kwarg_defaults(f):
+    argspec = inspect.getargspec(f)
+    defaults = {k: v for k,v in zip(argspec.args[::-1], argspec.defaults[::-1])}
+    return defaults
+
+
+def get_keywords(f):
+
+
+
+def call_from_fire(f):
+    """Turn a function that acts on a mix of image data, table data and other 
+    arguments and may return image or table data into a function that acts on 
+    filenames for image and table data, and json-encoded values for other arguments.
+
+    If output filename is provided, saves return value of function.
+
+    Supported filetypes are .pkl, .csv, and .tif.
+    """
+    def g(input_json=None, output=None):
+        
+        with open(input_json, 'r') as fh:
+            inputs = json.load(fh)
+
+        # provide all arguments as keyword arguments
+        kwargs = {x: load_arg(inputs[x]) for x in inputs}
+        result = f(**kwargs)
+
+        if output:
+            save_output(output, result, input)
+
+    return functools.update_wrapper(g, f)
+
+
+def add_method(class, name, f):
+    exec('%s.%s = f' % (class, name))
+
+
+class Snake2():
+    methods = [#('stitch', stitch)
+              #,('align', align)
+               ('segment_nuclei', f1)
+              ,('segment_cells', f2)
+              ]
+    for name, f in methods:
+        add_method('Snake2', name, call_from_fire(f))
+
 
 class Snake():
     @staticmethod
@@ -137,7 +258,6 @@ class Snake():
         aligned = aligned[sl]
 
         save(output, aligned, display_ranges=display_ranges)
-
     
     @staticmethod
     def consensus_DO(input_json=None, output=None):

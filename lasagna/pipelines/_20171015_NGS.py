@@ -1,7 +1,7 @@
 from lasagna.imports import *
 from lasagna.designs import pool1
 
-get_well = lambda x: re.findall('_([ABCDEFGH]..)_', x)[0]
+get_well = lambda x: re.findall('T._([ABCDEFGH]..)_', x)[0]
 get_pattern = lambda x: re.findall('grep.(.*).hist', x)[0]
 
 samples = ['A01' ,'A02' ,'A03' ,'A04' ,'A05' ,'A06' ,'A07' ,'A08' ,

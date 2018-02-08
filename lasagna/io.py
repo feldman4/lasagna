@@ -219,6 +219,9 @@ def save_stack(name, data, luts=None, display_ranges=None,
         name += '.tif'
     name = os.path.abspath(name)
 
+    if isinstance(data, list):
+        data = np.array(data)
+
     if data.ndim == 2:
         data = data[None]
 
