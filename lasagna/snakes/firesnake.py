@@ -52,7 +52,7 @@ def load_file(f):
         return load_tif(f)
     elif f.endswith('.pkl'):
         return load_pkl(f)
-    elif if.endswith('.csv'):
+    elif f.endswith('.csv'):
         return load_csv(f)
 
 
@@ -77,7 +77,7 @@ def save_output(f, x, input):
         return save_tif(f, x, **input)
     elif f.endswith('.pkl'):
         return save_pkl(f, x)
-    elif if.endswith('.csv'):
+    elif f.endswith('.csv'):
         return save_csv(f, x)
     else:
         raise ValueError('not a recognized filetype: ' + f)
@@ -96,7 +96,7 @@ def get_kwarg_defaults(f):
 
 
 def get_keywords(f):
-
+    pass
 
 
 def call_from_fire(f):
@@ -123,15 +123,15 @@ def call_from_fire(f):
     return functools.update_wrapper(g, f)
 
 
-def add_method(class, name, f):
-    exec('%s.%s = f' % (class, name))
+def add_method(class_, name, f):
+    exec('%s.%s = f' % (class_, name))
 
 
 class Snake2():
     methods = [#('stitch', stitch)
               #,('align', align)
-               ('segment_nuclei', f1)
-              ,('segment_cells', f2)
+              #  ('segment_nuclei', f1)
+              # ,('segment_cells', f2)
               ]
     for name, f in methods:
         add_method('Snake2', name, call_from_fire(f))
@@ -315,7 +315,11 @@ class Snake():
             mask = np.median(data[1:], axis=0)
 
         mask = mask > threshold
-        cells = lasagna.process.find_cells(nuclei, mask)
+        try:
+            cells = lasagna.process.find_cells(nuclei, mask)
+        except ValueError:
+            print('segment_cells error at ', files)
+            cells = nuclei
 
         save(output, cells)
     
@@ -396,7 +400,12 @@ class Snake():
         positions = np.array(np.where(blob_mask)).T
 
         index = ('cycle', cycles), ('channel', list('GTAC'))
-        df = lasagna.utils.ndarray_to_dataframe(values, index)
+        try:
+            df = lasagna.utils.ndarray_to_dataframe(values, index)
+        except ValueError:
+            print('extract_barcodes failed to reshape, writing dummy', files)
+            pd.DataFrame().to_pickle(output)
+            return
 
         df_positions = pd.DataFrame(positions, columns=['position_i', 'position_j'])
         df = (df.stack(['cycle', 'channel'])
@@ -411,8 +420,8 @@ class Snake():
 
     @staticmethod
     def extract_phenotype(input_json=None, output=None):
-        def correlate_dapi_myc(region):
-            dapi, myc, bkgd = region.intensity_image_full
+        def correlate_dapi_ha(region):
+            dapi, ha, bkgd = region.intensity_image_full
 
             filt = dapi > 0
             if filt.sum() == 0:
@@ -420,16 +429,16 @@ class Snake():
                 return np.nan
 
             dapi = dapi[filt]
-            myc  = myc[filt]
-            corr = (dapi - dapi.mean()) * (myc - myc.mean()) / (dapi.std() * myc.std())
+            ha  = ha[filt]
+            corr = (dapi - dapi.mean()) * (ha - ha.mean()) / (dapi.std() * ha.std())
 
             return corr.mean()
 
         features = {
-            'corr'       : correlate_dapi_myc,
+            'corr'       : correlate_dapi_ha,
             'dapi_median': lambda r: np.median(r.intensity_image_full[0]),
-            'bkgd_median': lambda r: np.median(r.intensity_image_full[1]),
-            'myc_median' : lambda r: np.median(r.intensity_image_full[2]),
+            'ha_median'  : lambda r: np.median(r.intensity_image_full[1]),
+            'bkgd_median': lambda r: np.median(r.intensity_image_full[2]),
             'cell'       : lambda r: r.label
         }
 

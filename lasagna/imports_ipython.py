@@ -1,5 +1,6 @@
 from lasagna.imports import *
 
+from tqdm import tqdm
 from Levenshtein import distance
 
 import IPython

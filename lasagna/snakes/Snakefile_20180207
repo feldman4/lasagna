@@ -1,0 +1,131 @@
+from glob import glob
+import firesnake
+import json
+
+import snakemake
+from firesnake3 import call_firesnake
+
+# if true, will run when the data is complete, doing what it can
+# snakemake.ignore_missing = True
+
+THRESHOLD_DO = 2000
+INDEX_DO = None
+
+CYCLES = ['c{cycle}-SBS-{cycle}'.format(cycle=c) for c in range(1, 13)]
+CYCLES = CYCLES[:4]
+CYCLE_PHENOTYPE = 'c0-HA-488'
+
+
+RANGE = lambda x: list(map(str, range(x[0] * x[1])))
+
+import pandas as pd
+df = pd.read_csv('good_positions.csv')
+WELLS = df['well']
+TILES = df['tile']
+
+DISPLAY_RANGES=((500, 20000), 
+                (100, 20000), 
+                (100, 20000), 
+                (100, 20000), 
+                (100, 20000))
+
+
+CHANNEL_OFFSETS = [(0, 0), (0, 0), (0, 0), (0, 0), (0, 0)]
+
+
+rule all:
+    input:
+        (
+        expand('process/10X_{well}_Tile-{tile}.barcodes.pkl', zip, well=WELLS, tile=TILES),
+        expand('process/10X_{well}_Tile-{tile}.phenotype.pkl', zip, well=WELLS, tile=TILES)
+        )
+
+rule segment_nuclei:
+    priority: -1
+    input:
+        'process/10X_{cycle}/10X_{cycle}_{{well}}_Site-{{tile}}.max.tif'.format(cycle=CYCLES[0])
+    output:
+        'process/10X_{well}_Tile-{tile}.nuclei.tif'
+    run:
+        call_firesnake(input, output, 'segment_nuclei', threshold=1200, area_min=0.25*150, area_max=0.25*800)
+
+rule extract_phenotype:
+    input:
+        'process/10X_{well}_Tile-{tile}.phenotype_aligned.tif',
+        'process/10X_{well}_Tile-{tile}.nuclei.tif'
+    output:
+        'process/10X_{well}_Tile-{tile}.phenotype.pkl'
+    run:
+        call_firesnake(input, output, 'extract_phenotype', wildcards=dict(wildcards))
+
+rule align:
+    priority: -1
+    input:
+        expand('process/10X_{cycle}/10X_{cycle}_{{well}}_Site-{{tile}}.max.tif', cycle=CYCLES)
+    output:
+        temp('process/10X_{well}_Tile-{tile}.aligned.tif')
+    run:
+        call_firesnake(input, output, 'align', display_ranges=DISPLAY_RANGES, channel_offsets=CHANNEL_OFFSETS)
+
+rule transform_LoG:
+    input:
+        'process/10X_{well}_Tile-{tile}.aligned.tif'
+    output:
+        'process/10X_{well}_Tile-{tile}.log.tif'
+    run:
+        call_firesnake(input, output, 'transform_LoG', display_ranges=DISPLAY_RANGES)
+
+rule consensus_DO:
+    input:
+        'process/10X_{well}_Tile-{tile}.log.tif'
+    output:
+        'process/10X_{well}_Tile-{tile}.consensus_DO.tif'
+    run:
+        call_firesnake(input, output, 'consensus_DO')
+
+rule find_peaks:
+    input:
+        'process/10X_{well}_Tile-{tile}.consensus_DO.tif'
+    output:
+        'process/10X_{well}_Tile-{tile}.peaks.tif'
+    run:
+        call_firesnake(input, output, 'find_peaks', display_ranges=None) 
+
+rule max_filter:
+    input:
+        'process/10X_{well}_Tile-{tile}.log.tif'
+    output:
+        temp('process/10X_{well}_Tile-{tile}.maxed.tif')
+    run:
+        call_firesnake(input, output, 'max_filter', width=3, display_ranges=DISPLAY_RANGES) 
+
+rule extract_barcodes:
+    input:
+        'process/10X_{well}_Tile-{tile}.peaks.tif',
+        'process/10X_{well}_Tile-{tile}.maxed.tif',
+        'process/10X_{well}_Tile-{tile}.cells.tif'
+    output:
+        'process/10X_{well}_Tile-{tile}.barcodes.pkl'
+    run:
+        call_firesnake(input, output, 'extract_barcodes', wildcards=dict(wildcards),
+            cycles=CYCLES, threshold_DO=THRESHOLD_DO, index_DO=INDEX_DO) 
+
+rule segment_cells:
+    input:
+        # expand('process/10X_{cycle}/10X_{cycle}_{{well}}_Site-{{tile}}.max.tif', cycle=CYCLES[0]),
+        'process/10X_{well}_Tile-{tile}.aligned.tif',
+        'process/10X_{well}_Tile-{tile}.nuclei.tif'
+    output:
+        'process/10X_{well}_Tile-{tile}.cells.tif'
+    run:
+        call_firesnake(input, output, 'segment_cells', threshold=4*200)
+
+rule align_phenotype:
+    input:
+        'process/10X_{cycle}/10X_{cycle}_{{well}}_Site-{{tile}}.max.tif'.format(cycle=CYCLES[0]),
+        'process/10X_{cycle}/10X_{cycle}_{{well}}_Site-{{tile}}.max.tif'.format(cycle=CYCLE_PHENOTYPE)
+    output:
+        'process/10X_{well}_Tile-{tile}.phenotype_aligned.tif'
+    run:
+        call_firesnake(input, output, 'align_phenotype')
+

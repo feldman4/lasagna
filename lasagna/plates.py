@@ -43,14 +43,15 @@ def microwells(width=None, base=(8, 12), downsample=((2, 2), (4, 4))):
 
     return pd.concat(arr, axis=1)
 
-def plate_coordinate(well, site, grid_shape=(15, 15), offset=(0, 0), mag='20X'):
+def plate_coordinate(well, site, spacing='10X', grid_shape=(7, 7)):
+    site = int(site)
     spacing_96w = 9000
-    if mag == '20X':
+    if spacing == '20X':
         delta = 600
-    elif mag == '10X':
-        delta = 1200
+    elif spacing == '10X':
+        delta = 1286
     else:
-        raise ValueError('mag')
+        delta = spacing
 
     row, col = well_to_row_col(well)
     i, j = row * spacing_96w, col * spacing_96w
@@ -61,8 +62,5 @@ def plate_coordinate(well, site, grid_shape=(15, 15), offset=(0, 0), mag='20X'):
     
     i -= delta * (height / 2) 
     j -= delta * (width  / 2)
-
-    i += offset[0]
-    j += offset[1]
 
     return i, j

@@ -822,7 +822,10 @@ class TiffFile(object):
 
         if self.is_micromanager:
             # MicroManager files contain metadata not stored in TIFF tags.
-            self.micromanager_metadata = read_micromanager_metadata(self._fh)
+            try:
+                self.micromanager_metadata = read_micromanager_metadata(self._fh)
+            except ValueError:
+                pass
 
         if self.is_lsm:
             self._fix_lsm_strip_offsets()
