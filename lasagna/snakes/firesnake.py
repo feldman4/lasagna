@@ -5,6 +5,8 @@ import re
 import inspect
 import fire
 from collections import defaultdict
+import functools
+import os
 
 if sys.version_info.major == 2:
     # python 2
@@ -39,21 +41,34 @@ def save_pkl(f, df):
     df.to_pickle(f)
 
 
-def save_tif(f, img, **kwargs):
-    # restrict keyword arguments
-    save_kwargs = {k: kwargs[k] for k in get_kwarg_defaults(f).keys()}
-    save(f, img, **save_kwargs)
+def save_tif(f, data_, **kwargs):
+    kwargs = restrict_kwargs(kwargs, save)
+    # make sure `data` doesn't come from the Snake method since it's an
+    # argument name for the save function, too
+    kwargs['data'] = data_
+    save(f, **kwargs)
+
+
+def restrict_kwargs(kwargs, f):
+    f_kwargs = set(get_kwarg_defaults(f).keys()) | set(get_arg_names(f))
+    keys = f_kwargs & set(kwargs.keys())
+    return {k: kwargs[k] for k in keys}
 
 
 def load_file(f):
+    # python 2, unicode coming from python 3
+    if not isinstance(f, (str, unicode)):
+        raise TypeError
     if not os.path.isfile(f):
-        return
+        raise ValueError
     if f.endswith('.tif'):
         return load_tif(f)
     elif f.endswith('.pkl'):
         return load_pkl(f)
     elif f.endswith('.csv'):
         return load_csv(f)
+    else:
+        raise ValueError(f)
 
 
 def load_arg(x):
@@ -63,18 +78,19 @@ def load_arg(x):
     for f in one_file, many_files:
         try:
             return f(x)
-        except:
+        except (ValueError, TypeError) as e:
+            # print(e)
             pass
     else:
         return x
 
 
-def save_output(f, x, input):
+def save_output(f, x, inputs):
     """Saves a single output file. Can extend to list if needed.
     Saving .tif might use kwargs (luts, ...) from input.
     """
     if f.endswith('.tif'):
-        return save_tif(f, x, **input)
+        return save_tif(f, x, **inputs)
     elif f.endswith('.pkl'):
         return save_pkl(f, x)
     elif f.endswith('.csv'):
@@ -85,12 +101,16 @@ def save_output(f, x, input):
 
 def get_arg_names(f):
     argspec = inspect.getargspec(f)
+    if argspec.defaults is None:
+        return argspec.args
     n = len(argspec.defaults)
-    return argspec.args[:n]
+    return argspec.args[:-n]
 
 
 def get_kwarg_defaults(f):
     argspec = inspect.getargspec(f)
+    if argspec.defaults is None:
+        return {}
     defaults = {k: v for k,v in zip(argspec.args[::-1], argspec.defaults[::-1])}
     return defaults
 
@@ -113,38 +133,37 @@ def call_from_fire(f):
         with open(input_json, 'r') as fh:
             inputs = json.load(fh)
 
+        # remove unused keyword arguments
+        # would be better to remove only the output arguments so 
+        # incorrectly named arguments raise a sensible error
+        inputs = restrict_kwargs(inputs, f)
+
         # provide all arguments as keyword arguments
         kwargs = {x: load_arg(inputs[x]) for x in inputs}
         result = f(**kwargs)
 
         if output:
-            save_output(output, result, input)
+            save_output(output, result, inputs)
 
     return functools.update_wrapper(g, f)
 
 
-def add_method(class_, name, f):
-    exec('%s.%s = f' % (class_, name))
-
-
-class Snake2():
-    methods = [#('stitch', stitch)
-              #,('align', align)
-              #  ('segment_nuclei', f1)
-              # ,('segment_cells', f2)
-              ]
-    for name, f in methods:
-        add_method('Snake2', name, call_from_fire(f))
-
-
 class Snake():
     @staticmethod
-    def stitch(input_json=None, output=None):
-        from lasagna.pipelines._20171031 import load_tile_configuration, parse_filename
+    def add_method(class_, name, f):
+        f = staticmethod(f)
+        exec('%s.%s = f' % (class_, name))
 
-        with open(input_json, 'r') as fh:
-            inputs = json.load(fh)
-        files, display_ranges, tile_config = [inputs[k] for k in ('input', 'display_ranges', 'tile_config')]
+    @staticmethod
+    def load_methods():
+        methods = inspect.getmembers(Snake)
+        for name, f in methods:
+            if name not in ('__doc__', '__module__') and name.startswith('_'):
+                Snake.add_method('Snake', name[1:], call_from_fire(f))
+
+    @staticmethod
+    def _stitch(data, tile_config):
+        from lasagna.pipelines._20171031 import load_tile_configuration, parse_filename
 
         _, ij = load_tile_configuration(tile_config)
         positions = []
@@ -153,14 +172,9 @@ class Snake():
             site = int(site)
             positions += [ij[site]]
     
-        data = np.array([read(file) for file in files])
+        data = np.array(data)
         if data.ndim == 3:
             data = data[:, None]
-        # GOT FUCKED UP IN NOTEBOOK MAX PROJECT
-        if 'c0-DO' in file:
-            data[:, 2] = data[:, 3]
-            data[:, [1, 3]] = 0
-        # lasagna.io._imread._reset()
 
         arr = []
         for c in range(data.shape[1]):
@@ -168,19 +182,17 @@ class Snake():
             arr += [result]
         stitched = np.array(arr)
 
-        save(output, stitched, display_ranges=display_ranges)
+        return stitched
 
     @staticmethod
-    def align(input_json=None, output=None):
-        """Align data using DAPI. Optional channel offset.
+    def _align(data, channel_offsets=None):
+        """Align data using first channel. If data is a list of stacks with different 
+        IJ dimensions, the data will be piled first. Optional channel offset.
         """
-        with open(input_json, 'r') as fh:
-            inputs = json.load(fh)
-        files, display_ranges = inputs['input'], inputs['display_ranges']
 
-        # might be stitched with different configs
+        # shapes might be different if stitched with different configs
         # keep shape consistent with DO
-        data = [read(file) for file in files]
+
         shape = data[0].shape
         data = lasagna.io.pile(data)
         data = data[..., :shape[-2], :shape[-1]]
@@ -191,123 +203,42 @@ class Snake():
             if d.shape[0] == 3:
                 d = np.insert(d, [1, 2], 0, axis=0)
             arr.append(d)
+
         data = np.array(arr)
         dapi = data[:,0]
         aligned = lasagna.bayer.register_and_offset(data, registration_images=data[:, 0])
 
-        try:
-            aligned = fix_channel_offsets(aligned, inputs['channel_offsets'])
-        except KeyError:
-            pass
+        if channel_offsets:
+            aligned = fix_channel_offsets(aligned, channel_offsets)
 
-        save(output, aligned, display_ranges=display_ranges)
+        return aligned
 
     @staticmethod
-    def align2(input_json=None, output=None):
-        """Align data using 2nd channel. Align internal channels to 2nd channel.
-        """
-        with open(input_json, 'r') as fh:
-            inputs = json.load(fh)
-        files, display_ranges = inputs['input'], inputs['display_ranges']
-
-        # might be stitched with different configs
-        # keep shape consistent with DO
-        data = [read(file) for file in files]
-        shape = data[0].shape
-        data = lasagna.io.pile(data)
-        # TODO: crop zeros at boundaries
-        data = data[..., :shape[-2], :shape[-1]]
-
-        # align within rounds
-        fwd = [1, 0, 2, 3, 4]
-        rev = [1, 0, 2, 3, 4]
-        arr = []
-        for data_ in data:
-            # stupid DO hack.
-            if data_[1].sum() == 0:
-                x = data_[2].copy()
-                data_[1] = x
-
-            data_ = data_[fwd]
-            data_ = lasagna.bayer.register_and_offset(data_)
-            data_ = data_[rev]
-            arr += [data_]
-        data = np.array(arr)
-
-        aligned = lasagna.bayer.register_and_offset(data, registration_images=data[:, 1])
-
-        save(output, aligned, display_ranges=display_ranges)
-
-    @staticmethod
-    def align_DAPI_H2B(input_json=None, output=None):
-        with open(input_json, 'r') as fh:
-            inputs = json.load(fh)
-        files, display_ranges = inputs['input'], inputs['display_ranges']
-
-        # align DAPI and rearrange channels
-        # DAPI, CH1-4, CH0 (H2B)
-        dapi = read(files[0])
-        data = read(files[1])
-        data_reg = data.mean(axis=0).astype(np.uint16)
-
-        xs = lasagna.bayer.register_and_offset([data_reg, dapi])
-        dapi_ = xs[1]
-        sl = lasagna.process.trim(xs, return_slice=True)
-
-        aligned = np.array([dapi_] + list(data[[1, 2, 3, 4, 0]]))
-        aligned = aligned[sl]
-
-        save(output, aligned, display_ranges=display_ranges)
-    
-    @staticmethod
-    def consensus_DO(input_json=None, output=None):
+    def _consensus_DO(data):
         """Use variance to estimate DO.
         """
-        with open(input_json, 'r') as fh:
-            inputs = json.load(fh)
-        files = inputs['input']
-
-        data = read(files[0])
         if data.ndim == 4:
             consensus = np.std(data[:, 1:], axis=(0, 1))
         elif data.ndim == 3:
             consensus = np.std(data[1:], axis=0)
 
-        save(output, consensus)
+        return consensus
     
     @staticmethod
-    def segment_nuclei(input_json=None, output=None):
+    def _segment_nuclei(data, threshold=5000, **kwargs):
         """Find nuclei from DAPI. Find cell foreground from aligned but unfiltered 
         data. Expects data to have shape C x I x J.
         """
-        with open(input_json, 'r') as fh:
-            inputs = json.load(fh)
-        files = inputs.pop('input')
-        threshold = 5000
-        if 'threshold' in inputs:
-            threshold = inputs.pop('threshold')
-
-        data = read(files[0])
         nuclei = lasagna.process.find_nuclei(data[0], 
-                                threshold=lambda x: threshold, **inputs)
-        nuclei = nuclei.astype(np.uint16)
-        save(output, nuclei)
-    
+                                threshold=lambda x: threshold, **kwargs)
+     
+        return nuclei.astype(np.uint16)
+
     @staticmethod
-    def segment_cells(input_json=None, output=None):
+    def _segment_cells(data, nuclei, threshold=750):
         """Segment cells from aligned data. To use less than full cycles for 
         segmentation, filter the input files.
         """
-        with open(input_json, 'r') as fh:
-            inputs = json.load(fh)
-        files = inputs['input']
-        threshold = 750
-        if 'threshold' in inputs:
-            threshold = inputs['threshold']
-
-        data = read(files[0])
-        nuclei = read(files[1])
-
         if data.ndim == 4:
             # no DAPI, min over cycles, mean over channels
             mask = data[:, 1:].min(axis=0).mean(axis=0)
@@ -321,15 +252,10 @@ class Snake():
             print('segment_cells error at ', files)
             cells = nuclei
 
-        save(output, cells)
-    
-    @staticmethod
-    def transform_LoG(input_json=None, bsub=False, output=None):
-        with open(input_json, 'r') as fh:
-            inputs = json.load(fh)
-        files, display_ranges = inputs['input'], inputs['display_ranges']
+        return cells
 
-        data = read(files[0])
+    @staticmethod
+    def _transform_LoG(data, bsub=False):
         if data.ndim == 3:
             data = data[None]
         loged = lasagna.bayer.log_ndi(data)
@@ -339,15 +265,10 @@ class Snake():
             loged = loged - np.sort(loged, axis=0)[-2].astype(float)
             loged[loged < 0] = 0
 
-        save(output, loged, display_ranges=display_ranges)
-    
-    @staticmethod
-    def find_peaks(input_json=None, output=None, cutoff=50):
-        with open(input_json, 'r') as fh:
-            inputs = json.load(fh)
-        files, display_ranges = inputs['input'], inputs['display_ranges']
+        return loged
 
-        data = read(files[0])
+    @staticmethod
+    def _find_peaks(data, cutoff=50):
         if data.ndim == 2:
             data = [data]
         peaks = [lasagna.process.find_peaks(x) 
@@ -356,42 +277,30 @@ class Snake():
         peaks = np.array(peaks)
         peaks[peaks < cutoff] = 0 # for compression
 
-        save(output, peaks, display_ranges=display_ranges)
-    
-    @staticmethod
-    def max_filter(input_json=None, output=None):
-        import scipy.ndimage.filters
-        with open(input_json, 'r') as fh:
-            inputs = json.load(fh)
-        files, display_ranges = inputs['input'], inputs['display_ranges']
-        if 'width' in inputs:
-            width = inputs['width']
-        else:
-            width = 5
+        return peaks
 
-        data = read(files[0])
+    @staticmethod
+    def _max_filter(data, width=5):
+        import scipy.ndimage.filters
+
         if data.ndim == 3:
             data = data[None]
         maxed = np.zeros_like(data)
         maxed[:, 1:] = scipy.ndimage.filters.maximum_filter(data[:,1:], size=(1, 1, width, width))
         maxed[:, 0] = data[:, 0] # DAPI
 
-        save(output, maxed, display_ranges=display_ranges)
+        return maxed
 
     @staticmethod
-    def extract_barcodes(input_json=None, output=None):
+    def _extract_barcodes(peaks, data_max, cells, 
+        threshold_DO, cycles, wildcards, index_DO=None):
+        """
+        """
 
-        with open(input_json, 'r') as fh:
-            inputs = json.load(fh)
-        files = inputs['input']
-        threshold_DO, index_DO, cycles = [inputs[k] for k in ('threshold_DO', 'index_DO', 'cycles')]
-        if index_DO is None:
-            index_DO = Ellipsis
-
-        peaks, data_max, cells = [read(f) for f in files]
-        
         if data_max.ndim == 3:
             data_max = data_max[None]
+        if index_DO is None:
+            index_DO = Ellipsis
 
         data_max = data_max[:, 1:] # no DAPI
         blob_mask = (peaks[index_DO] > threshold_DO) & (cells > 0)
@@ -414,12 +323,24 @@ class Snake():
            .join(pd.Series(labels, name='cell'), on='blob')
            .join(df_positions, on='blob')
            )
-        for k,v in inputs['wildcards'].items():
+        for k,v in wildcards.items():
             df[k] = v
-        df.to_pickle(output)
+
+        return df
 
     @staticmethod
-    def extract_phenotype(input_json=None, output=None):
+    def _align_phenotype(data_DO, data_phenotype):
+        """Align using DAPI.
+        """
+        _, offset = lasagna.process.register_images([data_DO[0], data_phenotype[0]])
+        aligned = lasagna.io.offset(data_phenotype, offset)
+        return aligned
+
+    @staticmethod
+    def _extract_phenotype(data_phenotype, nuclei, wildcards):
+        from lasagna.pipelines._20170914_endo import feature_table_stack
+        from lasagna.process import feature_table, default_object_features
+
         def correlate_dapi_ha(region):
             dapi, ha, bkgd = region.intensity_image_full
 
@@ -442,42 +363,17 @@ class Snake():
             'cell'       : lambda r: r.label
         }
 
-        with open(input_json, 'r') as fh:
-            inputs = json.load(fh)
-        files = inputs['input']
-
-        data_phenotype, nuclei = [read(f) for f in files]
-
-        from lasagna.pipelines._20170914_endo import feature_table_stack
         df = feature_table_stack(data_phenotype, nuclei, features)
-
-        from lasagna.process import feature_table, default_object_features
 
         features = default_object_features.copy()
         features['cell'] = features.pop('label')
         df2 = feature_table(nuclei, nuclei, features)
         df = df.join(df2.set_index('cell'), on='cell')
 
-        for k,v in inputs['wildcards'].items():
+        for k,v in wildcards.items():
             df[k] = v
-        df.to_pickle(output)
-
-    @staticmethod
-    def align_phenotype(input_json=None, output=None):
-        """Align using DAPI.
-        """
-        with open(input_json, 'r') as fh:
-            inputs = json.load(fh)
-        files = inputs['input']
-
-        data_DO, data_phenotype = [read(f) for f in files]
-
-        _, offset = lasagna.process.register_images([data_DO[0], data_phenotype[0]])
-        aligned = lasagna.io.offset(data_phenotype, offset)
-
-        save(output, aligned)
-
-
+        
+        return df
 
 ###
 
@@ -518,4 +414,5 @@ def site_to_tile(site_shape, tile_shape):
 
 if __name__ == '__main__':
 
+    Snake.load_methods()
     fire.Fire(Snake)
