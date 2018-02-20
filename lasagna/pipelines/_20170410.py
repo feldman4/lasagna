@@ -4,7 +4,7 @@ from lasagna.process import build_feature_table, feature_table
 
 # name of lasagna folder and sheet in Lasagna FISH
 datasets = '20170410_96W-G088'
-file_pattern = lasagna.io.default_file_pattern
+file_pattern = 'lasagna.io.default_file_pattern'
 channels = 'DAPI', 'FITC', 'Cy3', 'TexasRed', 'Cy5'
 luts = GRAY, CYAN, GREEN, RED, MAGENTA
 lasagna.io.default_luts = luts
@@ -307,7 +307,6 @@ class ImageGrid(object):
         ig.get_selected()
         """
         self.imp = show_al(montage(grid), title=title)
-        assert False
         self.grid, self.grid_mask = grid, mask
 
         self.labels = [x - 1 for x in range(mask.max() + 1)]

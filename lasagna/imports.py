@@ -19,7 +19,7 @@ np.mode = scipy.stats.mode
 import lasagna.io
 import lasagna.process
 import lasagna.utils
-from lasagna.utils import standardize, int_mode, categorize
+from lasagna.utils import standardize, int_mode, categorize, apply_subset
 from lasagna.io import save_stack as save
 from lasagna.io import read_stack as read
 from lasagna.io import show_IJ as show
@@ -34,6 +34,7 @@ from lasagna.utils import start_client
 
 from lasagna.designs.analyze import *
 from lasagna.design import rc
+from lasagna.plates import microwells, plate_coordinate
 
 
 
