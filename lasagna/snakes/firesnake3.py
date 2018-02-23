@@ -1,6 +1,7 @@
 #python3
 import uuid
 import json
+import os
 import shutil
 
 WIN_PYTHON2 = 'C:\ProgramData\Anaconda2\python.exe'
@@ -16,6 +17,9 @@ def stitch_input(wildcards):
     return inputs
 
 def dump_json(**info):
+    if not os.path.isdir('json'):
+        print('creating json directory...')
+        os.mkdir('json')
     name = 'json/input_%s.json' % uuid.uuid4()
     with open(name, 'w') as fh:
         json.dump(info, fh)
