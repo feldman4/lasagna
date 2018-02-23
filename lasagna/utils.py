@@ -836,3 +836,13 @@ def base_repr(x, n, width, to_str=True):
     if to_str:
         return ''.join(str(y) for y in arr)
     return arr
+
+def apply_subset(f, subset):
+    """usage: df.pipe(apply_subset(f, columns))
+    """
+    def wrapped(df):
+        df = df.copy()
+        df[subset] = f(df[subset])
+        return df
+    return wrapped
+

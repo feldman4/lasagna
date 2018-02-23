@@ -12,7 +12,7 @@ THRESHOLD_DO = 2000
 INDEX_DO = None
 
 CYCLES = ['c{cycle}-SBS-{cycle}'.format(cycle=c) for c in range(1, 13)]
-CYCLES = CYCLES[:4]
+CYCLES = CYCLES[:7]
 CYCLE_PHENOTYPE = 'c0-HA-488'
 
 

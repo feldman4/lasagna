@@ -10,12 +10,12 @@ def load_barcodes():
     return pd.read_csv(f)
 
 def load_layout():
-    f = os.path.join(home, '20171211_oligos_layout.csv')
     f = os.path.join(home, 'Lasagna Oligos - pools.csv')
     df_layout = (pd.read_csv(f, skiprows=4)
         .filter(regex='^(?!Unnamed).*')
-        .query('pool == "pool2"')
+        .dropna(axis=0, how='all')
         .dropna(axis=1))
+    # return df_layout
     df_layout.columns = [c.replace(' ', '_') for c in df_layout.columns]
     columns_int = ['dialout', 'sgRNAs/gene', '#_of_sgRNAs', 
                    'barcodes/sgRNA', 'spots/oligo', '#_of_barcodes', 
@@ -61,7 +61,6 @@ def run():
     df_design = design_pool(df_layout, df_sgRNAs, df_barcodes)
 
     return df_design
-
     
 def design_pool(df_layout, df_sgRNAs, df_barcodes):
     columns = ['sgRNA', 'barcode', 'sgRNA_name',
@@ -88,8 +87,6 @@ def design_pool(df_layout, df_sgRNAs, df_barcodes):
                      'oligo_design': row['oligo_design']
                      }
                 s = build_degenerate_oligo(sgRNA, x['barcode'], x['oligo_design'], x['dialout'])
-                # print s
-                # assert False
                 s = degenerate2(s)
                 
                 for _ in range(int(row['spots/oligo'])):
@@ -99,7 +96,6 @@ def design_pool(df_layout, df_sgRNAs, df_barcodes):
 
     df_design = pd.DataFrame(arr)
     return df_design
-
 
 def degenerate2(s):
     """returns a generator of degenerated sequences in scrambled order
@@ -131,7 +127,6 @@ def build_degenerate_oligo(sgRNA, barcode, oligo_design, dialout):
 
     s = lasagna.designs.pool0.build_oligo(layout, parts)
     return s
-
 
 def run_checks(df_design):
     checks = [('unique oligos', len(set(df_design['oligo']))),

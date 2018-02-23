@@ -17,6 +17,13 @@ BARCODE_1 = 'cell_barcode_1'
 BARCODE_COUNT_0 = 'cell_barcode_count_0'
 BARCODE_COUNT_1 = 'cell_barcode_count_1'
 
+def do_median_call(df_raw, cycles=12):
+  X = dataframe_to_values(df_raw)
+  Y, W = transform_medians(X.reshape(-1, 4))
+
+  df_reads = call_barcodes(df_raw, Y, cycles=cycles)
+  return df_reads
+
 def clean_up_raw(df_raw):
     """Categorize, sort. Pre-processing for `dataframe_to_values`.
     """
@@ -63,7 +70,7 @@ def dataframe_to_values(df, value='intensity'):
 
 def transform_medians(X):
     """Find median of max along each dimension to define new axes. 
-    Describe with linear transfomration W so that W * X = Y.
+    Describe with linear transformation W so that W * X = Y.
     """
 
     def get_medians(X):
@@ -80,10 +87,10 @@ def transform_medians(X):
     Y = W.dot(X.T).T.astype(int)
     return Y, W
 
-def call_barcodes(df_raw, Y):
+def call_barcodes(df_raw, Y, cycles=12):
     df_reads = df_raw.drop_duplicates([WELL, TILE, BLOB]).copy()
-    df_reads[CYCLES_IN_SITU] = call_bases_fast(Y.reshape(-1, 12, 4))
-    Q = quality(Y.reshape(-1, 12, 4))
+    df_reads[CYCLES_IN_SITU] = call_bases_fast(Y.reshape(-1, cycles, 4))
+    Q = quality(Y.reshape(-1, cycles, 4))
     # might want rank 0 or 1 instead
     df_reads[QUALITY] = Q.mean(axis=1)
     # needed for performance later
@@ -101,21 +108,21 @@ def call_bases_fast(values, bases='ACGT'):
     calls = np.array(list(bases))[calls]
     return [''.join(x) for x in calls]
 
-def do_median_call(df_raw):
-  X = dataframe_to_values(df_raw)
-  Y, W = transform_medians(X.reshape(-1, 4))
+# def quality_linear(X):
+#     """
+#     """
+#     X = np.sort(X, axis=-1).astype(float)
+#     P = 15000
+#     Q = (X[..., -1] - X[..., -2]) / P
+#     Q = Q.clip(min=0.0, max=1.0)
+#     return Q
 
-  df_reads = call_barcodes(df_raw, Y)
-  return df_reads
-
-def quality(X):
+def quality(X, boost=2):
+    """X_2 = (X_1)^a, a in [0..1]
     """
-    """
-    X = np.sort(X, axis=-1).astype(float)
-    # P = np.percentile()
-    P = 5000
-    Q = (X[..., -1] - X[..., -2]) / P
-    Q = Q.clip(min=0.0, max=1.0)
+    X = np.abs(np.sort(X, axis=-1).astype(float))
+    Q = 1 - np.log(2 + X[..., -2]) / np.log(2 + X[..., -1])
+    Q = (Q * 2).clip(0, 1)
     return Q
 
 def reads_to_fastq(df, dataset):
@@ -123,7 +130,7 @@ def reads_to_fastq(df, dataset):
     b = ':{well}:{well_tile}:{cell}:{blob}'
     c = ':{position_i}:{position_j}'
     d = ' 1:N:0:NN'
-    e = '\n{barcode_in_situ}\n+\n{phred}'
+    e = '\n{barcode}\n+\n{phred}'
     fmt = a + b + c + e
     
 
@@ -133,9 +140,9 @@ def reads_to_fastq(df, dataset):
     tile_spacing = ((tile_spacing + 100) // 100)*100
     tile_spacing = 1000
     df['well_tile'] = [wells.index(w) * tile_spacing + int(t) for w, t in it]
-    fields = ['well', 'well_tile', 'blob',
+    fields = [WELL, 'well_tile', BLOB,
               'position_i', 'position_j', 
-              'barcode_in_situ', 'cell']
+              BARCODE, CELL]
     
     Q = df.filter(like='Q_').as_matrix()
     
@@ -204,9 +211,10 @@ def convert_quality(quality_series):
     t = np.fromstring(s, dtype=np.uint8)
     q_shape = len(quality_series), n
     columns = ['Q_%02d' % i for i in range(n)]
-    x = pd.DataFrame(t.view(np.uint8).reshape(q_shape), columns=columns)
+    x = pd.DataFrame(t.view(np.uint8).reshape(q_shape), 
+        columns=columns, index=quality_series.index)
     x = unphred_array(x)
-    return x
+    return x[natsorted(x.columns)]
 
 def locate(well, tile):
     i, j = lasagna.plates.plate_coordinate(well, tile, grid_shape=(7,7), mag='10X')
@@ -215,29 +223,24 @@ def locate(well, tile):
 def make_reference_fasta(df_design):
     """needs work
     """ 
-    df_pool1 = df_design.drop_duplicates('barcode')
-
     import random
     random.seed(0)
     def shuffle(s):
         s = list(s)
         random.shuffle(s)
         return ''.join(s)
+    
+    df_pool = df_design.drop_duplicates('barcode').copy()
+    df_pool['scrambled'] = df_pool['barcode'].apply(shuffle)
+    fmt = '>{subpool}_{barcode}\n{barcode}'
 
-    fmt = '>pool1_{subpool}_{barcode}\n{barcode}'
-    reference = [fmt.format(**row) for _, row in df_pool1.iterrows()]
-    reference = '\n'.join(reference)
-    with open('/Users/feldman/transfer/pool1.fa', 'w') as fh:
-        fh.write(reference)
+    arr = []
+    for source in ('barcode', 'scrambled'):
+        it =  zip(df_pool['subpool'], df_pool[source])
+        reference = [fmt.format(subpool=s, barcode=b) for s,b in it]
+        arr += ['\n'.join(reference)]
 
-    # scrambled
-    fmt = '>pool1_{subpool}_{scrambled}_shuffled\n{scrambled}'
-    df_pool1['scrambled'] = df_pool1['barcode'].apply(shuffle)
-    reference = [fmt.format(**row) for _, row in df_pool1.iterrows()]
-    reference = '\n'.join(reference)
-    with open('/Users/feldman/transfer/pool1_shuffled.fa', 'w') as fh:
-        fh.write(reference)
-
+    return arr
 
 def add_6_well(df_reads):
     from lasagna.plates import microwells
@@ -255,3 +258,4 @@ def add_sg_names(df_design):
 
     df_design['sgRNA_name'] = [d.get(s, 'fuckyou') for s in df_design['sgRNA']]
     return df_design
+

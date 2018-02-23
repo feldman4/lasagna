@@ -679,7 +679,7 @@ file_pattern = [
         r'(?P<well>[A-H][0-9]*)',
         r'(?:[_-]Site[_-](?P<site>([0-9]+)))?',
         r'(?:_Tile-(?P<tile>([0-9]+)))?',
-        r'(?:\.(?P<tag>.*))*\.(tif|pkl)']
+        r'(?:\.(?P<tag>.*))*\.(?P<ext>tif|pkl|csv|fastq)']
 
 file_pattern_abs = ''.join(file_pattern)
 file_pattern_rel = ''.join(file_pattern[2:])
@@ -702,7 +702,7 @@ def parse_filename(filename):
     except AttributeError:
         raise ValueError('failed to parse filename: %s' % filename)
 
-def name(description, ext='tif', **more_description):
+def name(description, **more_description):
     """Name a file from a dictionary of filename parts. Can override dictionary with keyword arguments.
     """
     d = dict(description)
@@ -724,9 +724,9 @@ def name(description, ext='tif', **more_description):
         b = None
 
     if b:
-        basename = '%s_%s.%s.%s' % (a, b, d['tag'], ext)
+        basename = '%s_%s.%s.%s' % (a, b, d['tag'], d['ext'])
     else:
-        basename = '%s.%s.%s' % (a, d['tag'], ext)
+        basename = '%s.%s.%s' % (a, d['tag'], d['ext'])
     
     optional = lambda x: d.get(x, '')
     filename = os.path.join(optional('home'), optional('dataset'), optional('subdir'), basename)
