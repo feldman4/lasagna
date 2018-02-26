@@ -249,7 +249,7 @@ class Snake():
         try:
             cells = lasagna.process.find_cells(nuclei, mask)
         except ValueError:
-            print('segment_cells error at ', files)
+            print('segment_cells error -- no cells')
             cells = nuclei
 
         return cells
@@ -312,9 +312,8 @@ class Snake():
         try:
             df = lasagna.utils.ndarray_to_dataframe(values, index)
         except ValueError:
-            print('extract_barcodes failed to reshape, writing dummy', files)
-            pd.DataFrame().to_pickle(output)
-            return
+            print('extract_barcodes failed to reshape, writing dummy')
+            return pd.DataFrame()
 
         df_positions = pd.DataFrame(positions, columns=['position_i', 'position_j'])
         df = (df.stack(['cycle', 'channel'])
