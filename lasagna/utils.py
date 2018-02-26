@@ -811,11 +811,14 @@ def ndarray_to_dataframe(values, index):
     df = pd.DataFrame(values.reshape(values.shape[0], -1), columns=columns)
     return df
 
-def categorize(df):
+def categorize(df, subset=None):
     from pandas.api.types import is_object_dtype
     for col in df:
-        if is_object_dtype(df[col].dtype):
+        if subset and col in subset:
             df[col] = df[col].astype('category')
+        elif is_object_dtype(df[col].dtype):
+            df[col] = df[col].astype('category')
+
     return df
 
 def uncategorize(df):
@@ -846,3 +849,15 @@ def apply_subset(f, subset):
         return df
     return wrapped
 
+
+def write_excel(filename, sheets):
+    """
+    d = {'files': df_finfo, 'read stats': df_stats}
+    write_excel('summary', d.items())
+    """
+    if not filename.endswith('xlsx'):
+        filename = filename + '.xlsx'
+    writer = pd.ExcelWriter(filename, engine='xlsxwriter')
+    for name, df in sheets:
+        df.to_excel(writer, index=None, sheet_name=name)
+    writer.save()
