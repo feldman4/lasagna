@@ -143,6 +143,9 @@ def load_wang(path=''):
     df_wang = df_wang.join(enst_ncbi['gene_id'], on='gene_symbol')
     df_wang['source'] = 'Wang 2015'
 
+    f = '/Users/feldman/lasagna/libraries/Wang_2015_supplement/Wang_sgRNAs_scores.txt'
+    df_wang['CRISPOR_WangSVM'] = list(pd.read_csv(f, header=None)[0])
+
     return df_wang
 
 
@@ -361,14 +364,16 @@ def contains_typeIIS(s):
     return any(x in s for x in sites)
 
 
-def count_typeIIS_sites(s):
+def count_typeIIS_sites(s, subset=('BsmBI', 'BbsI')):
     s = s.upper()
 
-    a, b, c = lasagna_enzymes['BsmBI'], lasagna_enzymes['BsaI'], lasagna_enzymes['BbsI']
-    sites = a, rc(a), b, rc(b)
-    sites = a, rc(a), c, rc(c)
+    n = 0
+    for enzyme in subset:
+        site = lasagna_enzymes[enzyme]
+        n += s.count(site)
+        n += s.count(rc(site))
 
-    return sum(s.count(x) for x in sites)
+    return n
 
 
 def neighbors(s):

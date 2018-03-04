@@ -143,13 +143,17 @@ def cell_mapping_stats(df_cells):
          .assign(single=get_single)
          .assign(gt1=get_gt1)
     )
-    
-    a = z.query('mapped')[['gt1', 'single']].sum() / num_cells
-    b = z.query('~mapped')[['gt1', 'single']].sum() / num_cells
+
+    num_cells = len(z)    
+    a = z.query('mapped')[['gt1', 'single']].sum()
+    b = z.query('~mapped')[['gt1', 'single']].sum()
     a = a.rename(lambda x: x + '_mapped')
     b = b.rename(lambda x: x + '_not_mapped')
     
-    return pd.concat([a,b])
+    df_cell_stats = pd.concat([a,b]).rename(lambda x: 'cells_' + x)
+    df_cell_stats['cells'] = num_cells
+    
+    return df_cell_stats
 
 
 def read_mapping_stats(df_reads, df_cells):
@@ -159,10 +163,10 @@ def read_mapping_stats(df_reads, df_cells):
     reads_PF_unmapped = df_cells.query('subpool != subpool').shape[0]
 
     return  pd.Series(OrderedDict([('reads', reads)
-                       ,('PF', reads_PF / float(reads))
-                       ,('PF_mapped', reads_PF_mapped / float(reads))
-                       ,('PF_unmapped', reads_PF_unmapped / float(reads))
-                      ])
+                       ,('reads_PF', reads_PF / float(reads))
+                       ,('reads_PF_mapped', reads_PF_mapped / float(reads_PF))
+                       ,('reads_PF_unmapped', reads_PF_unmapped / float(reads_PF))
+                      ]))
 
 ### PLOTTING
 
