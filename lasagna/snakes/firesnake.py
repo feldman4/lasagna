@@ -336,10 +336,7 @@ class Snake():
         return aligned
 
     @staticmethod
-    def _extract_phenotype(data_phenotype, nuclei, wildcards):
-        from lasagna.pipelines._20170914_endo import feature_table_stack
-        from lasagna.process import feature_table, default_object_features
-
+    def _extract_phenotype_FR(data_phenotype, nuclei, wildcards):
         def correlate_dapi_ha(region):
             dapi, ha, bkgd = region.intensity_image_full
 
@@ -361,6 +358,59 @@ class Snake():
             'bkgd_median': lambda r: np.median(r.intensity_image_full[2]),
             'cell'       : lambda r: r.label
         }
+
+        return Snake._extract_phenotype(data_phenotype, nuclei, wildcards, features)       
+
+    @staticmethod
+    def _extract_phenotype_translocation(data_phenotype, nuclei, cells, wildcards):
+        from lasagna.pipelines._20170914_endo import feature_table_stack
+        from lasagna.process import feature_table, default_object_features
+
+        def correlate_dapi_gfp(region):
+            dapi, gfp = region.intensity_image_full
+
+            filt = dapi > 0
+            if filt.sum() == 0:
+                # assert False
+                return np.nan
+
+            dapi = dapi[filt]
+            gfp  = gfp[filt]
+            corr = (dapi - dapi.mean()) * (gfp - gfp.mean()) / (dapi.std() * gfp.std())
+
+            return corr.mean()
+
+        gfp_bkgd = np.median(data_phenotype[1])
+        
+        features_nuclear = {
+            'dapi_gfp_nuclear_corr' : correlate_dapi_gfp,
+            'dapi_nuclear_median': lambda r: np.median(r.intensity_image_full[0]),
+            'gfp_nuclear_median' : lambda r: np.median(r.intensity_image_full[1]) - gfp_bkgd,
+            'dapi_nuclear_int'   : lambda r: r.intensity_image_full[0].sum(),
+            'gfp_nuclear_int'    : lambda r: (r.intensity_image_full[1] - gfp_bkgd).sum(),
+            'cell'               : lambda r: r.label
+        }
+
+        features_cell = {
+            'gfp_cell_median' : lambda r: np.median(r.intensity_image_full[1]) - gfp_bkgd,
+            'gfp_cell_int'    : lambda r: (r.intensity_image_full[1] - gfp_bkgd).sum(),
+            'cell'            : lambda r: r.label
+        }
+
+        df_n =  Snake._extract_phenotype(data_phenotype, nuclei, wildcards, features_nuclear)
+
+        df_c =  Snake._extract_phenotype(data_phenotype, cells, wildcards, features_cell) 
+        df_c = df_c[features_cell.keys()]
+        
+        df = (pd.concat([df_n.set_index('cell'), df_c.set_index('cell')], axis=1)
+                .reset_index())
+        
+        return df
+
+    @staticmethod
+    def _extract_phenotype(data_phenotype, nuclei, wildcards, features):
+        from lasagna.pipelines._20170914_endo import feature_table_stack
+        from lasagna.process import feature_table, default_object_features
 
         df = feature_table_stack(data_phenotype, nuclei, features)
 
