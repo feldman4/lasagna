@@ -811,11 +811,13 @@ def ndarray_to_dataframe(values, index):
     df = pd.DataFrame(values.reshape(values.shape[0], -1), columns=columns)
     return df
 
-def categorize(df):
+def categorize(df, **custom_order):
     from pandas.api.types import is_object_dtype
     for col in df:
         if is_object_dtype(df[col].dtype):
             df[col] = df[col].astype('category')
+            if col in custom_order:
+                df[col] = df[col].cat.reorder_categories(custom_order[col])
     return df
 
 def uncategorize(df):

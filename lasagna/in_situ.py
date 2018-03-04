@@ -259,3 +259,12 @@ def add_sg_names(df_design):
     df_design['sgRNA_name'] = [d.get(s, 'fuckyou') for s in df_design['sgRNA']]
     return df_design
 
+def add_xy(df):
+    df = df.copy()
+    from lasagna.plates import plate_coordinate
+    it = zip(df['well'], df['tile'])
+    ij = [lasagna.plates.plate_coordinate(w, t) for w,t in it]
+    ij = zip(*ij)
+    df['global_x'] = ij[1]
+    df['global_y'] = ij[0]
+    return df
