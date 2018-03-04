@@ -388,12 +388,14 @@ class Snake():
             'gfp_nuclear_median' : lambda r: np.median(r.intensity_image_full[1]) - gfp_bkgd,
             'dapi_nuclear_int'   : lambda r: r.intensity_image_full[0].sum(),
             'gfp_nuclear_int'    : lambda r: (r.intensity_image_full[1] - gfp_bkgd).sum(),
+            'area_nuclear'       : lambda r: r.area,
             'cell'               : lambda r: r.label
         }
 
         features_cell = {
             'gfp_cell_median' : lambda r: np.median(r.intensity_image_full[1]) - gfp_bkgd,
             'gfp_cell_int'    : lambda r: (r.intensity_image_full[1] - gfp_bkgd).sum(),
+            'area_cell'       : lambda r: r.area,
             'cell'            : lambda r: r.label
         }
 
