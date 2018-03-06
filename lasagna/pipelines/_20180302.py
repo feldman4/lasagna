@@ -25,19 +25,19 @@ def frame_to_timestamp_20180302(frame):
     else:
         return 10 * first_interval + (frame - 10) * second_interval
     
-def extract_phenotype_live_translocation(data_phenotype, nuclei_tracked, wildcards):
+def extract_phenotype_live_translocation(data_phenotype, nuclei, perimeter):
     import lasagna.snakes.firesnake
     extract = lasagna.snakes.firesnake.Snake._extract_phenotype_translocation
     
-    perimeter = get_nuclear_perimeter(nuclei_tracked)
-    data_ = data[:, [1, 0]]
+    data = data_phenotype[:, [1, 0]]
     
-    it = enumerate(zip(data_, nuclei_tracked, perimeter))
+    it = enumerate(zip(data, nuclei, perimeter))
     
     arr = []
-    for frame, (data_phenotype, nuclei_t, nuclei_t_p) in it:
-        arr.append(extract(data_phenotype, nuclei_t, nuclei_t_p, wildcards)
-                   .assign(frame=frame))
+    for frame, (d, n, p) in it:
+        arr.append(extract(d, n, p, {})
+                   .assign(frame=frame)
+                   .assign(time=frame_to_timestamp_20180302(frame)))
     
     return pd.concat(arr)
 
