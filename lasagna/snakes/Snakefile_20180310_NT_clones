@@ -2,7 +2,6 @@ from glob import glob
 import json
 
 import snakemake
-# from lasagna.snakes.firesnake3 import call_firesnake
 from firesnake3 import call_firesnake
 
 
@@ -16,7 +15,7 @@ WELLS = [r + str(c) for r in 'EFG' for c in range(4, 10)]
 RANGE = lambda x: list(map(str, range(x[0] * x[1])))
 TILES = RANGE((4, 4))
 
-PLATES = 'plateA', 'plateB', 'plateC'
+PLATES = 'DAPI-mNeon-plate-A', # 'plateB'
 
 DISPLAY_RANGES=((500, 60000), 
                 (500, 20000))
@@ -39,7 +38,7 @@ rule segment_nuclei:
         'process/10X_{plate}_{well}_Tile-{tile}.nuclei.tif'
     run:
         call_firesnake('segment_nuclei', output, data=input[0], 
-            threshold=4000, area_min=0.25*150, area_max=0.25*800)
+            threshold=1200, area_min=0.25*150, area_max=0.25*800)
 
 rule segment_cells:
     """segment_cells works best when fed data with the most cytoplasmic autofluorescence. SBS data is OK but
