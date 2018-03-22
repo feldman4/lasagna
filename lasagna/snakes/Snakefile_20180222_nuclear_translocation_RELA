@@ -39,7 +39,7 @@ rule segment_nuclei:
         'process/10X_{plate}_{well}_Tile-{tile}.nuclei.tif'
     run:
         call_firesnake('segment_nuclei', output, data=input[0], 
-            threshold=4000, area_min=0.25*150, area_max=0.25*800)
+            threshold=1200, area_min=0.25*150, area_max=0.25*800)
 
 rule segment_cells:
     """segment_cells works best when fed data with the most cytoplasmic autofluorescence. SBS data is OK but

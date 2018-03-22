@@ -10,24 +10,25 @@ from firesnake3 import call_firesnake
 
 
 # UPDATE: more sites will take longer for the DAG to build (especially if ignore_missing is true)
-WELLS = [r + str(c) for r in 'EFG' for c in range(4, 10)]
+WELLS = [r + str(c) for r in 'ABCDEFGH' for c in range(1, 13)]
 
 RANGE = lambda x: list(map(str, range(x[0] * x[1])))
 TILES = RANGE((4, 4))
 
-PLATES = 'DAPI-mNeon-plate-A', # 'plateB'
+PLATES = 'DAPI-mNeon-plate-A', 'DAPI-mNeon-plate-B'
 
 DISPLAY_RANGES=((500, 60000), 
                 (500, 20000))
 
 
-CHANNEL_OFFSETS = [(0, 0), (0, 0), (0, 0), (0, 0), (0, 0)]
-
+PERIMETER_WIDTH = 5
 
 rule all:
     input:
     # can request individual files here
-        expand('process/10X_{plate}_{well}_Tile-{tile}.phenotype.pkl', plate=PLATES, well=WELLS, tile=TILES)
+        # expand('process/10X_{plate}_{well}_Tile-{tile}.phenotype_perimeter.pkl', plate=PLATES, well=WELLS, tile=TILES),
+        # expand('process/10X_{plate}_{well}_Tile-{tile}.phenotype.pkl', plate=PLATES, well=WELLS, tile=TILES)
+        'process/10X_DAPI-mNeon-plate-A_B4_Tile-4.phenotype.pkl'
         # expand('process/10X_{plate}_{well}_Tile-{tile}.cells.tif', plate=PLATES, well=WELLS, tile=TILES)
 
 rule segment_nuclei:
@@ -38,7 +39,16 @@ rule segment_nuclei:
         'process/10X_{plate}_{well}_Tile-{tile}.nuclei.tif'
     run:
         call_firesnake('segment_nuclei', output, data=input[0], 
-            threshold=1200, area_min=0.25*150, area_max=0.25*800)
+            threshold=4000, area_min=0.25*150, area_max=0.25*800)
+
+rule segment_perimeter:
+    input:
+        'process/10X_{plate}_{well}_Tile-{tile}.nuclei.tif'
+    output:
+        'process/10X_{plate}_{well}_Tile-{tile}.perimeter.tif'
+    run:
+        call_firesnake('segment_perimeter', output, 
+            data_nuclei=input[0],width=PERIMETER_WIDTH)
 
 rule segment_cells:
     """segment_cells works best when fed data with the most cytoplasmic autofluorescence. SBS data is OK but
@@ -60,6 +70,18 @@ rule extract_phenotype:
         'process/10X_{plate}_{well}_Tile-{tile}.cells.tif'
     output:
         'process/10X_{plate}_{well}_Tile-{tile}.phenotype.pkl'
+    run:
+        call_firesnake('extract_phenotype_translocation', output, 
+            data_phenotype=input[0], nuclei=input[1], cells=input[2], 
+            wildcards=dict(wildcards)) 
+
+rule extract_phenotype_perimeter:
+    input:
+        'process/10X_{plate}/10X_{plate}_{well}_Site-{tile}.max.tif',
+        'process/10X_{plate}_{well}_Tile-{tile}.nuclei.tif',
+        'process/10X_{plate}_{well}_Tile-{tile}.perimeter.tif'
+    output:
+        'process/10X_{plate}_{well}_Tile-{tile}.phenotype_perimeter.pkl'
     run:
         call_firesnake('extract_phenotype_translocation', output, 
             data_phenotype=input[0], nuclei=input[1], cells=input[2], 

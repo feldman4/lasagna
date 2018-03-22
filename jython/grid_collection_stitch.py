@@ -15,7 +15,7 @@ if False:
     home_dir = '/Volumes/Samsung_T5/lasagna/20171024_24W-endocytosis/MAX/'
 else:
     # windows
-    home_dir = 'E:\\lasagna\\20180302_nuclear_translocation_live\\tmp\\'
+    home_dir = 'D:\\David\\lasagna\\20180310_NT_clones\\process\\'
     filesep = '\\'
 
 # C
@@ -29,12 +29,12 @@ else:
 #                ('Green', (400, 6000)),
 #                ('Red', (400, 4000)),
 #                ('Magenta', (400, 4000)))
-channel_luts = (('Green',  (400, 10000)),
-               ('Red',     (400, 10000)))
+channel_luts = (('Grays',  (400, 10000)),
+               ('Green',     (400, 10000)))
 #channel_luts = (('Grays', (400, 40000)),)
 
 channels = len(channel_luts)
-slices = 78;  # Z
+slices = 1;  # Z
 frames = 1;  # T
 
 ##### 40X
@@ -47,7 +47,7 @@ frames = 1;  # T
 #pixel_width = 0.35 * 2
 
 ##### 10X
-tiles, overlap = (2, 2), int(100 * (1. - 1200. / 1286))
+tiles, overlap = (4, 4), int(100 * (1. - 1200. / 1286))
 pixel_width = 0.7 * 2
 
 ### 4X
@@ -89,13 +89,13 @@ def make_template(well, data_dir):
 use_template = True
 template = None #or make_template('E3', '10X_plateB_3')
 
-data_dirs = ['10X_plateB_7']
+data_dirs = ['10X_DAPI-mNeon-plate-A', '10X_DAPI-mNeon-plate-B']
 
 # usually xyzct, except on bad days when it's xyczt(default)
 # order = 'xyzct'
 order = 'xyczt(default)'
-rows = 'DE'
-columns = [str(x) for x in range(3, 11)]
+rows = 'ABH'
+columns = [str(x) for x in range(1, 13)]
 wells = [row + column for row in rows for column in columns]
 
 

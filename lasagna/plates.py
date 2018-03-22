@@ -47,7 +47,7 @@ def plate_coordinate(well, site, spacing='10X', grid_shape=(7, 7)):
     site = int(site)
     spacing_96w = 9000
     if spacing == '20X':
-        delta = 600
+        delta = 643
     elif spacing == '10X':
         delta = 1286
     else:
@@ -60,7 +60,7 @@ def plate_coordinate(well, site, spacing='10X', grid_shape=(7, 7)):
     i += delta * int(site / width)
     j += delta * (site % width)
     
-    i -= delta * (height / 2) 
-    j -= delta * (width  / 2)
+    i -= delta * ((height - 1) / 2.) 
+    j -= delta * ((width  - 1)  / 2.)
 
     return i, j

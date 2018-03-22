@@ -96,7 +96,7 @@ def get_row_stack(row, full=False, nuclei=False, apply_offset=False, pad=0):
     if nuclei:
         filename = config.paths.lookup('nuclei', stitch=row[('all', 'file')])
     I = _get_stack(filename)
-    if full is False:
+    if not full:
         I = subimage(I, row[('all', 'bounds')], pad=pad)
     if apply_offset:
         offsets = np.array(I.shape) * 0

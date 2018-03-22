@@ -42,9 +42,14 @@ def extract_phenotype_live_translocation(data_phenotype, nuclei, perimeter):
     return pd.concat(arr)
 
 def get_nuclear_perimeter(nuclei, width=5):
+    print 'width -------', width
+    print 'nuclei shape---------', nuclei.shape
     from skimage.morphology import dilation, disk
     selem = disk(width)
-    dilated = np.array([dilation(x, selem) for x in nuclei])
+    if nuclei.ndim == 3:
+        dilated = np.array([dilation(x, selem) for x in nuclei])
+    else:
+        dilated = dilation(nuclei, selem)
     dilated[nuclei > 0] = 0
     return dilated
 

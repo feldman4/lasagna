@@ -238,6 +238,8 @@ class Snake():
     def _segment_cells(data, nuclei, threshold=750):
         """Segment cells from aligned data. To use less than full cycles for 
         segmentation, filter the input files.
+
+        !!! matches cell labels to nuclei labels !!!
         """
         if data.ndim == 4:
             # no DAPI, min over cycles, mean over channels
@@ -336,6 +338,14 @@ class Snake():
         return aligned
 
     @staticmethod
+    def _segment_perimeter(data_nuclei, width=5):
+        """Expand mask to generate perimeter (e.g., area around nuclei).
+        """
+        from lasagna.pipelines._20180302 import get_nuclear_perimeter
+
+        return get_nuclear_perimeter(data_nuclei, width=width)
+
+    @staticmethod
     def _extract_phenotype_FR(data_phenotype, nuclei, wildcards):
         def correlate_dapi_ha(region):
             dapi, ha, bkgd = region.intensity_image_full
@@ -388,11 +398,14 @@ class Snake():
             'gfp_nuclear_median' : lambda r: np.median(r.intensity_image_full[1]) - gfp_bkgd,
             'dapi_nuclear_int'   : lambda r: r.intensity_image_full[0].sum(),
             'gfp_nuclear_int'    : lambda r: (r.intensity_image_full[1] - gfp_bkgd).sum(),
+            'dapi_nuclear_max'   : lambda r: r.intensity_image_full[0].max(),
+            'gfp_nuclear_max'    : lambda r: r.intensity_image_full[1].max(),
             'area_nuclear'       : lambda r: r.area,
             'cell'               : lambda r: r.label
         }
 
         features_cell = {
+            'dapi_gfp_cell_corr' : correlate_dapi_gfp,
             'gfp_cell_median' : lambda r: np.median(r.intensity_image_full[1]) - gfp_bkgd,
             'gfp_cell_int'    : lambda r: (r.intensity_image_full[1] - gfp_bkgd).sum(),
             'area_cell'       : lambda r: r.area,
@@ -404,7 +417,7 @@ class Snake():
         df_c =  Snake._extract_phenotype(data_phenotype, cells, wildcards, features_cell) 
         df_c = df_c[features_cell.keys()]
         
-        df = (pd.concat([df_n.set_index('cell'), df_c.set_index('cell')], axis=1)
+        df = (pd.concat([df_n.set_index('cell'), df_c.set_index('cell')], axis=1, join='inner')
                 .reset_index())
         
         return df
