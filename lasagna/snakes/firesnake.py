@@ -115,10 +115,6 @@ def get_kwarg_defaults(f):
     return defaults
 
 
-def get_keywords(f):
-    pass
-
-
 def call_from_fire(f):
     """Turn a function that acts on a mix of image data, table data and other 
     arguments and may return image or table data into a function that acts on 
@@ -348,7 +344,7 @@ class Snake():
     @staticmethod
     def _extract_phenotype_FR(data_phenotype, nuclei, wildcards):
         def correlate_dapi_ha(region):
-            dapi, ha, bkgd = region.intensity_image_full
+            dapi, ha = region.intensity_image_full
 
             filt = dapi > 0
             if filt.sum() == 0:
@@ -364,8 +360,8 @@ class Snake():
         features = {
             'corr'       : correlate_dapi_ha,
             'dapi_median': lambda r: np.median(r.intensity_image_full[0]),
+            'dapi_max'   : lambda r: r.intensity_image_full[0].max(),
             'ha_median'  : lambda r: np.median(r.intensity_image_full[1]),
-            'bkgd_median': lambda r: np.median(r.intensity_image_full[2]),
             'cell'       : lambda r: r.label
         }
 
