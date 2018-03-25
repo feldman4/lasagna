@@ -64,3 +64,38 @@ def plate_coordinate(well, site, spacing='10X', grid_shape=(7, 7)):
     j -= delta * ((width  - 1)  / 2.)
 
     return i, j
+
+
+def remap_snake(site, n=25):
+    """Maps site names from snake order to regular order.
+    """
+    import math
+    site = int(site)
+    j = math.floor(site / n)
+    rem = site - j*n
+    if j % 2 == 0: # even
+        return site
+    else:
+        i = n - rem
+        
+    site_ = j * n + i - 1
+    return '%d' % site_
+
+
+def filter_position_list(filename, well_site_list):
+    """Restrict micromanager position list to given wells and sites.
+    """
+    import json
+    well_site_list = set(well_site_list)
+    def filter_well_site(position):
+        pat = '(.\d+)-Site_(\d+)'
+        return re.findall(pat, position['LABEL'])[0] in well_site_list
+    
+    with open(filename, 'r') as fh:
+        d = json.load(fh)
+    
+    d['POSITIONS'] = filter(filter_well_site, d['POSITIONS'])
+    
+    with open(filename + '.filtered.pos', 'w') as fh:
+        json.dump(d, fh)
+
