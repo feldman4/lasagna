@@ -106,7 +106,7 @@ def load_gene_ids():
     
     names = ['JSB_366_ISG', 'JSB_272_UL', 'JSB_296_DUB', 'JSB_87']
     gene_ids = {k: sorted(set(v['gene_id'].dropna().astype(int)))
-                for k,v in pd.read_excel(f, sheetname=names).items()}
+                for k,v in pd.read_excel(f, sheet_name=names).items()}
 
     gene_ids['genome_wide'] = load_genome_wide_ids()
 
@@ -298,7 +298,7 @@ def load_extra_ECRISP():
 def load_benchling_sgRNAs():
     
     f = 'pool3/Lasagna-Nougat.xlsx'
-    return (pd.read_excel(f, sheetname='benchling_sgRNAs')
+    return (pd.read_excel(f, sheet_name='benchling_sgRNAs')
               .assign(sgRNA=lambda x: x['sgRNA'].apply(lambda y: y.upper()))
               .pipe(filter_typeIIs_sgRNAs)
               [['gene_symbol', 'gene_id', 'sgRNA']]
@@ -320,4 +320,14 @@ def load_layout():
         df_layout[c] = df_layout[c].astype(int)
     return df_layout
 
+
+def get_JSB_13_barcodes():
+    f = os.path.join(home, 'pool3/JSB_13.csv')
+    design = pd.read_csv(f).dropna()
+    design['oligo'] = design['Sequence']
+
+    pat = 'ttcc(.*)actg'
+    get_bc = lambda a: re.findall(pat, a)[0]
+    design['barcode'] = design['oligo'].apply(get_bc)
+    return sorted(set(design['barcode']))
 

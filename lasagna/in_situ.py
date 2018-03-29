@@ -46,7 +46,7 @@ def call_cells(df_reads):
        .value_counts()
        .rename('count')
        .sort_values(ascending=False)
-       .reset_index(BARCODE)
+       .reset_index()
        .groupby(cols)
         )
 
@@ -80,7 +80,6 @@ def transform_medians(X):
         M = np.array(arr)
         return M
 
-    W = np.eye(4)
     M = get_medians(X).T
     M = M / M.sum(axis=0)
     W = np.linalg.inv(M)
@@ -98,7 +97,7 @@ def call_barcodes(df_raw, Y, cycles=12):
         df_reads['Q_%d' % i] = Q[:,i]
  
     # cycles converted straight to barcodes
-    df_reads[BARCODE] = df_reads[CYCLES_IN_SITU]
+    df_reads = df_reads.rename(columns={CYCLES_IN_SITU: BARCODE})
     return df_reads
 
 def call_bases_fast(values, bases='ACGT'):
@@ -136,8 +135,6 @@ def reads_to_fastq(df, dataset):
 
     wells = list(lasagna.plates.microwells()['96_well'])
     it = zip(df['well'], df['tile'])
-    tile_spacing = df['tile'].astype(int).max()
-    tile_spacing = ((tile_spacing + 100) // 100)*100
     tile_spacing = 1000
     df['well_tile'] = [wells.index(w) * tile_spacing + int(t) for w, t in it]
     fields = [WELL, 'well_tile', BLOB,
@@ -249,13 +246,31 @@ def add_6_well(df_reads):
     s.name = 'well_6'
     return df_reads.join(s, on='well')
 
-def add_sg_names(df_design):
-    d = {}
-    for design_name, df_ in df_design.query('subpool < 5').groupby(['design']):
-        for i, sgRNA in enumerate(sorted(set(df_['sgRNA']))):
-            name_ = 'sg_{i}_{design}'.format(design=design_name[:3],i=i)
-            d[sgRNA] = name_
+def add_quality(df):
+    """Convert string quality column to numeric per-cycle, 
+    including Q_min and Q_mean
+    """
+    df = pd.concat([df, convert_quality(df['quality'])], 
+                axis=1)
 
-    df_design['sgRNA_name'] = [d.get(s, 'fuckyou') for s in df_design['sgRNA']]
-    return df_design
+    df['Q_min']  = df.filter(regex='Q_\d+', axis=1).min(axis=1)
+    df['Q_mean'] = df.filter(regex='Q_\d+', axis=1).mean(axis=1)
+    return df
 
+def add_global_xy(df):
+    df = df.copy()
+    wt = zip(df['well'], df['tile'])
+    d = {(w,t): plate_coordinate(w, t) for w,t in set(zip(df['well'], df['tile']))}
+    y, x = zip(*[d[k] for k in zip(df['well'], df['tile'])])
+
+    if 'x' in df:
+        df['global_x'] = x + df['x']
+        df['global_y'] = y + df['y']
+    elif 'position_i' in df:
+        df['global_x'] = x + df['position_j']
+        df['global_y'] = y + df['position_i']
+    else:
+        df['global_x'] = x
+        df['global_y'] = y
+
+    return df
