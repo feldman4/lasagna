@@ -47,7 +47,7 @@ def plate_coordinate(well, site, spacing='10X', grid_shape=(7, 7)):
     site = int(site)
     spacing_96w = 9000
     if spacing == '20X':
-        delta = 600
+        delta = 643
     elif spacing == '10X':
         delta = 1286
     else:
@@ -60,7 +60,36 @@ def plate_coordinate(well, site, spacing='10X', grid_shape=(7, 7)):
     i += delta * int(site / width)
     j += delta * (site % width)
     
-    i -= delta * (height / 2) 
-    j -= delta * (width  / 2)
+    i -= delta * ((height - 1) / 2.) 
+    j -= delta * ((width  - 1)  / 2.)
 
     return i, j
+
+
+def remap_snake(site, rows=25, cols=25):
+    """Maps site names from snake order to regular order.
+    """
+    import numpy as np
+    grid = np.arange(rows*cols).reshape(rows, cols)
+    grid[1::2] = grid[1::2, ::-1]
+    site_ = grid.flat[int(site)]
+    return '%d' % site_
+
+
+def filter_position_list(filename, well_site_list):
+    """Restrict micromanager position list to given wells and sites.
+    """
+    import json
+    well_site_list = set(well_site_list)
+    def filter_well_site(position):
+        pat = '(.\d+)-Site_(\d+)'
+        return re.findall(pat, position['LABEL'])[0] in well_site_list
+    
+    with open(filename, 'r') as fh:
+        d = json.load(fh)
+    
+    d['POSITIONS'] = filter(filter_well_site, d['POSITIONS'])
+    
+    with open(filename + '.filtered.pos', 'w') as fh:
+        json.dump(d, fh)
+

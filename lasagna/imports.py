@@ -35,7 +35,7 @@ from lasagna.utils import start_client
 from lasagna.designs.analyze import *
 from lasagna.design import rc
 from lasagna.plates import microwells, plate_coordinate
-
+from lasagna import in_situ
 
 
 

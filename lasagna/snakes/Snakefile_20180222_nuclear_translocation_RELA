@@ -1,0 +1,67 @@
+from glob import glob
+import json
+
+import snakemake
+# from lasagna.snakes.firesnake3 import call_firesnake
+from firesnake3 import call_firesnake
+
+
+# if true, will run when the data is complete, doing what it can
+# snakemake.ignore_missing = True
+
+
+# UPDATE: more sites will take longer for the DAG to build (especially if ignore_missing is true)
+WELLS = [r + str(c) for r in 'EFG' for c in range(4, 10)]
+
+RANGE = lambda x: list(map(str, range(x[0] * x[1])))
+TILES = RANGE((4, 4))
+
+PLATES = 'plateA', 'plateB', 'plateC'
+
+DISPLAY_RANGES=((500, 60000), 
+                (500, 20000))
+
+
+CHANNEL_OFFSETS = [(0, 0), (0, 0), (0, 0), (0, 0), (0, 0)]
+
+
+rule all:
+    input:
+    # can request individual files here
+        expand('process/10X_{plate}_{well}_Tile-{tile}.phenotype.pkl', plate=PLATES, well=WELLS, tile=TILES)
+        # expand('process/10X_{plate}_{well}_Tile-{tile}.cells.tif', plate=PLATES, well=WELLS, tile=TILES)
+
+rule segment_nuclei:
+    priority: -1
+    input:
+        'process/10X_{plate}/10X_{plate}_{well}_Site-{tile}.max.tif'
+    output:
+        'process/10X_{plate}_{well}_Tile-{tile}.nuclei.tif'
+    run:
+        call_firesnake('segment_nuclei', output, data=input[0], 
+            threshold=1200, area_min=0.25*150, area_max=0.25*800)
+
+rule segment_cells:
+    """segment_cells works best when fed data with the most cytoplasmic autofluorescence. SBS data is OK but
+    not the best if something else is available.
+    """
+    input:
+        'process/10X_{plate}/10X_{plate}_{well}_Site-{tile}.max.tif',
+        'process/10X_{plate}_{well}_Tile-{tile}.nuclei.tif'
+    output:
+        'process/10X_{plate}_{well}_Tile-{tile}.cells.tif'
+    run:
+        call_firesnake('segment_cells', output, 
+            data=input[0], nuclei=input[1], threshold=1200)
+
+rule extract_phenotype:
+    input:
+        'process/10X_{plate}/10X_{plate}_{well}_Site-{tile}.max.tif',
+        'process/10X_{plate}_{well}_Tile-{tile}.nuclei.tif',
+        'process/10X_{plate}_{well}_Tile-{tile}.cells.tif'
+    output:
+        'process/10X_{plate}_{well}_Tile-{tile}.phenotype.pkl'
+    run:
+        call_firesnake('extract_phenotype_translocation', output, 
+            data_phenotype=input[0], nuclei=input[1], cells=input[2], 
+            wildcards=dict(wildcards)) 

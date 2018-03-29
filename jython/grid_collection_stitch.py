@@ -15,27 +15,28 @@ if False:
     home_dir = '/Volumes/Samsung_T5/lasagna/20171024_24W-endocytosis/MAX/'
 else:
     # windows
-    home_dir = 'D:\\David\lasagna\\20180120_24W-G141A\\MAX\\'
-    # home_dir = '\\\\neon-cifs\\blainey_lab\\David\\lasagna\\20150817 6 round\\analysis\\calibrated\\raw\\'
+    home_dir = 'E:\\lasagna\\20180321_A375-317_test\\'
     filesep = '\\'
 
 # C
 #channel_luts = (('Grays', (400, 8000)),)
-channel_luts = (('Grays', (400, 12000)),
-                ('Cyan',  (1000, 8000)),
-#                ('Green', (400, 2500)),
-#                ('Red',   (1000, 8000)),
-                ('Magenta', (400, 2500)))
+#channel_luts = (('Grays', (400, 12000)),
+#                ('Cyan',  (1000, 8000)),
+##                ('Green', (400, 2500)),
+##                ('Red',   (1000, 8000)),
+#                ('Magenta', (400, 2500)))
 #channel_luts = (('Blue', (400, 40000)),
 #                ('Green', (400, 6000)),
 #                ('Red', (400, 4000)),
 #                ('Magenta', (400, 4000)))
-#channel_luts = (('Green',  (400, 4000)),
-#               ('Magenta', (400, 8000)))
-#channel_luts = (('Grays', (400, 40000)),)
+channel_luts = (('Blue',  (400, 40000)),
+                ('Green', (400, 10000)),
+                ('Grays', (400, 10000))
+               )
+channel_luts = (('Grays', (400, 40000)),)
 
 channels = len(channel_luts)
-slices = 1;  # Z20180120_24W-G141A20180120_24W-G141A
+slices = 1;  # Z
 frames = 1;  # T
 
 ##### 40X
@@ -44,14 +45,18 @@ frames = 1;  # T
 #
 
 ##### 20X
-tiles, overlap = (5, 5), int(100 * (1. - 600. / 675))
-pixel_width = 0.35 * 2
-#
+# tiles, overlap = (60, 6), int(100 * (1. - 600. / 675))
+# pixel_width = 0.35 * 2
+
+# ##### 10X
+tiles, overlap = (30, 3), int(100 * (1. - 1200. / 1286))
+pixel_width = 0.7 * 2
+
 ### 4X
 #tiles, overlap = (5, 5), int(100*(1. - 3000./3379))
 #pixel_width = 1.64
 
-### 100X20X_TF_EGF_1
+### 100X
 #tiles, overlap = (7, 7), int(100*(1. - 100./135))
 #pixel_width = 0.066 * 2
 
@@ -84,16 +89,17 @@ def make_template(well, data_dir):
 # first well stitched. to use a specific file as template, stitch it separately and 
 # call template=make_template(well, data_dir) here.
 use_template = True
-template = None #or make_template('A4', '20X_transferrin_EGF')
+template = None #or make_template('B3', '10X_plateA_45NA_V2uM_t000')
 
-data_dirs = ['20X_TF_EGF_1']
+data_dirs = ['10X_plateA_45NA_V2uM_t088']
 
 # usually xyzct, except on bad days when it's xyczt(default)
-order = 'xyzct'
-#order = 'xyczt(default)'
-rows = 'ABCDEFGH'
+# order = 'xyzct'
+order = 'xyczt(default)'
+rows = 'ABH'
 columns = [str(x) for x in range(1, 13)]
 wells = [row + column for row in rows for column in columns]
+wells = ['B1', 'B3']
 
 
 cal = Calibration()
@@ -115,7 +121,7 @@ def macro_dir(s):
 	return '[%s]' % (s.replace('\\', '\\\\'))
 
 def stitch_cmd(grid_size, overlap, directory, file_pattern, config):
-    s = """type=[Grid: row-by-row] order=[Right & Down                ]
+    s = """type=[Grid: snake by rows] order=[Right & Down                ]
     grid_size_x=%d grid_size_y=%d tile_overlap=%d first_file_index_i=0 directory=[%s]
     file_names=%s output_textfile_name=TileConfiguration_%s.txt fusion_method=[Linear Blending]
     regression_threshold=0.30 max/avg_displacement_threshold=2.50

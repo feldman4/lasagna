@@ -135,6 +135,8 @@ def reads_to_fastq(df, dataset):
 
     wells = list(lasagna.plates.microwells()['96_well'])
     it = zip(df['well'], df['tile'])
+    tile_spacing = df['tile'].astype(int).max()
+    tile_spacing = ((tile_spacing + 100) // 100)*100
     tile_spacing = 1000
     df['well_tile'] = [wells.index(w) * tile_spacing + int(t) for w, t in it]
     fields = [WELL, 'well_tile', BLOB,
