@@ -1,7 +1,7 @@
 from lasagna.imports import *
 
 def load_well_site_list():
-    well_site_list = map(tuple, pd.read_pickle('well_site_list.pkl').as_matrix())       
+    well_site_list = map(tuple, pd.read_pickle('well_site_list_MM.pkl').as_matrix())       
     return well_site_list
 
 
@@ -17,9 +17,9 @@ def filter_well_site_filename(f, well_site_list):
     return key in well_site_list
 
 
-def copy_tif_to_process_dir(f):
+def copy_tif_to_process_dir(f, rows, cols):
     d = parse(f)
-    d['site'] = lasagna.plates.remap_snake(d['site'])
+    d['site'] = lasagna.plates.remap_snake(d['site'], rows=rows, cols=cols)
     d['subdir'] = 'process/{mag}_{cycle}'.format(**d)
     f_SBS = name(d, tag='max')
 
@@ -27,16 +27,18 @@ def copy_tif_to_process_dir(f):
     d['subdir'] = 'process/{mag}_{cycle}'.format(**d)
     f_ph = name(d, tag='max')
     
-    if 'c1-SBS-1' not in f:
-        if not os.path.exists(f_SBS):
-            save(f_SBS, read(f))
-    else:
-        if not os.path.exists(f_SBS):
-            data = read(f)
-            data_SBS = data[[0, 2, 3, 4, 5]]
-            save(f_SBS, data_SBS)
+    save(f_SBS, read(f))
+
+    # if 'c1-SBS-1' not in f:
+    #     if not os.path.exists(f_SBS):
+    #         save(f_SBS, read(f))
+    # else:
+    #     if not os.path.exists(f_SBS):
+    #         data = read(f)
+    #         data_SBS = data[[0, 2, 3, 4, 5]]
+    #         save(f_SBS, data_SBS)
             
-        if not os.path.exists(f_ph):
-            data = read(f)
-            data_ph = data[:2]
-            save(f_ph, data_ph)
+    #     if not os.path.exists(f_ph):
+    #         data = read(f)
+    #         data_ph = data[:2]
+    #         save(f_ph, data_ph)

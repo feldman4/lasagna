@@ -66,19 +66,13 @@ def plate_coordinate(well, site, spacing='10X', grid_shape=(7, 7)):
     return i, j
 
 
-def remap_snake(site, n=25):
+def remap_snake(site, rows=25, cols=25):
     """Maps site names from snake order to regular order.
     """
-    import math
-    site = int(site)
-    j = math.floor(site / n)
-    rem = site - j*n
-    if j % 2 == 0: # even
-        return site
-    else:
-        i = n - rem
-        
-    site_ = j * n + i - 1
+    import numpy as np
+    grid = np.arange(rows*cols).reshape(rows, cols)
+    grid[1::2] = grid[1::2, ::-1]
+    site_ = grid.flat[int(site)]
     return '%d' % site_
 
 

@@ -88,6 +88,8 @@ def transform_medians(X):
     return Y, W
 
 def call_barcodes(df_raw, Y, cycles=12):
+    """Transform the sequencing data into array Y first. This just uses argmax to call bases.
+    """
     df_reads = df_raw.drop_duplicates([WELL, TILE, BLOB]).copy()
     df_reads[CYCLES_IN_SITU] = call_bases_fast(Y.reshape(-1, cycles, 4))
     Q = quality(Y.reshape(-1, cycles, 4))
