@@ -1,6 +1,7 @@
 import pandas as pd
 import numpy as np
 import string
+import re
 
 def row_col_to_well(row, col, width=1):
     fmt = r'%s%0' + str(width) + 'd' 
@@ -74,11 +75,10 @@ def remap_snake(site, n=25):
     j = math.floor(site / n)
     rem = site - j*n
     if j % 2 == 0: # even
-        return site
+        site_ = site
     else:
         i = n - rem
-        
-    site_ = j * n + i - 1
+        site_ = j * n + i - 1
     return '%d' % site_
 
 
@@ -93,9 +93,13 @@ def filter_position_list(filename, well_site_list):
     
     with open(filename, 'r') as fh:
         d = json.load(fh)
+        print 'read %d positions from %s' % (len(d['POSITIONS']), filename)
     
     d['POSITIONS'] = filter(filter_well_site, d['POSITIONS'])
     
-    with open(filename + '.filtered.pos', 'w') as fh:
+    filename2 = filename + '.filtered.pos'
+    with open(filename2, 'w') as fh:
         json.dump(d, fh)
+        print '...'
+        print 'wrote %d positions to %s' % (len(d['POSITIONS']), filename2)
 

@@ -1,6 +1,7 @@
 # common imports for interactive work
 
 import os
+import re
 from natsort import natsorted
 from collections import OrderedDict, Counter, defaultdict
 from itertools import product
