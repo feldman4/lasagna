@@ -1,7 +1,8 @@
 import pandas as pd
 import numpy as np
 from itertools import product, combinations, cycle
-from lasagna.design import rc, generate_sequence
+from lasagna.design import reverse_complement as rc
+from lasagna.design import generate_sequence
 from Levenshtein import distance
 from collections import Counter
 import regex as re

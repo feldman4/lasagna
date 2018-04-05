@@ -257,20 +257,3 @@ def add_quality(df):
     df['Q_mean'] = df.filter(regex='Q_\d+', axis=1).mean(axis=1)
     return df
 
-def add_global_xy(df):
-    df = df.copy()
-    wt = zip(df['well'], df['tile'])
-    d = {(w,t): plate_coordinate(w, t) for w,t in set(zip(df['well'], df['tile']))}
-    y, x = zip(*[d[k] for k in zip(df['well'], df['tile'])])
-
-    if 'x' in df:
-        df['global_x'] = x + df['x']
-        df['global_y'] = y + df['y']
-    elif 'position_i' in df:
-        df['global_x'] = x + df['position_j']
-        df['global_y'] = y + df['position_i']
-    else:
-        df['global_x'] = x
-        df['global_y'] = y
-
-    return df

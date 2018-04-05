@@ -190,19 +190,18 @@ def cell_mapping_stats(df_cells):
     df_cell_stats = pd.concat([a,b]).rename(lambda x: 'cells_' + x)
     df_cell_stats['cells'] = num_cells
     
-    return df_cell_stats
+    return df_cell_stats.astype(int)
 
-def read_mapping_stats(df_reads, df_cells):
-    reads             = len(df_reads)
-    reads_PF          = df_cells.shape[0]
-    reads_PF_mapped   = df_cells.query('subpool == subpool').shape[0]
-    reads_PF_unmapped = df_cells.query('subpool != subpool').shape[0]
+def read_mapping_stats(df_reads):
+    reads          = float(len(df_reads))
+    reads_mapped   = df_reads.query('subpool == subpool').shape[0]
+    reads_unmapped = df_reads.query('subpool != subpool').shape[0]
 
     return  pd.Series(OrderedDict([('reads', reads)
-                       ,('reads_PF', reads_PF / float(reads))
-                       ,('reads_PF_mapped', reads_PF_mapped / float(reads_PF))
-                       ,('reads_PF_unmapped', reads_PF_unmapped / float(reads_PF))
-                      ]))
+                       # ,('reads_PF', reads_PF / float(reads))
+                       ,('reads_mapped', reads_mapped )
+                       ,('reads_unmapped', reads_unmapped )
+                      ])).astype(int)
 
 def get_good_well_tiles(cluster_labels):
     good_cluster = (cluster_labels

@@ -10,6 +10,7 @@ from collections import OrderedDict, Counter
 from decorator import decorator 
 
 
+# PYTHON
 class Memoized(object):
     """Decorator that caches a function's return value each time it is called.
     If called later with the same arguments, the cached value is returned, and
@@ -49,188 +50,37 @@ class Memoized(object):
         self.cache = {}
 
 
-class Filter2D(object):
-    def __init__(self, func, window_size=200):
-        """Create 2D fourier filter from 1D radial function.
-        The filter itself is available as Filter2D.filter1D, .filter2D.
-        :param func: 1D radial function in fourier space.
-        :param window_size: can be anything, really
-        :return:
-        """
-        self.func = func
-        y = np.array([np.arange(window_size).astype(float)])
-        self.filter1D = self.func(y[0])
-        self.H = self.func(np.sqrt(y ** 2 + y.T ** 2))
-        self.H = self.H / self.H.max()
-        self.__call__(self.H)
-
-    def __call__(self, M, pad_width=None):
-        """
-        :param M:
-        :param pad_width: minimum pad width, pads up to next power of 2
-        :return:
-        """
-        if pad_width:
-            sz = 2 ** (int(np.log2(max(M.shape) + pad_width)) + 1)
-            pad_width = [((sz - s) / 2, (sz - s) - (sz - s) / 2) for s in M.shape]
-            M_ = np.pad(M, pad_width, mode='linear_ramp', end_values=(M.mean(),))
-        else:
-            M_ = M
-        H = self.H
-        M_fft = np.fft.fft2(M_)
-        s, t = [s / 2 for s in M_fft.shape]
-        h = np.zeros(M_.shape)
-        h[:s, :t] = H[:s, :t]
-        h[:-s - 1:-1, :t] = H[:s, :t]
-        h[:-s - 1:-1, :-t - 1:-1] = H[:s, :t]
-        h[:s, :-t - 1:-1] = H[:s, :t]
-        self.M_pre_abs = np.fft.ifft2(h * M_fft)
-        M_f = np.abs(self.M_pre_abs)
-        self.filter2D = np.fft.fftshift(h)
-        # out = M_f * (M_.sum()/M_f.sum())
-        if pad_width:
-            M_f = M_f[pad_width[0][0]:-pad_width[0][1], pad_width[1][0]:-pad_width[1][1]]
-        return M_f
-
-    def build_pyramid(self, real_filter, start=1, end=10):
-        pyramid = {}
-        if len(real_filter) < 2 ** end:
-            real_filter = np.pad(real_filter, (0, 2 ** end - len(real_filter)),
-                                 mode='constant', constant_values=0)
-        for width in [2 ** i for i in range(start, end + 1)]:
-            pyramid[width] = np.zeros(width)
-            x = [float(width) / i for i in range(1, width + 1)]
-            pyramid[width] = np.interp(x, range(1, len(real_filter) + 1), real_filter)
-        return pyramid
+def compress_obj(obj):
+    s = StringIO.StringIO()
+    pickle.dump(obj, s)
+    out = zlib.compress(s.getvalue())
+    s.close()
+    return out
 
 
-def regionprops(*args, **kwargs):
-    """Supplement skimage.measure.regionprops with additional field containing full intensity image in
-    bounding box (useful for filtering).
-    :param args:
-    :param kwargs:
+def decompress_obj(string):
+    return pickle.load(StringIO.StringIO(zlib.decompress(string)))
+
+
+def concatMap(f, xs):
+    return sum(map(f, xs), [])
+
+
+def call(arg, stdin='', shell=True):
+    """Call process with stdin provided (equivalent to cat), return stdout.
+    :param arg:
+    :param stdin:
     :return:
     """
-    import skimage.measure
-
-    regions = skimage.measure.regionprops(*args, **kwargs)
-    if 'intensity_image' in kwargs:
-        intensity_image = kwargs['intensity_image']
-        for region in regions:
-            b = region.bbox
-            region.intensity_image_full = intensity_image[..., b[0]:b[2], b[1]:b[3]]
-    return regions
+    import subprocess
+    p = subprocess.Popen(arg, stdin=subprocess.PIPE,
+                         stdout=subprocess.PIPE, shell=shell)
+    p.stdin.write(stdin)
+    p.stdin.close()
+    return p.stdout.read()
 
 
-def mad(arr, axis=None, keepdims=True):
-    med = np.median(arr, axis=axis, keepdims=keepdims)
-    return np.median(np.abs(arr - med), axis=axis, keepdims=keepdims)
-
-
-class Filter2DReal(object):
-    def __init__(self, func, max_size=10):
-        self.pyramid = None
-        self.pyramid_2D = None
-        self.max_size = max_size
-        self.x = np.arange(0., 2. ** (max_size + 1), 0.2)
-        self.real_filter = [func(x) for x in self.x]
-
-        self.build_pyramid()
-
-    def __call__(self, M, pad_width=2):
-        i = int(np.ceil(np.log2(max(M.shape) + pad_width)))
-        width = 2 ** i
-
-        pad_width = [(int((width - s) / 2), int((width - s) - (width - s) / 2)) for s in M.shape]
-        M_ = np.pad(M, pad_width, mode='linear_ramp', end_values=(M.mean(),))
-
-        self.M_ = M_
-
-        M_fft = np.fft.fft2(M_)
-
-        slic = (slice(pad_width[0][0], -pad_width[0][1]),
-                slice(pad_width[1][0], -pad_width[1][1]))
-
-        self.M_pre_abs = np.fft.ifft2(M_fft * self.pyramid_2D[i])
-        M_filt = np.abs(self.M_pre_abs)
-        M_filt[M_filt < 0] = 0
-
-        self.M_pre_abs = self.M_pre_abs[slic]
-
-        return M_filt[slic]
-
-    def build_pyramid(self):
-        self.pyramid = {}
-        self.pyramid_2D = {}
-
-        y = np.array([self.x])
-
-        for i in range(1, self.max_size + 1):
-            width = 2. ** (i - 1)
-
-            y = [width / x for x in np.arange(1, width + 1)]
-            self.pyramid[i] = np.interp(y, self.x, self.real_filter)
-
-            z = np.array([np.arange(1, width + 1)])
-            r = np.sqrt(z ** 2 + z.T ** 2)
-
-            f = np.interp(r, z[0], self.pyramid[i])
-            self.pyramid_2D[i] = self.quadrant_to_full(f)
-
-    def quadrant_to_full(self, m):
-        n = np.r_[m, m[::-1, :]]
-        return np.c_[n, n[:, ::-1]]
-
-
-def plot_image_overlay(image0, image1, offset, ax=None):
-    from matplotlib import pyplot as plt
-    from matplotlib import cm
-
-    sz0, sz1 = image0.shape, image1.shape
-    # (x0, x1, y0, y1); flip y by convention
-    extent = (0 + offset[1], sz1[1] + offset[1],
-              sz1[0] + offset[0], 0 + offset[0])
-    print extent, sz1
-    if ax is None:
-        fig, ax = plt.subplots(figsize=(10, 10))
-    ax.imshow(image0, cmap=cm.Blues, alpha=0.5)
-    ax.hold('on')
-    ax.imshow(image1, cmap=cm.Reds, extent=extent, alpha=0.5)
-    ax.axis('image')
-
-
-def plot_corner_alignments(data, n=500, axs=None):
-    """Superimpose corners of 3-D array. Only uses first two entries in leading dimension.
-    :param data: [2, height, width] array
-    :param n: corner window width
-    :param axs: list of up to 4 axes to plot to (clockwise from top left)
-    :return:
-    """
-    import matplotlib.pyplot as plt
-    if axs is None:
-        fig, axs = plt.subplots(2, 2, figsize=(10, 10))
-    axs = axs.flatten()
-    corners = _get_corners(n)
-    for ax, corner in zip(axs, (0, 1, 3, 2)):
-        plot_image_overlay(data[corners[corner]][0],
-                           data[corners[corner]][1],
-                           np.array([0, 0]), ax=ax)
-    return axs
-
-
-def _get_corners(n):
-    """Retrieve slice index for 2-D corners of 3-D array.
-    :param n:
-    :return:
-    """
-    a, b, c = slice(None), slice(None, n), slice(-n, None)
-    corners = ((a, b, b),
-               (a, b, c),
-               (a, c, c),
-               (a, c, b))
-    return corners
-
-
+# PANDAS
 def standardize(x):
     # only standardize numeric columns
     numerics = (np.float64, np.int64)
@@ -244,63 +94,6 @@ def normalize_rows(x):
     :return:
     """
     return x.divide(((x ** 2).sum(axis=1)) ** 0.5, axis=0)
-
-
-def to_nd_array(x):
-    """Converts DataFrame with MultiIndex rows and columns to ndarray.
-    Accepts regular Index too.
-    Will throw error if size doesn't match. Inner-most row level can have
-    non-repeated values.
-    """
-    # update index to remove missing values
-    x = x.set_index(pd.MultiIndex.from_tuples(x.index.values))
-    levels = []
-    last = -1
-    for i, index in enumerate((x.columns, x.index)):
-        if type(index) is pd.Index:
-            add = [index]
-        else:
-            # reshape goes from inside out
-            # x = x.sortlevel(axis=1-i)
-            add = list(index.levels)[::-1]
-        levels += add
-
-    last = -1 * len(add)
-    reshaper = [len(s) for s in levels]
-    if np.prod(reshaper) != x.size:
-        reshaper = reshaper[:last] + [-1] + reshaper[last + 1:]
-        size = np.prod(reshaper[:last] + reshaper[last + 1:])
-        levels[last] = pd.Index(range(x.size / size),
-                                name=levels[last].name)
-        print 'resetting innermost row index to [%d...%d]' % (levels[last][0], levels[last][-1])
-
-    output = x.as_matrix().reshape(reshaper[::-1])
-    return output, levels[::-1]
-
-
-def argsort_nd(a, axis):
-    """Format argsort result so it can be used to index original array.
-    :param a:
-    :param axis:
-    :return:
-    """
-    index = list(np.ix_(*[np.arange(i) for i in a.shape]))
-    index[axis] = a.argsort(axis)
-    return index
-
-
-def pad(array, pad_width, mode=None, **kwargs):
-    """Extend numpy.pad to support negative pad width.
-    """
-    if type(pad_width) == int:
-        if pad_width < 0:
-            s = [slice(-1 * pad_width, pad_width)] * array.ndim
-            return array[s]
-    return np.pad(array, pad_width, mode=mode, **kwargs)
-
-
-def argmax_nd(a):
-    return np.unravel_index(a.argmax(), a.shape)
 
 
 def group_sort(x, columns, top_n=None, **kwargs):
@@ -323,35 +116,6 @@ def group_sort(x, columns, top_n=None, **kwargs):
         output = output.ix[:top_n]
         output.index = output.index.droplevel(range(len(k)))
     return output
-
-
-def show_grid(z, force_fit=False):
-    import qgrid
-    qgrid.set_defaults(remote_js=True, precision=4)
-
-    new = pd.DataFrame()
-    for x in z.columns:
-        new[' '.join(x)] = z[x]
-    return qgrid.show_grid(new, grid_options={'forceFitColumns': force_fit, 'defaultColumnWidth': 120})
-
-
-def pivot(x, plus=1, minus=0, expand=False):
-    """Pivot table keeping existing index. Create full product column MultiIndex from all
-    columns, set entries from original table to plus, rest to minus.
-    :return:
-    """
-    x = x.copy()
-    columns = list(x.columns)
-    x['dummy'] = plus
-    x = x.reset_index().pivot_table(values='dummy',
-                                    index=x.index.name,
-                                    columns=columns)
-    if expand:
-        index = pd.MultiIndex.from_product(x.index.levels,
-                                           names=x.index.names)
-        x = x.transpose().reindex(index, fill_value=minus).transpose()
-
-    return x.fillna(minus)
 
 
 def print_table(df):
@@ -378,107 +142,23 @@ def print_table(df):
     return lambda: HTML(htm)
 
 
-def call(arg, stdin='', shell=True):
-    """Call process with stdin provided (equivalent to cat), return stdout.
-    :param arg:
-    :param stdin:
+def pivot(x, plus=1, minus=0, expand=False):
+    """Pivot table keeping existing index. Create full product column MultiIndex from all
+    columns, set entries from original table to plus, rest to minus.
     :return:
     """
-    import subprocess
-    p = subprocess.Popen(arg, stdin=subprocess.PIPE,
-                         stdout=subprocess.PIPE, shell=shell)
-    p.stdin.write(stdin)
-    p.stdin.close()
-    return p.stdout.read()
+    x = x.copy()
+    columns = list(x.columns)
+    x['dummy'] = plus
+    x = x.reset_index().pivot_table(values='dummy',
+                                    index=x.index.name,
+                                    columns=columns)
+    if expand:
+        index = pd.MultiIndex.from_product(x.index.levels,
+                                           names=x.index.names)
+        x = x.transpose().reindex(index, fill_value=minus).transpose()
 
-
-def linear_assignment(df):
-    """Wrapper of sklearn linear assignment algorithm for DataFrame cost matrix. Returns
-    DataFrame with columns for matched labels. Minimizes cost.
-    """
-    from sklearn.utils.linear_assignment_ import linear_assignment
-
-    x = linear_assignment(df.as_matrix())
-    y = zip(df.index[x[:, 0]], df.columns[x[:, 1]])
-    df_out = pd.DataFrame(y, columns=[df.index.name, df.columns.name])
-    return df_out
-
-
-class TimeoutError(Exception):
-    pass
-
-
-class timeout:
-    def __init__(self, seconds=1, error_message='Timeout'):
-        import signal
-        self.seconds = seconds
-        self.error_message = error_message
-
-    def handle_timeout(self, signum, frame):
-        raise TimeoutError(self.error_message)
-
-    def __enter__(self):
-        signal.signal(signal.SIGALRM, self.handle_timeout)
-        signal.alarm(self.seconds)
-
-    def __exit__(self, type, value, traceback):
-        signal.alarm(0)
-
-
-def auto_assign(*names, **kwargs):
-    """
-    auto_assign(function) -> method
-    auto_assign(*args) -> decorator
-    auto_assign(exclude=args) -> decorator
-
-    allow a method to assign (some of) its arguments as attributes of
-    'self' automatically.  E.g.
-
-    class Foo(object):
-    ...     @auto_assign
-    ...     def __init__(self, foo, bar): pass
-    ...
-    breakfast = Foo('spam', 'eggs')
-    breakfast.foo, breakfast.bar
-    ('spam', 'eggs')
-
-    To restrict auto-assignment to 'bar' and 'baz', write:
-
-        @auto_assign('bar', 'baz')
-        def method(self, foo, bar, baz): ...
-
-    To prevent 'foo' and 'baz' from being auto_assigned, use:
-
-        @auto_assign(exclude=('foo', 'baz'))
-        def method(self, foo, bar, baz): ...
-    """
-    if kwargs:
-        exclude, f = set(kwargs['exclude']), None
-        sieve = lambda l: ifilter(lambda nv: nv[0] not in exclude, l)
-    elif len(names) == 1 and isfunction(names[0]):
-        f = names[0]
-        sieve = lambda l: l
-    else:
-        names, f = set(names), None
-        sieve = lambda l: ifilter(lambda nv: nv[0] in names, l)
-
-    def decorator(f):
-        fargnames, _, _, fdefaults = getargspec(f)
-        # Remove self from fargnames and make sure fdefault is a tuple
-        fargnames, fdefaults = fargnames[1:], fdefaults or ()
-        defaults = list(sieve(izip(reversed(fargnames), reversed(fdefaults))))
-
-        @wraps(f)
-        def decorated(self, *args, **kwargs):
-            assigned = dict(sieve(izip(fargnames, args)))
-            assigned.update(sieve(kwargs.iteritems()))
-            for _ in starmap(assigned.setdefault, defaults): pass
-            self.__dict__.update(assigned)
-            return f(self, *args, **kwargs)
-
-        return decorated
-
-    return f and decorator(f) or decorator
+    return x.fillna(minus)
 
 
 def jitter(x, r=0.1):
@@ -486,45 +166,6 @@ def jitter(x, r=0.1):
     each column, with scale factor r.
     """
     return x + np.random.rand(*x.shape) * np.std(x)[None, :] * r
-
-
-def better_legend(**kwargs):
-    """Call pyplot.legend after removing duplicates.
-    """
-    import matplotlib.pyplot as plt
-    from collections import OrderedDict
-    handles, labels = plt.gca().get_legend_handles_labels()
-    by_label = OrderedDict(zip(labels, handles))
-    plt.legend(by_label.values(), by_label.keys(), **kwargs)
-
-
-def simulate(f):
-    """Wrapped function takes original function's args and kwargs as lists and evaluates
-    all combinations. Results are stored in a DataFrame indexed by each arg/kwarg combination.
-    """
-
-    def wrapped_f(*args, **kwargs):
-        all_kwargs = OrderedDict()
-        [all_kwargs.update({'arg_%d' % i: a}) for i, a in enumerate(args)]
-        all_kwargs.update(kwargs)
-
-        # build index of conditions to evaluate
-        index_tuples = list(product(*all_kwargs.values()))
-        index = pd.MultiIndex.from_tuples(index_tuples,
-                                          names=all_kwargs.keys())
-
-        # store output in DataFrame, indexed by condition
-        results = []
-        for ix in index:
-            args = ix[:len(args)]
-            kwargs = ix[len(args):]
-            kwargs_keys = all_kwargs.keys()[len(args):]
-            kwargs = {k: v for k, v in zip(kwargs_keys, kwargs)}
-            results += [f(*args, **kwargs)]
-
-        return pd.DataFrame(results, index=index)
-
-    return wrapped_f
 
 
 class DataFrameFind(pd.DataFrame):
@@ -541,35 +182,40 @@ class DataFrameFind(pd.DataFrame):
         return self.loc[index, :]
 
 
-def nice_tuple(z):
-    """Convert iterable of iterables of strings into list of comma separated strings.
+def comma_split(df, column, split=', '):
+    """Split entries in given column of strings, duplicating the 
+    index and the rest of the row.
     """
-    return [', '.join(y).encode('ascii') for y in z]
+    arr, index = [], []
+    for ix, row in df.iterrows():
+        for entry in row[column].split(split):
+            r = row.copy()
+            r[column] = entry
+            arr += [r]
+            index += [ix]
+    df_out = pd.concat(arr, axis=1).T
+    if isinstance(df.index, pd.MultiIndex):
+        df_out.index = pd.MultiIndex.from_tuples(index, names=df.index.names)
+    else:
+        df_out.index = index
+        df_out.index.name = df.index.name
+    return df_out
 
 
-def probes_to_rounds(rounds=1):
-    def f(ind_vars):
-        for rnd in range(1, rounds + 1):
-            ind_vars['probes round %s' % rnd] = \
-                [tuple(x.split(', ')) for x in ind_vars['probes']]
-
-    return f
 
 
-def cells_to_barcodes(ind_vars_table, cloning=None):
-    """
-    :param cloning: dict of DataFrames based on Lasagna Cloning sheets
-    """
-    cells = ind_vars_table['cells']
-    virus = cloning['cell lines'].loc[cells, 'lentivirus']
-    plasmids = cloning['lentivirus'].loc[virus, 'plasmid']
-    plasmids = plasmids.fillna('')
-    barcodes = cloning['plasmids'].loc[plasmids, 'barcode']
-    barcodes = barcodes.fillna('')
-    # split comma-separated list of barcodes
-    ind_vars_table['barcodes'] = [tuple(x.split(', ')) for x in barcodes]
+# GLUE
+def show_grid(z, force_fit=False):
+    import qgrid
+    qgrid.set_defaults(remote_js=True, precision=4)
+
+    new = pd.DataFrame()
+    for x in z.columns:
+        new[' '.join(x)] = z[x]
+    return qgrid.show_grid(new, grid_options={'forceFitColumns': force_fit, 'defaultColumnWidth': 120})
 
 
+# IMAGEJ
 def launch_queue(queue, log=None):
     import threading
 
@@ -615,6 +261,38 @@ def pack_contours(contours):
     # imagej origin is at top left corner, matplotlib origin is at center of top left pixel
     packed = [(0.5 + c).T.tolist() for c in contours]
     return packed
+
+
+
+def linear_assignment(df):
+    """Wrapper of sklearn linear assignment algorithm for DataFrame cost matrix. Returns
+    DataFrame with columns for matched labels. Minimizes cost.
+    """
+    from sklearn.utils.linear_assignment_ import linear_assignment
+
+    x = linear_assignment(df.as_matrix())
+    y = zip(df.index[x[:, 0]], df.columns[x[:, 1]])
+    df_out = pd.DataFrame(y, columns=[df.index.name, df.columns.name])
+    return df_out
+
+
+
+def cells_to_barcodes(ind_vars_table, cloning=None):
+    """
+    :param cloning: dict of DataFrames based on Lasagna Cloning sheets
+    """
+    cells = ind_vars_table['cells']
+    virus = cloning['cell lines'].loc[cells, 'lentivirus']
+    plasmids = cloning['lentivirus'].loc[virus, 'plasmid']
+    plasmids = plasmids.fillna('')
+    barcodes = cloning['plasmids'].loc[plasmids, 'barcode']
+    barcodes = barcodes.fillna('')
+    # split comma-separated list of barcodes
+    ind_vars_table['barcodes'] = [tuple(x.split(', ')) for x in barcodes]
+
+
+
+
 
 
 def sample(line=tuple(), plane=tuple(), scale='um_per_px'):
@@ -696,27 +374,7 @@ def sample(line=tuple(), plane=tuple(), scale='um_per_px'):
     return wrapper_of_f
 
 
-def comma_split(df, column, split=', '):
-    """Split entries in given column of strings, duplicating the 
-    index and the rest of the row.
-    """
-    arr, index = [], []
-    for ix, row in df.iterrows():
-        for entry in row[column].split(split):
-            r = row.copy()
-            r[column] = entry
-            arr += [r]
-            index += [ix]
-    df_out = pd.concat(arr, axis=1).T
-    if isinstance(df.index, pd.MultiIndex):
-        df_out.index = pd.MultiIndex.from_tuples(index, names=df.index.names)
-    else:
-        df_out.index = index
-        df_out.index.name = df.index.name
-    return df_out
-
-
-def import_facs(files, drop=lambda s: '-A$' in s):
+def import_fcs(files, drop=lambda s: '-A$' in s):
     """Import a list of FACS files, adding well and x,y info if available.
     """
     import FlowCytometryTools as fcs
@@ -802,8 +460,6 @@ def applyXY(f, arr, *args, **kwargs):
         arr_ += [f(frame, *args, **kwargs)]
     return np.array(arr_).reshape(arr.shape)
 
-def concatMap(f, xs):
-    return sum(map(f, xs), [])
 
 def ndarray_to_dataframe(values, index):
     names, levels  = zip(*index)
@@ -863,3 +519,238 @@ def write_excel(filename, sheets):
     for name, df in sheets:
         df.to_excel(writer, index=None, sheet_name=name)
     writer.save()
+
+
+class Mask(object):
+    def __init__(self, mask):
+        """Hack to avoid slow printing of DataFrame containing boolean np.ndarray.
+        """
+        self.mask = mask
+    def __repr__(self):
+        return str(self.mask.shape) + ' mask'
+
+
+
+# NUMPY
+def pile(arr):
+    """Concatenate stacks of same dimensionality along leading dimension. Values are
+    filled from top left of matrix. Fills background with zero.
+    :param arr:
+    :return:
+    """
+    shape = [max(s) for s in zip(*[x.shape for x in arr])]
+    # strange numpy limitations
+    arr_out = []
+    for x in arr:
+        y = np.zeros(shape, x.dtype)
+        slicer = [slice(None, s) for s in x.shape]
+        y[slicer] = x
+        arr_out += [y[None, ...]]
+
+    return np.concatenate(arr_out, axis=0)
+
+
+def montage(arr, shape=None):
+    """tile ND arrays ([..., height, width]) in last two dimensions
+    first N-2 dimensions must match, tiles are expanded to max height and width
+    pads with zero, no spacing
+    if shape=(rows, columns) not provided, defaults to square, clipping last row if empty
+    """
+    sz = zip(*[img.shape for img in arr])
+    h, w, n = max(sz[-2]), max(sz[-1]), len(arr)
+    if not shape:
+        nr = nc = int(np.ceil(np.sqrt(n)))
+        if (nr - 1) * nc >= n:
+            nr -= 1
+    else:
+        nr, nc = shape
+    M = np.zeros(arr[0].shape[:-2] + (nr * h, nc * w), dtype=arr[0].dtype)
+
+    for (r, c), img in zip(product(range(nr), range(nc)), arr):
+        s = [[None] for _ in img.shape]
+        s[-2] = (r * h, r * h + img.shape[-2])
+        s[-1] = (c * w, c * w + img.shape[-1])
+        M[[slice(*x) for x in s]] = img
+
+    return M
+
+
+def tile(arr, m, n, pad=None):
+    """Divide a stack of images into tiles of size m x n. If m or n is between 
+    0 and 1, it specifies a fraction of the input size. If pad is specified, the
+    value is used to fill in edges, otherwise the tiles may not be equally sized.
+    Tiles are returned in a list.
+    """
+    assert arr.ndim > 1
+    h, w = arr.shape[-2:]
+    # convert to number of tiles
+    m_ = h / m if m >= 1 else int(np.round(1 / m))
+    n_ = w / n if n >= 1 else int(np.round(1 / n))
+
+    if pad is not None:
+        pad_width = (arr.ndim - 2) * ((0, 0),) + ((0, -h % m), (0, -w % n))
+        arr = np.pad(arr, pad_width, 'constant', constant_values=pad)
+        print arr.shape
+
+    h_ = int(int(h / m) * m)
+    w_ = int(int(w / n) * n)
+
+    tiled = np.array_split(arr[:h_, :w_], m_, axis=-2)
+    tiled = lasagna.utils.concatMap(lambda x: np.array_split(x, n_, axis=-1), tiled)
+    return tiled
+
+
+def trim(arr, return_slice=False):
+    """Remove i,j area that overlaps a zero value in any leading
+    dimension. Trims stitched and piled images.
+    """
+    def coords_to_slice(i_0, i_1, j_0, j_1):
+        return slice(i_0, i_1), slice(j_0, j_1)
+
+    leading_dims = tuple(range(arr.ndim)[:-2])
+    mask = (arr == 0).any(axis=leading_dims)
+    coords = inscribe(mask)
+    sl = (Ellipsis,) + coords_to_slice(*coords)
+    if return_slice:
+        return sl
+    return arr[sl]
+
+
+def inscribe(mask):
+    """Guess the largest axis-aligned rectangle inside mask. 
+    Rectangle must exclude zero values. Assumes zeros are at the 
+    edges, there are no holes, etc. Shrinks the rectangle's most 
+    egregious edge at each iteration.
+    """
+    h, w = mask.shape
+    i_0, i_1 = 0, h - 1
+    j_0, j_1 = 0, w - 1
+    
+    def edge_costs(i_0, i_1, j_0, j_1):
+        a = mask[i_0, j_0:j_1 + 1].sum()
+        b = mask[i_1, j_0:j_1 + 1].sum()
+        c = mask[i_0:i_1 + 1, j_0].sum()
+        d = mask[i_0:i_1 + 1, j_1].sum()        
+        return a,b,c,d
+    
+    def area(i_0, i_1, j_0, j_1):
+        return (i_1 - i_0) * (j_1 - j_0)
+    
+    coords = [i_0, i_1, j_0, j_1]
+    while area(*coords) > 0:
+        costs = edge_costs(*coords)
+        if sum(costs) == 0:
+            return coords
+        worst = costs.index(max(costs))
+        coords[worst] += 1 if worst in (0, 2) else -1
+    return
+
+
+def subimage(stack, bbox, pad=0):
+    """Index rectangular region from [...xYxX] stack with optional constant-width padding.
+    Boundary is supplied as (min_row, min_col, max_row, max_col).
+    If boundary lies outside stack, raises error.
+    If padded rectangle extends outside stack, fills with fill_value.
+
+    bbox can be bbox or iterable of bbox (faster if padding)
+    :return:
+    """ 
+    i0, j0, i1, j1 = bbox + np.array([-pad, -pad, pad, pad])
+
+    sub = np.zeros(stack.shape[:-2]+(i1-i0, j1-j0), dtype=stack.dtype)
+
+    i0_, j0_ = max(i0, 0), max(j0, 0)
+    i1_, j1_ = min(i1, stack.shape[-2]), min(j1, stack.shape[-1])
+    s = (Ellipsis, 
+         slice(i0_-i0, (i0_-i0) + i1_-i0_),
+         slice(j0_-j0, (j0_-j0) + j1_-j0_))
+
+    sub[s] = stack[..., i0_:i1_, j0_:j1_]
+    return sub
+
+
+def offset(stack, offsets):
+    """Applies offset to stack, fills with zero. Only applies integer offsets.
+    :param stack: N-dim array
+    :param offsets: list of N offsets
+    :return:
+    """
+    if len(offsets) != stack.ndim:
+        if len(offsets) == 2 and stack.ndim > 2:
+            offsets = [0] * (stack.ndim - 2) + list(offsets)
+        else:
+            raise IndexError("number of offsets must equal stack dimensions, or 2 (trailing dimensions)")
+
+    offsets = np.array(offsets).astype(int)
+
+    n = stack.ndim
+    ns = (slice(None),)
+    for d, offset in enumerate(offsets):
+        stack = np.roll(stack, offset, axis=d)
+        if offset < 0:
+            index = ns * d + (slice(offset, None),) + ns * (n - d - 1)
+            stack[index] = 0
+        if offset > 0:
+            index = ns * d + (slice(None, offset),) + ns * (n - d - 1)
+            stack[index] = 0
+
+    return stack    
+
+
+def to_nd_array(x):
+    """Converts DataFrame with MultiIndex rows and columns to ndarray.
+    Accepts regular Index too.
+    Will throw error if size doesn't match. Inner-most row level can have
+    non-repeated values.
+    """
+    # update index to remove missing values
+    x = x.set_index(pd.MultiIndex.from_tuples(x.index.values))
+    levels = []
+    last = -1
+    for i, index in enumerate((x.columns, x.index)):
+        if type(index) is pd.Index:
+            add = [index]
+        else:
+            # reshape goes from inside out
+            # x = x.sortlevel(axis=1-i)
+            add = list(index.levels)[::-1]
+        levels += add
+
+    last = -1 * len(add)
+    reshaper = [len(s) for s in levels]
+    if np.prod(reshaper) != x.size:
+        reshaper = reshaper[:last] + [-1] + reshaper[last + 1:]
+        size = np.prod(reshaper[:last] + reshaper[last + 1:])
+        levels[last] = pd.Index(range(x.size / size),
+                                name=levels[last].name)
+        print 'resetting innermost row index to [%d...%d]' % (levels[last][0], levels[last][-1])
+
+    output = x.as_matrix().reshape(reshaper[::-1])
+    return output, levels[::-1]
+
+
+def argsort_nd(a, axis):
+    """Format argsort result so it can be used to index original array.
+    :param a:
+    :param axis:
+    :return:
+    """
+    index = list(np.ix_(*[np.arange(i) for i in a.shape]))
+    index[axis] = a.argsort(axis)
+    return index
+
+
+def pad(array, pad_width, mode=None, **kwargs):
+    """Extend numpy.pad to support negative pad width.
+    """
+    if type(pad_width) == int:
+        if pad_width < 0:
+            s = [slice(-1 * pad_width, pad_width)] * array.ndim
+            return array[s]
+    return np.pad(array, pad_width, mode=mode, **kwargs)
+
+
+def argmax_nd(a):
+    return np.unravel_index(a.argmax(), a.shape)
+
+
