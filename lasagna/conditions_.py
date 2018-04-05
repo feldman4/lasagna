@@ -6,7 +6,6 @@ import pandas as pd
 from itertools import product
 from collections import defaultdict, OrderedDict
 import urllib2
-from lasagna.design import rc
 
 import lasagna.models
 import lasagna.config

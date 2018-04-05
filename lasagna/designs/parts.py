@@ -1,4 +1,4 @@
-from lasagna.design import rc
+from lasagna.design import reverse_complement as rc
 import re
 
 

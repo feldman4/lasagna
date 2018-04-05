@@ -2,17 +2,16 @@ import pandas as pd
 import numpy as np
 import string
 
-def row_col_to_well(row, col, width=1):
-    fmt = r'%s%0' + str(width) + 'd' 
-    return fmt % (string.ascii_uppercase[row], col + 1)
-
-def well_to_row_col(well):
-    return string.ascii_uppercase.index(well[0]), int(well[1:]) - 1
-
 def microwells(width=None, base=(8, 12), downsample=((2, 2), (4, 4))):
     """Set zero-padding using `width`.
     """
-    import pandas as pd
+    
+    def row_col_to_well(row, col, width=1):
+        fmt = r'%s%0' + str(width) + 'd' 
+        return fmt % (string.ascii_uppercase[row], col + 1)
+
+    def well_to_row_col(well):
+        return string.ascii_uppercase.index(well[0]), int(well[1:]) - 1
 
     if width is None:
         width = int(np.ceil(base[1] / 10))
@@ -42,6 +41,7 @@ def microwells(width=None, base=(8, 12), downsample=((2, 2), (4, 4))):
         arr += [rows, cols, wells]
 
     return pd.concat(arr, axis=1)
+
 
 def plate_coordinate(well, site, spacing='10X', grid_shape=(7, 7)):
     site = int(site)
@@ -93,3 +93,31 @@ def filter_position_list(filename, well_site_list):
     with open(filename + '.filtered.pos', 'w') as fh:
         json.dump(d, fh)
 
+
+def well_to_row_col(df, in_place=False, col_to_int=True):
+    if not in_place:
+        df = df.copy()
+    f = lambda s: int(s) if col_to_int else s
+
+    df['row'] = [s[0] for s in df['well']]
+    df['col'] = [f(s[1:]) for s in df['well']]
+
+    return df
+
+def add_global_xy(df):
+    df = df.copy()
+    wt = zip(df['well'], df['tile'])
+    d = {(w,t): plate_coordinate(w, t) for w,t in set(zip(df['well'], df['tile']))}
+    y, x = zip(*[d[k] for k in zip(df['well'], df['tile'])])
+
+    if 'x' in df:
+        df['global_x'] = x + df['x']
+        df['global_y'] = y + df['y']
+    elif 'position_i' in df:
+        df['global_x'] = x + df['position_j']
+        df['global_y'] = y + df['position_i']
+    else:
+        df['global_x'] = x
+        df['global_y'] = y
+
+    return df

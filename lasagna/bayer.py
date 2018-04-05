@@ -65,18 +65,6 @@ def laplace_only(data, *args, **kwargs):
         arr += [laplace(frame, *args, **kwargs)]
     return np.array(arr).reshape(data.shape)
 
-def log_ndi(data, *args, **kwargs):
-    """Apply laplacian of gaussian to each image in a stack of shape
-    (..., I, J). 
-    Extra arguments are passed to scipy.ndimage.filters.gaussian_laplace.
-    """
-    from scipy.ndimage.filters import gaussian_laplace
-    h, w = data.shape[-2:]
-    arr = []
-    for frame in data.reshape((-1, h, w)):
-        arr += [gaussian_laplace(frame, *args, **kwargs)]
-    return np.array(arr).reshape(data.shape)
-
 laplace_ndi = applyXY(gaussian_laplace)
     
 def log_ndi(arr, sigma=1, **kwargs):
