@@ -1,5 +1,5 @@
 import pickle
-from lasagna.design import rc
+from lasagna.design import reverse_complement as rc
 from lasagna.sequence import UMIGraph
 import pandas as pd
 import numpy as np

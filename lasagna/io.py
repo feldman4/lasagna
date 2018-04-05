@@ -42,153 +42,47 @@ DIR = {}
 VISITOR_FONT = PIL.ImageFont.truetype(config.visitor_font)
 
 
-def get_file_list(str_or_list):
-    """Get a list of files from a single filename or iterable of filenames. Glob expressions accepted.
-    :param str_or_list: filename, glob, list of filenames, or list of globs
-    :return:
+def binary_contours(img, fix=True, labeled=False):
+    """Find contours of binary image, or labeled if flag set. For labeled regions,
+    returns contour of largest area only.
+    :param img:
+    :return: list of nx2 arrays of [x, y] points along contour of each image.
     """
-    if type(str_or_list) is str:
-        return glob(str_or_list)
-    return [y for x in str_or_list for y in glob(x)]
-
-
-def add_dir(path, dir_to_add):
-    x = path.split('/')
-    return '/'.join(x[:-1] + [dir_to_add] + [x[-1]])
-
-
-def find_files(start='', include='', exclude='', depth=2):
-    # or require glob2
-    files = []
-    for d in range(depth):
-        path_str = '*/' * d + '*.tif'
-        files += glob(os.path.join(start, path_str))
-
-    def keep(f):
-        flag1 = include and not re.findall(include, f)
-        flag2 = exclude and re.findall(exclude, f)
-        return (not flag1 or flag2)
-
-    return filter(keep, files)
-
-
-def well_to_row_col(df, in_place=False, col_to_int=True):
-    if not in_place:
-        df = df.copy()
-    f = lambda s: int(s) if col_to_int else s
-
-    df['row'] = [s[0] for s in df['well']]
-    df['col'] = [f(s[1:]) for s in df['well']]
-
-    return df
-
-
-def get_row_stack(row, full=False, nuclei=False, apply_offset=False, pad=0):
-    """For a given DataFrame row, get image data for full frame or cell extents only.
-    :param row:
-    :param full:
-    :param nuclei:
-    :param apply_offset:
-    :param pad: constant, included on both sides
-    :return:
-    """
-    filename = row[('all', 'file')]
-    if nuclei:
-        filename = config.paths.lookup('nuclei', stitch=row[('all', 'file')])
-    I = _get_stack(filename)
-    if not full:
-        I = subimage(I, row[('all', 'bounds')], pad=pad)
-    if apply_offset:
-        offsets = np.array(I.shape) * 0
-        offsets[-2:] = 1 * row['offset x'], 1 * row['offset y']
-        I = offset(I, offsets)
-
-    return I
-
-
-def compose_rows(df, load_function=lambda x: get_row_stack(x)):
-    """Load and concatenate stacks corresponding to rows in a DataFrame.
-    Stacks are expanded to maximum in each dimension by padding with zeros.
-    :param df: N rows in DataFrame, stacks have shape [m,...,n]
-    :param load_function:
-    :return: ndarray of shape [N,m,...,n]
-    """
-
-    arr_ = []
-    for ix, row in df.iterrows():
-        z = load_function(row).copy()
-        arr_.append(z)
-
-    return pile(arr_)
-
-
-def pile(arr):
-    """Concatenate stacks of same dimensionality along leading dimension. Values are
-    filled from top left of matrix. Fills background with zero.
-    :param arr:
-    :return:
-    """
-    shape = [max(s) for s in zip(*[x.shape for x in arr])]
-    # strange numpy limitations
-    arr_out = []
-    for x in arr:
-        y = np.zeros(shape, x.dtype)
-        slicer = [slice(None, s) for s in x.shape]
-        y[slicer] = x
-        arr_out += [y[None, ...]]
-
-    return np.concatenate(arr_out, axis=0)
-
-
-def montage(arr, shape=None):
-    """tile ND arrays ([..., height, width]) in last two dimensions
-    first N-2 dimensions must match, tiles are expanded to max height and width
-    pads with zero, no spacing
-    if shape=(rows, columns) not provided, defaults to square, clipping last row if empty
-    """
-    sz = zip(*[img.shape for img in arr])
-    h, w, n = max(sz[-2]), max(sz[-1]), len(arr)
-    if not shape:
-        nr = nc = int(np.ceil(np.sqrt(n)))
-        if (nr - 1) * nc >= n:
-            nr -= 1
+    if labeled:
+        regions = skimage.measure.regionprops(img)
+        contours = [sorted(skimage.measure.find_contours(np.pad(r.image, 1, mode='constant'), 0.5, 'high'),
+                key=lambda x: len(x))[-1] for r in regions]
+        contours = [contour + [r.bbox[:2]] for contour,r in zip(contours, regions)]
     else:
-        nr, nc = shape
-    M = np.zeros(arr[0].shape[:-2] + (nr * h, nc * w), dtype=arr[0].dtype)
-
-    for (r, c), img in zip(product(range(nr), range(nc)), arr):
-        s = [[None] for _ in img.shape]
-        s[-2] = (r * h, r * h + img.shape[-2])
-        s[-1] = (c * w, c * w + img.shape[-1])
-        M[[slice(*x) for x in s]] = img
-
-    return M
+        # pad binary image to get outer contours
+        contours = skimage.measure.find_contours(np.pad(img, 1, mode='constant'),
+                                                 level=0.5)
+        contours = [contour - 1 for contour in contours]
+    if fix:
+        return [fixed_contour(c) for c in contours]
+    return contours
 
 
-def tile(arr, m, n, pad=None):
-    """Divide a stack of images into tiles of size m x n. If m or n is between 
-    0 and 1, it specifies a fraction of the input size. If pad is specified, the
-    value is used to fill in edges, otherwise the tiles may not be equally sized.
-    Tiles are returned in a list.
+def fixed_contour(contour):
+    """Fix contour generated from binary mask to exactly match outline.
     """
-    assert arr.ndim > 1
-    h, w = arr.shape[-2:]
-    # convert to number of tiles
-    m_ = h / m if m >= 1 else int(np.round(1 / m))
-    n_ = w / n if n >= 1 else int(np.round(1 / n))
+    # adjusts corner points based on CCW contour
+    def f(x0, y0, x1, y1):
+        d = (x1 - x0, y1 - y0)
+        if not(x0 % 1):
+            x0 += d[0]
+        else:
+            y0 += d[1]
+        return x0, y0
 
-    if pad is not None:
-        pad_width = (arr.ndim - 2) * ((0, 0),) + ((0, -h % m), (0, -w % n))
-        arr = np.pad(arr, pad_width, 'constant', constant_values=pad)
-        print arr.shape
+    x, y = contour.T
+    xy = []
+    for k in range(len(x) - 1):
+        xy += [f(x[k], y[k], x[k + 1], y[k + 1])]
 
-    h_ = int(int(h / m) * m)
-    w_ = int(int(w / n) * n)
+    return np.array(xy)
 
-    tiled = np.array_split(arr[:h_, :w_], m_, axis=-2)
-    tiled = lasagna.utils.concatMap(lambda x: np.array_split(x, n_, axis=-1), tiled)
-    return tiled
-
+    
 
 @lasagna.utils.Memoized
 def _get_stack(name):
@@ -340,56 +234,6 @@ def parse_MM(s):
         raise ValueError('Filename %s does not match MM pattern' % s)
     
 
-def subimage(stack, bbox, pad=0):
-    """Index rectangular region from [...xYxX] stack with optional constant-width padding.
-    Boundary is supplied as (min_row, min_col, max_row, max_col).
-    If boundary lies outside stack, raises error.
-    If padded rectangle extends outside stack, fills with fill_value.
-
-    bbox can be bbox or iterable of bbox (faster if padding)
-    :return:
-    """ 
-    i0, j0, i1, j1 = bbox + np.array([-pad, -pad, pad, pad])
-
-    sub = np.zeros(stack.shape[:-2]+(i1-i0, j1-j0), dtype=stack.dtype)
-
-    i0_, j0_ = max(i0, 0), max(j0, 0)
-    i1_, j1_ = min(i1, stack.shape[-2]), min(j1, stack.shape[-1])
-    s = (Ellipsis, 
-         slice(i0_-i0, (i0_-i0) + i1_-i0_),
-         slice(j0_-j0, (j0_-j0) + j1_-j0_))
-
-    sub[s] = stack[..., i0_:i1_, j0_:j1_]
-    return sub
-
-
-def offset(stack, offsets):
-    """Applies offset to stack, fills with zero. Only applies integer offsets.
-    :param stack: N-dim array
-    :param offsets: list of N offsets
-    :return:
-    """
-    if len(offsets) != stack.ndim:
-        if len(offsets) == 2 and stack.ndim > 2:
-            offsets = [0] * (stack.ndim - 2) + list(offsets)
-        else:
-            raise IndexError("number of offsets must equal stack dimensions, or 2 (trailing dimensions)")
-
-    offsets = np.array(offsets).astype(int)
-
-    n = stack.ndim
-    ns = (slice(None),)
-    for d, offset in enumerate(offsets):
-        stack = np.roll(stack, offset, axis=d)
-        if offset < 0:
-            index = ns * d + (slice(offset, None),) + ns * (n - d - 1)
-            stack[index] = 0
-        if offset > 0:
-            index = ns * d + (slice(None, offset),) + ns * (n - d - 1)
-            stack[index] = 0
-
-    return stack
-
 
 def grid_view(files, bounds, padding=40, with_mask=False):
     """Mask is 1-indexed. Zero values indicate background.
@@ -413,6 +257,7 @@ def grid_view(files, bounds, padding=40, with_mask=False):
     return pile(arr)
 
 
+# ANNOTATE
 def watermark(shape, text, spacing=1, corner='top left'):
     """ Add rasterized text to empty 2D numpy array.
     :param shape: (height, width)
@@ -502,16 +347,6 @@ def mark_blobs(row, n):
     return im
 
 
-def compress_obj(obj):
-    s = StringIO.StringIO()
-    pickle.dump(obj, s)
-    out = zlib.compress(s.getvalue())
-    s.close()
-    return out
-
-
-def decompress_obj(string):
-    return pickle.load(StringIO.StringIO(zlib.decompress(string)))
 
 
 def read_lut(name):
@@ -685,6 +520,8 @@ file_pattern_abs = ''.join(file_pattern)
 file_pattern_rel = ''.join(file_pattern[2:])
         
 
+# FILEPATHS
+
 def parse_filename(filename):
     """Parse filename into dictionary. Some entries in dictionary optional, e.g., cycle and tile.
     """
@@ -701,6 +538,7 @@ def parse_filename(filename):
         return result
     except AttributeError:
         raise ValueError('failed to parse filename: %s' % filename)
+
 
 def name(description, **more_description):
     """Name a file from a dictionary of filename parts. Can override dictionary with keyword arguments.
@@ -731,4 +569,34 @@ def name(description, **more_description):
     optional = lambda x: d.get(x, '')
     filename = os.path.join(optional('home'), optional('dataset'), optional('subdir'), basename)
     return os.path.normpath(filename)
+
+
+def get_file_list(str_or_list):
+    """Get a list of files from a single filename or iterable of filenames. Glob expressions accepted.
+    :param str_or_list: filename, glob, list of filenames, or list of globs
+    :return:
+    """
+    if type(str_or_list) is str:
+        return glob(str_or_list)
+    return [y for x in str_or_list for y in glob(x)]
+
+
+def add_dir(path, dir_to_add):
+    x = path.split('/')
+    return '/'.join(x[:-1] + [dir_to_add] + [x[-1]])
+
+
+def find_files(start='', include='', exclude='', depth=2):
+    # or require glob2
+    files = []
+    for d in range(depth):
+        path_str = '*/' * d + '*.tif'
+        files += glob(os.path.join(start, path_str))
+
+    def keep(f):
+        flag1 = include and not re.findall(include, f)
+        flag2 = exclude and re.findall(exclude, f)
+        return (not flag1 or flag2)
+
+    return filter(keep, files)
 

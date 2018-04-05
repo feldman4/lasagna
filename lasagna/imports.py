@@ -20,21 +20,23 @@ np.mode = scipy.stats.mode
 import lasagna.io
 import lasagna.process
 import lasagna.utils
-from lasagna.utils import standardize, int_mode, categorize, apply_subset
 from lasagna.io import save_stack as save
 from lasagna.io import read_stack as read
 from lasagna.io import show_IJ as show
 from lasagna.io import grab_image as grab
 from lasagna.io import BLUE, GREEN, RED, MAGENTA, GRAY, CYAN, GLASBEY 
-from lasagna.io import pile, montage, grid_view, tile
 from lasagna.io import parse_filename as parse
-from lasagna.io import name
-from lasagna.process import register_images, trim
-import lasagna.config as config
+from lasagna.io import name, grid_view
+from lasagna.process import register_images
+
+from lasagna.utils import standardize, int_mode, categorize, apply_subset
+from lasagna.utils import pile, montage, tile, trim
 from lasagna.utils import start_client
 
+import lasagna.config as config
+
 from lasagna.designs.analyze import *
-from lasagna.design import rc
+from lasagna.design import reverse_complement as rc
 from lasagna.plates import microwells, plate_coordinate
 from lasagna import in_situ
 

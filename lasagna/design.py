@@ -59,7 +59,7 @@ def generate_sequence(GC_content, length):
     return ''.join(DNA[seq])
 
 
-def rc(seq):
+def reverse_complement(seq):
     return ''.join(watson_crick[x] for x in seq)[::-1]
 
 

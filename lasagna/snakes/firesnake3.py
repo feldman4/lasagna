@@ -4,7 +4,7 @@ import json
 import os
 import shutil
 
-WIN_PYTHON2 = 'C:\ProgramData\Anaconda2\python.exe'
+WIN_PYTHON2 = ['C:\ProgramData\Miniconda2\python.exe', 'C:\ProgramData\Anaconda2\python.exe']
 FIRESNAKE2 = __file__.replace('firesnake3', 'firesnake')
 
 def stitch_input(wildcards):
@@ -35,6 +35,12 @@ def call_firesnake(method, output, **info):
 
 def find_python2():
     python2 = shutil.which('python2')
-    if python2 is None:
-        return WIN_PYTHON2
-    return python2
+    if python2 is not None:
+        return python2
+
+    for path in WIN_PYTHON2:
+        if os.path.exists(path):
+            return path
+
+    raise ValueError('python2.exe not found')
+    
