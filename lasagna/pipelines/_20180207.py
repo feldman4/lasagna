@@ -1,6 +1,6 @@
 from lasagna.imports_ipython import *
 from lasagna import in_situ
-from lasagna.plates import plate_coordinate
+import lasagna.plates
 from collections import OrderedDict
 
 FR_gate = 'corr > 0.85 & ha_median > bkgd_median & ha_median > 2500'
@@ -231,7 +231,7 @@ def plot_bc(df_reads3, df_ph, barcode, colors=None, jitter=500, **plot_kws):
     
     files, bounds, df_ph_ = bc_to_files_bounds(df_reads3, df_ph, barcode)
 
-    ij = [plate_coordinate(w, t) for w,t in zip(df_ph_['well'], df_ph_['tile'])]
+    ij = [lasagna.plates.plate_coordinate(w, t) for w,t in zip(df_ph_['well'], df_ph_['tile'])]
     ij = ij + np.random.rand(*np.array(ij).shape) * jitter
     df_ph_['global_x'] = zip(*ij)[1] + df_ph_['x']
     df_ph_['global_y'] = zip(*ij)[0] + df_ph_['y']
@@ -337,15 +337,15 @@ def plot_combined_clustermap(df_reads, df_ph, n_clusters=5, return_clusters=Fals
     from sklearn.cluster import AgglomerativeClustering
     from sklearn.preprocessing import scale
 
-    cols = ['corr', 'ha_median', 'bkgd_median']
     x = (df_ph.fillna(0)
-              .groupby(['well', 'tile'])[cols].mean()
+              .groupby(['well', 'tile']).mean()
         )
 
     cols = list(df_reads.filter(axis=1, regex='Q_\d+').columns)
     y = df_reads.groupby(['well', 'tile'])[cols].mean()
 
-    df_plot = pd.concat([x, y], axis=1)
+    df_plot = pd.concat([x, y], axis=1, join='inner')
+    # return df_plot
     X = standardize(df_plot)
     ag = AgglomerativeClustering(n_clusters)
     ag.fit(X)
@@ -372,7 +372,7 @@ def plot_combined_clustermap(df_reads, df_ph, n_clusters=5, return_clusters=Fals
         pd.Series(labels, index=X.index)
          .rename('cluster')
          .reset_index()
-         .pipe(in_situ.add_global_xy)
+         .pipe(lasagna.plates.add_global_xy)
          .assign(global_x=lambda x: x['global_x'] / 1000, 
                  global_y=lambda x: x['global_y'] / 1000)
          )
