@@ -107,15 +107,6 @@ def call_bases_fast(values, bases='ACGT'):
     calls = np.array(list(bases))[calls]
     return [''.join(x) for x in calls]
 
-# def quality_linear(X):
-#     """
-#     """
-#     X = np.sort(X, axis=-1).astype(float)
-#     P = 15000
-#     Q = (X[..., -1] - X[..., -2]) / P
-#     Q = Q.clip(min=0.0, max=1.0)
-#     return Q
-
 def quality(X, boost=2):
     """X_2 = (X_1)^a, a in [0..1]
     """

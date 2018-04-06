@@ -1,18 +1,37 @@
 from lasagna.imports_ipython import *
 
-def plot_reads_per_cell(df_reads, df_ph):
-    cols = ['well', 'tile', 'cell']
-    x = df_reads.set_index(cols)['cell_barcode_count_0']
-    df = df_ph.join(x, on=cols).fillna(0)
-    s = df['cell_barcode_count_0'].value_counts()
-    
-    t = np.cumsum(s / s.sum())
-    ax = t.reset_index().plot(kind='scatter', x=0, y=1)
-    ax.set_xlabel('reads per cell')
-    ax.set_ylabel('cumulative fraction of cells')
+def plot_reads_per_cell(df_cells, **line_kwargs):
+    ax = \
+    (df_cells
+     ['cell_barcode_count_0'].value_counts()
+     .pipe(lambda x: np.cumsum(x / x.sum()))
+     .rename('cumulative fraction of cells')
+     .rename_axis('reads per cell', axis=0)
+     [:10]
+     .plot.line(**line_kwargs)
+    )
     ax.set_ylim([0, 1.05])
-  
     return ax
+
+
+def plot_mean_quality_per_tile(df_reads):
+    stats_q = (df_reads
+               .filter(regex='Q_\d+|well|tile')
+               .groupby(['well', 'tile'])
+               .mean().dropna()
+               .stack().rename('mean quality per tile').reset_index()
+               .rename(columns={'level_2': 'cycle'})
+              )
+
+    ax = sns.boxplot(data=stats_q, x='cycle', y='mean quality per tile', 
+                     whis=[10, 90])
+    ax.set_ylim([0.3, 1])
+    ax.set_xticklabels(range(1, 11))
+    ax.figure.tight_layout()
+
+    return stats_q, ax
+
+
 
 def groupby_barcode(df_reads):
     gb = df_reads.groupby(['barcode', 'well_6'])
@@ -44,3 +63,27 @@ def plot_roc(y_true, y_score, **kwargs):
     # y_true, y_score = df_plot['design'], df_plot['FR_pos']
     fpr,tpr,thresholds = roc_curve(y_true, y_score, pos_label='FR_GFP_TM')
     plt.plot(fpr, tpr, **kwargs)
+
+
+# from https://github.com/pandas-dev/pandas/issues/18124
+from functools import wraps
+
+def monkey_patch_series_plot():
+    """Makes Series.plot to show series name as ylabel/xlabel according to plot kind."""
+    f = pd.Series.plot.__call__
+    @wraps(f)
+    def _decorator(*kargs, **kwargs):
+        res = f(*kargs, **kwargs)
+        s = kargs[0].__dict__['_data']
+        if s.name:
+            try:
+                kind = kwargs['kind']
+            except KeyError:
+                kind = 'line'
+            if kind == 'line' or kind == 'scatter':
+                plt.ylabel(s.name)
+            elif kind == 'hist':
+                plt.xlabel(s.name)
+        return res
+    pd.Series.plot.__call__ = _decorator
+
