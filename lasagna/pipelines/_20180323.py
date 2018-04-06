@@ -33,8 +33,16 @@ def copy_tif_to_process_dir(f, rows, cols):
 def select(x):
     return ''.join(x[i-1] for i in (1,2,3,6,7,8,9,10,11,12))
 
-def load_NGS_hists():
+
+def load_gDNA_NGS_hists():
     search = '/Users/feldman/lasagna/NGS/20180325_AS/cLas41_46/T1_B0[123]*hist'
+    return load_NGS_hists(search)
+
+def load_pDNA_NGS_hists():
+    search = '/Users/feldman/lasagna/NGS/20180325_AS/pLL_plasmid/T1_A0[12]*hist'
+    return load_NGS_hists(search)
+    
+def load_NGS_hists(search):
     files = glob(search)
     wells = ['A1_NGS', 'A2_NGS', 'A3_NGS']
     arr = []
@@ -46,6 +54,7 @@ def load_NGS_hists():
          .assign(length=lambda x: x['barcode_full'].map(len))
          .query('length == 12')
          .assign(barcode=lambda x: x['barcode_full'].map(select))
+         .assign(fraction=lambda x: np.log10(x['count']/x['count'].sum()))
          .pipe(arr.append))
         
     df_ngs = pd.concat(arr)
