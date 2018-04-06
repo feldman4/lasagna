@@ -13,6 +13,7 @@ def plot_reads_per_cell(df_cells, **line_kwargs):
     ax.set_ylim([0, 1.05])
     return ax
 
+<<<<<<< HEAD
 
 def plot_red_blue_scatter(df_cells, df_design):
     stats = calculate_barcode_stats(df_cells, df_design)
@@ -73,6 +74,8 @@ def calculate_barcode_stats(df_cells, df_design):
 
 
 
+=======
+>>>>>>> e22d86573683cdaf9bd8bacea25fe5d345cc9022
 def plot_mean_quality_per_tile(df_reads):
     stats_q = (df_reads
                .filter(regex='Q_\d+|well|tile')
@@ -89,8 +92,6 @@ def plot_mean_quality_per_tile(df_reads):
     ax.figure.tight_layout()
 
     return stats_q, ax
-
-
 
 def groupby_barcode(df_reads):
     gb = df_reads.groupby(['barcode', 'well_6'])
@@ -122,7 +123,6 @@ def plot_roc(y_true, y_score, **kwargs):
     # y_true, y_score = df_plot['design'], df_plot['FR_pos']
     fpr,tpr,thresholds = roc_curve(y_true, y_score, pos_label='FR_GFP_TM')
     plt.plot(fpr, tpr, **kwargs)
-
 
 # from https://github.com/pandas-dev/pandas/issues/18124
 from functools import wraps
