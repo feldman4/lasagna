@@ -372,16 +372,17 @@ def plot_combined_clustermap(df_reads, df_ph, n_clusters=5, return_clusters=Fals
         pd.Series(labels, index=X.index)
          .rename('cluster')
          .reset_index()
-         .pipe(lasagna.plates.add_global_xy)
+         .pipe(lasagna.plates.add_global_xy, '6w', grid_shape=(25, 25))
          .assign(global_x=lambda x: x['global_x'] / 1000, 
                  global_y=lambda x: x['global_y'] / 1000)
          )
     cluster_series.plot.scatter(x='global_x', y='global_y', 
-                       c=colors, s=100, ax=ax)
+                       c=colors, s=40, ax=ax)
 
     ax.set_xlabel('x (mm)')
     ax.set_ylabel('y (mm)')
     ax.set_title('tiles clustered by quality and phenotype')
+    ax.axis('equal')
 
     if return_clusters:
         return cg, cluster_series

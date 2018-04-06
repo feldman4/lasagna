@@ -14,6 +14,65 @@ def plot_reads_per_cell(df_cells, **line_kwargs):
     return ax
 
 
+def plot_red_blue_scatter(df_cells, df_design):
+    stats = calculate_barcode_stats(df_cells, df_design)
+    fg = (stats
+     .pipe(sns.FacetGrid, hue='sgRNA type', palette=['blue', 'red'], size=6)
+     .map(plt.scatter, 'cells per barcode', 'fraction positive cells', 
+          s=20, alpha=0.7))
+
+    fg.add_legend()
+    ax = fg.axes.flat[0]
+    ax.set_xscale('log')
+    ax.set_xlim([10, 3000])
+    return fg
+
+def plot_sgRNA_phenotype_box(df_cells, df_design):
+    stats = calculate_barcode_stats(df_cells, df_design)
+    cell_threshold = 100
+
+    ax = \
+    (stats
+     .sort_values('sgRNA_name')
+     .pipe(lambda x: x[x['cells per barcode'] > cell_threshold])
+     .pipe(lambda x: sns.boxplot(data=x, x='sgRNA_name', 
+                     y='fraction positive cells', 
+                     hue='sgRNA type'))
+    )
+    num = stats['cells per barcode'] > cell_threshold
+
+    ax.set_xticklabels([])
+    ax.set_xlabel('sgRNA')
+    ax.set_title('showing %d/%d barcodes above %d cells' % (num.sum(), len(num), cell_threshold))
+    ax.legend(bbox_to_anchor=(1.05, 1), loc=2, borderaxespad=0.)
+    
+    return ax
+
+
+def calculate_barcode_stats(df_cells, df_design):
+    gb = (df_cells
+      .query('subpool == "pool2_1"')
+      .groupby('cell_barcode_0'))
+    A = (gb.size().rename('cells per barcode'))
+    B = (gb['FR_pos']
+         .mean().clip(upper=0.13)
+         .rename('fraction positive cells'))
+
+    s = df_design.set_index('barcode')[['sgRNA_design', 'sgRNA_name']]
+    stats = (pd.concat([A, B], axis=1).reset_index()
+               .join(s, on='cell_barcode_0'))
+
+    rename = lambda x: 'targeting' if x == 'FR_GFP_TM' else 'nontargeting'
+    stats['sgRNA type'] = stats['sgRNA_design'].apply(rename)
+    return stats
+
+
+####
+
+
+
+
+
 def plot_mean_quality_per_tile(df_reads):
     stats_q = (df_reads
                .filter(regex='Q_\d+|well|tile')
