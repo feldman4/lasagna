@@ -1,0 +1,51 @@
+from glob import glob
+import firesnake
+import json
+
+
+import snakemake
+from firesnake3 import call_firesnake
+
+# snakemake.ignore_missing = True
+
+PYTHON2 = 'C:\ProgramData\Anaconda2\python.exe'
+
+WELLS = ['A1', 'A2', 'A4', 'A5', 'B2', 'B4', 'B5', 'C1', 'C5']
+SITES = [str(x) for x in range(13 * 13)]
+
+TILE_CONFIG = 'registered/TileConfiguration_60X_endo_5_w_A1.registered.txt'
+
+DISPLAY_RANGES=((500, 50000), 
+                (500, 10000), 
+                (500, 10000), 
+                (500, 10000), 
+                (500, 10000))
+
+
+def stitch_input(wildcards):
+    search = '*/60X_endo_*_MMStack_{well}-Site_*.ome.tif'.format(well=wildcards.well)
+    files = sorted(glob(search))
+    # print(search, len(files))
+    assert len(files) == len(SITES)
+    return files
+
+
+rule all:
+    input:
+        expand('process/20X_{well}.log.tif', well=WELLS)
+
+rule stitch:
+    input: 
+        stitch_input
+    output:
+        'process/20X_{well}.stitched.tif'
+    run:
+        call_firesnake(input, output, 'stitch', tile_config=TILE_CONFIG, display_ranges=DISPLAY_RANGES)
+
+rule transform_LoG:
+    input:
+        'process/20X_{well}.stitched.tif'
+    output:
+        'process/20X_{well}.log.tif'
+    run:
+        call_firesnake(input, output, 'transform_LoG', display_ranges=DISPLAY_RANGES)

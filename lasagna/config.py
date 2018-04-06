@@ -2,10 +2,8 @@ import os
 import pandas as pd
 import lasagna.conditions_
 import lasagna.utils
-import lasagna.io
 
-up = os.path.dirname
-home = up(__file__)
+home = os.path.dirname(__file__)
 paths = None
 calibration = None
 calibration_short = None
@@ -14,14 +12,19 @@ paths = type('', (), {})()
 paths.full = lambda s: s
 experiment = None
 
+fiji_target = os.path.expanduser('~/transfer/')
+
 fonts = os.path.join(home, 'resources', 'fonts')
 luts = os.path.join(home, 'resources', 'luts')
 
 visitor_font = os.path.join(fonts, 'visitor1.ttf')
 
 credentials = os.path.join(home, 'resources', 'gspread-da2f80418147.json')
+wolfram     = os.path.join(home, 'resources', 'wolfram.txt')
 
 cloning = None
+# overwritten by j = lasagna.config.j = lasagna.utils.start_client()
+j = None
 
 # relative magnification, empirical
 magnification = {'100X': 0.066,
@@ -35,8 +38,10 @@ def get_appender(queue):
     return appender
     
 queue = []
-thread = lasagna.utils.launch_queue(queue)
+queue_log = []
+thread = lasagna.utils.launch_queue(queue, queue_log)
 queue_appender = get_appender(queue)
+
 
 
 def load_sheets():
@@ -69,6 +74,7 @@ def set_linear_model_defaults(model):
     :return:
     """
     pr = cloning['probes']
+    pr = lasagna.utils.comma_split(pr, 'targets')
     pr['oligos'] = pr['oligos'].convert_objects(convert_numeric=True).fillna(0)
     x = pr.reset_index().pivot_table(values='oligos', fill_value=0, index='name', columns='targets')
 
@@ -76,8 +82,8 @@ def set_linear_model_defaults(model):
     tiles = {k: v.split(', ') for k,v in dict(tiles).items()}
 
     B = pd.DataFrame()
-    for barcode, tiles in tiles.items():
-        B[barcode] = x[tiles].sum(axis=1)
+    for barcode, tiles_ in tiles.items():
+        B[barcode] = x[tiles_].sum(axis=1)
 
     model.tables['B'] = B
     model.tables['C'] = (cloning['dyes'].drop('dummy', 1)

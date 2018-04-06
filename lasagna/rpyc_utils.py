@@ -1,6 +1,10 @@
 import sys
-sys.path.append('/Users/feldman/anaconda/lib/python2.7/site-packages')
+import os
+p = os.path.expanduser('~/anaconda/lib/python2.7/site-packages')
+sys.path.append(p)
+sys.path.append('/anaconda/lib/python2.7/site-packages')
 sys.path.append('C:\\Users\\Blaineylab\\Anaconda2\\lib\\site-packages')
+
 
 import rpyc.utils.server
 import threading

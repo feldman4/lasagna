@@ -1,4 +1,8 @@
 /lasagna/resources/gspread-da2f80418147.json
+/lasagna/resources/wolfram.txt
 *.pyc
-*/*.pyc
-
+*.class
+.DS_Store
+.idea/*
+*.ipynb
+Lasagna.egg-info

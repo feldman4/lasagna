@@ -129,36 +129,39 @@ def segment_cells(nuclei, mask, small_holes=100, remove_boundary_cells=True):
     time = skfmm.travel_time(phi, speed).astype(np.uint16)
     time[nuclei>0] = 0
 
-    w = skimage.morphology.watershed(time, nuclei)
-
-    if remove_boundary_cells:
-        cut = w[0,:], w[-1,:], w[:,0], w[:,-1]
-        w.flat[np.in1d(w, np.unique(cut))] = 0
-        w = skimage.measure.label(w)
+    cells = skimage.morphology.watershed(time, nuclei)
 
     # apply mask
-    w[mask==0] = 0
-    w = skimage.morphology.closing(w)
+    cells[mask==0] = 0
 
     # only take biggest component for each cell
-    relabeled = skimage.measure.label(w, background=0) + 1
-    relabeled[w==0] = 0
-    regions = skimage.measure.regionprops(relabeled, 
-                                          intensity_image=nuclei)
-    cut = [reg.label for reg in regions if reg.intensity_image.max() == 0]
-    relabeled.flat[np.in1d(relabeled, np.unique(cut))] = 0
+    bkgd = cells == 0
+    cells = skimage.measure.label(cells, background=0) + 1
+    cells[bkgd] = 0
 
-    # fill small holes
-    holes = skimage.measure.label(relabeled==0, background=0) + 1
+    # remove cells that don't overlap nuclei
+    regions = skimage.measure.regionprops(cells, intensity_image=nuclei)
+    cut = [reg.label for reg in regions if reg.intensity_image.max() == 0]
+    cells.flat[np.in1d(cells, np.unique(cut))] = 0
+
+    # remove cells touching the boundary
+    if remove_boundary_cells:
+        cut = np.concatenate([cells[0,:], cells[-1,:], 
+                              cells[:,0], cells[:,-1]])
+        cells.flat[np.in1d(cells, np.unique(cut))] = 0
+        cells = skimage.measure.label(cells)
+
+    # assign small holes to neighboring cell with most contact
+    holes = skimage.measure.label(cells==0, background=0) + 1
     regions = skimage.measure.regionprops(holes,
-                intensity_image=skimage.morphology.dilation(relabeled))
+                intensity_image=skimage.morphology.dilation(cells))
 
     for reg in regions:
         if reg.area < small_holes:
             vals = reg.intensity_image[reg.intensity_image>0]
-            relabeled[holes == reg.label] = scipy.stats.mode(vals)[0][0]
+            cells[holes == reg.label] = scipy.stats.mode(vals)[0][0]
 
-    return relabeled
+    return cells.astype(np.uint16)
 
 
 
@@ -244,7 +247,7 @@ def prepare_linear_model():
 
 
 
-def stitch(df, translations=None, clip=True):
+def stitch(data, translations, edge=0.7, edge_width=0.03, clip=True):
     """Stitches images with alpha blending, provided Paths DataFrame with tile filenames in column
     'calibrated' and TileConfiguration.registered.txt file (from GridCollection stitching) with location
     stored in pipeline.tile_configuration. Alternately, provide list of translations (xy).
@@ -258,21 +261,14 @@ def stitch(df, translations=None, clip=True):
     if isinstance(translations, str):
         translations = lasagna.io.load_tile_configuration(translations)
 
-    # kluge for 5x5 vs 3x3 grids present in some data
-    grid_size = int(np.sqrt(len(df['calibrated']))) * np.array([1, 1])
-
-    save_name = lasagna.config.paths.full(df['stitched'][0])
-    print save_name
-    files = np.array([f for f in df['calibrated']]).reshape(grid_size)
-    data = np.array([[lasagna.io.read_stack(lasagna.config.paths.full(x)) for x in y] for y in files])
-    print data.shape
     arr = []
-    for channel in range(data.shape[2]):
-        arr += [lasagna.process.alpha_blend(data[:, :, channel].reshape(-1, *data.shape[-2:]),
-                                            translations, edge=0.48,
-                                            edge_width=0.01,
-                                            clip=clip)]
+    arr = lasagna.process.alpha_blend(np.array(data),
+                                            translations, edge=edge,
+                                            edge_width=edge_width,
+                                            clip=clip)
 
-    lasagna.io.save_hyperstack(save_name, np.array(arr), display_ranges=display_ranges, luts=luts)
+    return np.array(arr)
+
+
 
 

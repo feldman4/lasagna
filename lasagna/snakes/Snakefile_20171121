@@ -1,0 +1,70 @@
+from glob import glob
+import firesnake
+import json
+
+
+import snakemake
+from firesnake3 import call_firesnake
+
+# snakemake.ignore_missing = True
+
+PYTHON2 = 'C:\ProgramData\Anaconda2\python.exe'
+
+WELLS = [r + str(c) for r in 'BCFG' for c in (2,3,6,7,10,11)]
+TILE_SHAPE = (3, 3)
+SITE_SHAPE = (15, 15)
+
+TILES = map(str, range(TILE_SHAPE[0] * TILE_SHAPE[1]))
+SITES = map(str, range(SITE_SHAPE[0] * SITE_SHAPE[1])) 
+
+TILE_CONFIG = 'registered/TileConfiguration_batch_B2.registered.txt'
+
+DISPLAY_RANGES=((500, 65000), 
+                (500, 65000), 
+                (500, 65000), 
+                (500, 65000), 
+                (500, 15000))
+
+
+
+def stitch_input(wildcards):
+    # doesn't respect wildcard constraints
+    format_ = 'process/20X_{cycle}/20X_{cycle}_{well}_Site-{{site}}.max.tif'.format(**wildcards)
+    sites = firesnake.stitch_input_sites(wildcards['tile'], site_shape=SITE_SHAPE, tile_shape=TILE_SHAPE)
+    inputs = []
+    for site in sites:
+        inputs.append(format_.format(site=site))
+    return inputs
+
+
+rule all:
+    input:
+        expand('process/20X_{cycle}_{well}_Tile-{tile}.stitched.tif', cycle=DAPI, well=WELLS, tile=TILES)
+        # expand('process/20X_{well}_Tile-{tile}.nuclei.tif'. well=WELLS, tile=TILES)
+
+
+rule stitch:
+    input: 
+        stitch_input
+    output:
+        'process/20X_{cycle}_{well}_Tile-{tile}.stitched.tif'
+    run:
+        call_firesnake(input, output, 'stitch', tile_config=TILE_CONFIG, display_ranges=DISPLAY_RANGES)
+
+
+rule segment_nuclei:
+    input:
+        'process/20X_{cycle}_{{well}}_Tile-{{tile}}.stitched.tif'.format(cycle=PHENOTYPE) # DO
+    output:
+        'process/20X_{well}_Tile-{tile}.nuclei.tif'
+    run:
+        call_firesnake(input, output, 'segment_nuclei', threshold=1500, area_min=250, area_max=800)
+
+rule segment_cells:
+    input:
+        'process/20X_{well}_Tile-{tile}.aligned.tif',
+        'process/20X_{well}_Tile-{tile}.nuclei.tif'
+    output:
+        'process/20X_{well}_Tile-{tile}.cells.tif'
+    run:
+        call_firesnake(input, output, 'segment_cells')

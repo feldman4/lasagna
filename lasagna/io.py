@@ -2,7 +2,6 @@ from itertools import product
 import skimage.morphology
 from lasagna import config
 import lasagna.utils
-from glob import glob
 import pandas
 import struct
 import os
@@ -14,18 +13,20 @@ import numpy as np
 from numpy.lib.stride_tricks import as_strided
 import regex as re
 import StringIO, pickle, zlib
-from skimage.external.tifffile import TiffFile, imsave, imread
+from lasagna.external.tifffile_old import TiffFile, imsave, imread
 
 imagej_description = ''.join(['ImageJ=1.49v\nimages=%d\nchannels=%d\nslices=%d',
                               '\nframes=%d\nhyperstack=true\nmode=composite',
                               '\nunit=\\u00B5m\nspacing=8.0\nloop=false\n',
                               'min=764.0\nmax=38220.0\n'])
 
-UM_PER_PX = {'40X': 0.44,
-             '20X': 0.22}
+UM_PER_PX = {'10X' : 0.66,
+             '20X' : 0.33,
+             '40X' : 0.175,
+             '60X' : 0.11,
+             '100X': 0.066}
 
 BINNING = 2
-OBJECTIVE = '40X'
 
 RED = tuple(range(256) + [0] * 512)
 GREEN = tuple([0] * 256 + range(256) + [0] * 256)
@@ -34,131 +35,54 @@ MAGENTA = tuple(range(256) + [0] * 256 + range(256))
 GRAY = tuple(range(256) * 3)
 CYAN = tuple([0] * 256 + range(256) * 2)
 
-DEFAULT_LUTS = BLUE, GREEN, RED, MAGENTA, GRAY, GRAY, GRAY
+DEFAULT_LUTS = GRAY, CYAN, GREEN, RED, MAGENTA, GRAY, GRAY, GRAY
 
 DIR = {}
 
 VISITOR_FONT = PIL.ImageFont.truetype(config.visitor_font)
 
 
-def get_file_list(str_or_list):
-    """Get a list of files from a single filename or iterable of filenames. Glob expressions accepted.
-    :param str_or_list: filename, glob, list of filenames, or list of globs
-    :return:
+def binary_contours(img, fix=True, labeled=False):
+    """Find contours of binary image, or labeled if flag set. For labeled regions,
+    returns contour of largest area only.
+    :param img:
+    :return: list of nx2 arrays of [x, y] points along contour of each image.
     """
-    if type(str_or_list) is str:
-        return glob(str_or_list)
-    return [y for x in str_or_list for y in glob(x)]
-
-
-def add_dir(path, dir_to_add):
-    x = path.split('/')
-    return '/'.join(x[:-1] + [dir_to_add] + [x[-1]])
-
-
-def read_stack(filename, master=None, memmap=False):
-    if config.paths:
-        filename = config.paths.full(filename)
-    if master:
-        TF = _load_tifffile(master)
-        names = [s.pages[0].parent.filename for s in TF.series]
-        index = names.index(filename.split('/')[-1])
-        page = TF.series[index].pages[0]
-        data = TF.asarray(series=index, memmap=memmap)
+    if labeled:
+        regions = skimage.measure.regionprops(img)
+        contours = [sorted(skimage.measure.find_contours(np.pad(r.image, 1, mode='constant'), 0.5, 'high'),
+                key=lambda x: len(x))[-1] for r in regions]
+        contours = [contour + [r.bbox[:2]] for contour,r in zip(contours, regions)]
     else:
-        data = imread(filename, multifile=False, memmap=memmap)
-    while data.shape[0] == 1:
-        data = np.squeeze(data, axis=(0,))
-    return data
+        # pad binary image to get outer contours
+        contours = skimage.measure.find_contours(np.pad(img, 1, mode='constant'),
+                                                 level=0.5)
+        contours = [contour - 1 for contour in contours]
+    if fix:
+        return [fixed_contour(c) for c in contours]
+    return contours
 
 
-# save load time, will bring trouble if the TiffFile reference is closed
-@lasagna.utils.Memoized
-def _load_tifffile(master):
-    return TiffFile(master)
-
-
-def get_row_stack(row, full=False, nuclei=False, apply_offset=False, pad=(0, 0)):
-    """For a given DataFrame row, get image data for full frame or cell extents only.
-    :param row:
-    :param full:
-    :param nuclei:
-    :param apply_offset:
-    :param pad: (height, width), adds to both sides
-    :return:
+def fixed_contour(contour):
+    """Fix contour generated from binary mask to exactly match outline.
     """
-    filename = row[('all', 'file')]
-    if nuclei:
-        filename = config.paths.lookup('nuclei', stitch=row[('all', 'file')])
-    I = _get_stack(filename)
-    if full is False:
-        I = I[b_idx(row, padding=(pad, I.shape))]
-    if apply_offset:
-        offsets = np.array(I.shape) * 0
-        offsets[-2:] = 1 * row['offset x'], 1 * row['offset y']
-        I = offset_stack(I, offsets)
+    # adjusts corner points based on CCW contour
+    def f(x0, y0, x1, y1):
+        d = (x1 - x0, y1 - y0)
+        if not(x0 % 1):
+            x0 += d[0]
+        else:
+            y0 += d[1]
+        return x0, y0
 
-    return I
+    x, y = contour.T
+    xy = []
+    for k in range(len(x) - 1):
+        xy += [f(x[k], y[k], x[k + 1], y[k + 1])]
 
+    return np.array(xy)
 
-def compose_rows(df, load_function=lambda x: get_row_stack(x)):
-    """Load and concatenate stacks corresponding to rows in a DataFrame.
-    Stacks are expanded to maximum in each dimension by padding with zeros.
-    :param df: N rows in DataFrame, stacks have shape [m,...,n]
-    :param load_function:
-    :return: ndarray of shape [N,m,...,n]
-    """
-
-    arr_ = []
-    for ix, row in df.iterrows():
-        z = load_function(row).copy()
-        arr_.append(z)
-
-    return compose_stacks(arr_)
-
-
-def compose_stacks(arr_):
-    """Concatenate stacks of same dimensionality along leading dimension. Values are
-    filled from top left of matrix. Fills background with zero.
-    :param arr_:
-    :return:
-    """
-    shape = [max(s) for s in zip(*[x.shape for x in arr_])]
-    # strange numpy limitations
-    arr_out = []
-    for x in arr_:
-        y = np.zeros(shape, x.dtype)
-        slicer = [slice(None, s) for s in x.shape]
-        y[slicer] = x
-        arr_out += [y[None, ...]]
-
-    return np.concatenate(arr_out, axis=0)
-
-
-def montage(arr, shape=None):
-    """tile ND arrays ([..., height, width]) in last two dimensions
-    first N-2 dimensions must match, tiles are expanded to max height and width
-    pads with zero, no spacing
-    if shape=(rows, columns) not provided, defaults to square, clipping last row if empty
-    """
-    sz = zip(*[img.shape for img in arr])
-    h, w, n = max(sz[-2]), max(sz[-1]), len(arr)
-    if not shape:
-        nr = nc = int(np.ceil(np.sqrt(n)))
-        if (nr - 1) * nc >= n:
-            nr -= 1
-    else:
-        nr, nc = shape
-    M = np.zeros(arr[0].shape[:-2] + (nr * h, nc * w), dtype=arr[0].dtype)
-
-    for (r, c), img in zip(product(range(nr), range(nc)), arr):
-        s = [[None] for _ in img.shape]
-        s[-2] = (r * h, r * h + img.shape[-2])
-        s[-1] = (c * w, c * w + img.shape[-1])
-        M[[slice(*x) for x in s]] = img
-
-    return M
-
+    
 
 @lasagna.utils.Memoized
 def _get_stack(name):
@@ -169,36 +93,68 @@ def _get_stack(name):
 
 
 # TODO fix extension of luts and display_ranges when not provided
-def save_hyperstack(name, data, autocast=True, resolution=None,
-                    luts=None, display_ranges=None, compress=0,
-                    auto_make_dir=True):
-    """input ND array dimensions as ([time], [z slice], channel, y, x)
+def save_stack(name, data, luts=None, display_ranges=None, 
+               resolution=1., compress=0):
+    """
+    :param data: numpy array with 5, 4, 3, or 2 dimensions [TxZxCxYxX]. float64 
+        is automatically converted to float32 for ImageJ compatibility
+    :type data: array[...xYxX](bool | uint8 | uint16 | float32 | float64)
+
+    :param resolution: resolution in microns per pixel
+
+
+
+    input ND array dimensions as ([time], [z slice], channel, y, x)
     leading dimensions beyond 5 could be wrapped into time, not implemented
     if no lut provided, use default and pad extra channels with GRAY
     """
-    if name[-4:] != '.tif':
+    
+    if name.split('.')[-1] != 'tif':
         name += '.tif'
+    name = os.path.abspath(name)
+
+    if isinstance(data, list):
+        data = np.array(data)
+
     if data.ndim == 2:
-        data = data[np.newaxis, :, :]
-    if not os.path.isabs(name):
-        name = config.paths.full(name)
+        data = data[None]
+
+    if (data.dtype == np.int64):
+        if (data>=0).all() and (data<2**16).all():
+            data = data.astype(np.uint16)
+            print 'Cast int64 to int16 without loss'
+        else:
+            data = data.astype(np.float32)
+            print 'Cast int64 to float32'
+    if data.dtype == np.float64:
+        data = data.astype(np.float32)
+        print 'Cast float64 to float32'
+
+    if data.dtype == np.bool:
+        data = 255 * data.astype(np.uint8)
+
+    if not data.dtype in (np.uint8, np.uint16, np.float32):
+        raise ValueError('Cannot save data of type %s' % data.dtype)
 
     nchannels = data.shape[-3]
-    if resolution is None:
-        resolution = (1. / (UM_PER_PX[OBJECTIVE] * BINNING),) * 2
+
+    if isinstance(resolution, str):
+        resolution = UM_PER_PX[resolution] * BINNING
+    resolution = (1./resolution,)*2
+    resolution[0]
+
     if luts is None:
-        luts = [x for x, _ in zip(DEFAULT_LUTS + (GRAY,) * nchannels, range(nchannels))]
+        luts = DEFAULT_LUTS + (GRAY,) * nchannels
+
     if display_ranges is None:
         display_ranges = tuple([(x.min(), x.max())
                                 for x in np.rollaxis(data, -3)])
 
-    if len(luts) != len(display_ranges) or len(luts) != data.shape[-3]:
-        raise ValueError('lookup table, display ranges, and data shape must match')
-
-    # convert to uint16
-    tmp = data.copy()
-    if autocast:
-        tmp = tmp.astype(np.uint16)
+    try:
+        luts = luts[:nchannels]
+        display_ranges = display_ranges[:nchannels]
+    except IndexError:
+        raise IndexError('Must provide at least %d luts and display ranges' % nchannels)
 
     # metadata encoding LUTs and display ranges
     # see http://rsb.info.nih.gov/ij/developer/source/ij/io/TiffEncoder.java.html
@@ -206,11 +162,10 @@ def save_hyperstack(name, data, autocast=True, resolution=None,
     tag_50838 = ij_tag_50838(nchannels)
     tag_50839 = ij_tag_50839(luts, display_ranges)
 
-    if os.path.dirname(name):
-        if auto_make_dir and not os.path.isdir(os.path.dirname(name)):
-            os.makedirs(os.path.dirname(name))
+    if not os.path.isdir(os.path.dirname(name)):
+        os.makedirs(os.path.dirname(name))
 
-    imsave(name, tmp, photometric='minisblack',
+    imsave(name, data, photometric='minisblack',
            description=description, resolution=resolution, compress=compress,
            extratags=[(50838, 'I', len(tag_50838), tag_50838, True),
                       (50839, 'B', len(tag_50839), tag_50839, True),
@@ -263,228 +218,46 @@ def ij_tag_50839(luts, display_ranges):
     return tag + tuple(sum([list(x) for x in luts], []))
 
 
-# helper functions for loading
-def sort_by_site(s):
-    return ''.join(get_well_site(s)[::-1])
-
-
-def get_well_site(s):
-    """Return well and site from a MicroManager MDA filename, e.g.:
-    100X_round1_1_MMStack_A1-Site_15.ome.tif => (A1, 15)
+def parse_MM(s):
+    """Parses Micro-Manager MDA filename.
+    100X_round1_1_MMStack_A1-Site_15.ome.tif => ('100X', 1,  'A1', 15)
+    100X_scan_1_MMStack_A1-Site_15.ome.tif => ('100X', None, 'A1', 15)
     """
-    match = re.search('_(..)-Site_([0-9]*)', s)
-    if match:
-        well, site = match.groups(1)
-        return well, int(site)
-    match = re.search('([A-H][0-9]*)_', s)
-    if match:
-        well = match.groups(1)
-        return well[0], 0
-    print s
-    raise NameError('FuckYouError')
+    pat = '.*?([0-9]*X).*?([a-zA-Z]+([0-9])*).*_MMStack_(.*)-Site_([0-9]*).*'
+    m = re.match(pat, s)
+    try:
+        mag, _, rnd, well, site = m.groups()
+        if rnd:
+            rnd = int(rnd)
+        return mag, rnd, well, int(site)
+    except TypeError:
+        raise ValueError('Filename %s does not match MM pattern' % s)
+    
 
 
-def get_round(s):
-    match = re.search('round([0-9]*)', s)
-    if match:
-        return int(match.groups(1)[0])
-    return 0
-
-
-def get_magnification(s):
-    match = re.search('([0-9]+X)', s)
-    if match:
-        return match.groups(1)[0]
-
-
-def b_idx(row, bounds=None, padding=None):
-    """For a given DataFrame row, get slice index to cell in original data. Assumes bounds constrain
-    trailing two dimensions, keeps remainder [..., height, width].
-    :param row:
-    :return:
+def grid_view(files, bounds, padding=40, with_mask=False):
+    """Mask is 1-indexed. Zero values indicate background.
     """
-    if bounds is None:
-        bounds = row[('all', 'bounds')]
-    if padding:
-        pad, shape = padding
-        bounds = bounds[0] - pad[0], bounds[1] - pad[1], bounds[2] + pad[0], bounds[3] + pad[1]
-        bounds = max(bounds[0], 0), max(bounds[1], 0), min(bounds[2], shape[-2]), min(bounds[3], shape[-1])
-    return Ellipsis, slice(bounds[0], bounds[2]), slice(bounds[1], bounds[3])
+    padding = int(padding)
+
+    arr = []
+    for filename, bounds_ in zip(files, bounds):
+        I = read_stack(filename, memmap=False, copy=False) # some memory issue right now
+        I_cell = subimage(I, bounds_, pad=padding)
+        arr.append(I_cell.copy())
+
+    if with_mask:
+        arr_m = []
+        for i, (i0, j0, i1, j1) in enumerate(bounds):
+            shape = i1 - i0 + padding, j1 - j0 + padding
+            img = np.zeros(shape, dtype=np.uint16) + i + 1
+            arr_m += [img]
+        return pile(arr), pile(arr_m)
+
+    return pile(arr)
 
 
-def offset_stack(stack, offsets):
-    """Applies offset to stack, fills with zero.
-    :param stack: N-dim array
-    :param offsets: list of N offsets
-    :return:
-    """
-    if len(offsets) != stack.ndim:
-        if len(offsets) == 2 and stack.ndim > 2:
-            offsets = [0] * (stack.ndim - 2) + list(offsets)
-        else:
-            raise IndexError("number of offsets must equal stack dimensions, or 2 (trailing dimensions)")
-    n = stack.ndim
-    ns = (slice(None),)
-    for d, offset in enumerate(offsets):
-        stack = np.roll(stack, offset, axis=d)
-        if offset < 0:
-            index = ns * d + (slice(offset, None),) + ns * (n - d - 1)
-            stack[index] = 0
-        if offset > 0:
-            index = ns * d + (slice(None, offset),) + ns * (n - d - 1)
-            stack[index] = 0
-
-    return stack
-
-
-default_dirs = {'raw': 'raw',
-                'data': 'data',
-                'analysis': 'analysis',
-                'nuclei': 'analysis/nuclei',
-                'stitch': 'stitch',
-                'calibration': 'calibration',
-                'export': 'export'}
-
-default_file_pattern = '(data)/((([0-9]*X).*round([0-9]))*.*)/(((.*_([A-Z][0-9]))-Site_([0-9]*)).ome.tif)'
-default_file_groups = 'data', 'set', '', 'mag', 'round', 'file', 'file_well_site', 'file_well', 'well', 'site'
-default_path_formula = {'raw': '[data]/[set]/[file]',
-                        'calibrated': '[data]/[set]/[file_well_site].calibrated.tif',
-                        'stitched': '[data]/[set]/[file_well].stitched.tif',
-                        'aligned': '[data]/aligned/[mag]/[well].aligned.tif',
-                        'aligned_FFT': '[data]/aligned/[mag]/[well].aligned.FFT.tif',
-                        'nuclei': '[data]/aligned/[mag]/[well].aligned.nuclei.tif',
-                        }
-default_table_index = {'mag': str,
-                       'round': float,
-                       'set': str,
-                       'well': str,
-                       'site': int}
-
-
-class Paths(object):
-    def __init__(self, dataset, lasagna_path='/broad/blainey_lab/David/lasagna',
-                 sub_dirs=None):
-        """Store file paths relative to lasagna_path, allowing dataset to be loaded in different
-        absolute locations. Retrieve raw files, stitched files, and nuclei. Pass stitch name and
-        get nuclei name. Store path to calibration information.
-
-        Path information stored in DataFrame paths.table, e.g.,
-        paths.table.find(mag='60X', round=1)
-
-        :param dataset:
-        :param lasagna_path:
-        :return:
-        """
-        self.calibrations = []
-        self.datafiles = []
-        self.dirs = default_dirs if sub_dirs is None else sub_dirs
-        self.table = None
-        self.dataset = dataset
-        # resolve path, strip trailing slashes
-        self.lasagna_path = os.path.abspath(lasagna_path)
-
-        self.update_datafiles()
-        self.update_table()
-        self.update_calibration()
-
-    def full(self, *args):
-        """Prepend dataset location, multiple arguments are joined. If given an absolute
-        path, just return it..
-        :param args:
-        :return:
-        """
-        if args and os.path.isabs(args[0]):
-            return args[0]
-        return os.path.join(self.lasagna_path, self.dataset, *args)
-
-    def export(self, *args):
-        """Shortcut to export directory.
-        :param args:
-        :return:
-        """
-        return self.full(self.dirs['export'], *args)
-
-    def relative(self, s):
-        """Convert absolute paths to relative paths within dataset.
-        :param s:
-        :return:
-        """
-        return s.replace(self.full() + '/', '')
-
-    def parent(self, s):
-        """Shortcut to name of parent directory of file or directory.
-        :param s:
-        :return:
-        """
-        return os.path.basename(os.path.dirname(s))
-
-    def update_datafiles(self):
-        self.datafiles = []
-        for dirpath, dirnames, filenames in os.walk(self.full(self.dirs['data'])):
-            self.datafiles += [os.path.join(dirpath, f) for f in filenames]
-
-    def update_table(self, file_pattern=default_file_pattern, groups=default_file_groups,
-                     path_formula=default_path_formula, table_index=default_table_index):
-
-        """Match pattern to find original files in dataset. For each raw file, apply patterns in
-        self.dirs to generate new file names and add to self.table if file exists (else nan).
-
-        E.g., raw file 'data/set/set_A1-Site1.ome.tif' is captured as ('set', 'Site1'). Pattern-matching yields:
-         'aligned': '[data]/aligned/[set]/[file_well].aligned.tif'
-         ==> data/aligned/set/set_A1.tif
-         'calibrated': '[data]/[set]/[file_well_site].calibrated.tif'
-         ==> data/set/set_A1-Site1.calibrated.tif
-
-        """
-
-        # one dict per raw data file, keys are regex groups and patterns after substitution
-        d = []
-        for f in self.datafiles:
-            m = re.match(file_pattern, self.relative(f))
-            if m:
-                d += [{k: v for k, v in zip(groups, m.groups())}]
-        for entry in d:
-            for key, pattern in path_formula.items():
-                for group, value in entry.items():
-                    pattern = pattern.replace('[%s]' % group, str(value))
-                entry.update({key: pattern})
-
-        self.table = lasagna.utils.DataFrameFind(d)
-        # skip if empty
-        if d:
-            for k, v in table_index.items():
-                self.table[k] = self.table[k].astype(v)
-
-            self.table.set_index(table_index.keys(), inplace=True)
-            self.table.sortlevel(inplace=True)
-
-    def update_calibration(self):
-        calibration_dir = self.full(self.dirs['calibration'])
-        if os.path.isdir(calibration_dir):
-            _, calibrations, _ = os.walk(calibration_dir).next()
-            self.calibrations = [os.path.join(self.dirs['calibration'], c) for c in calibrations]
-
-    def make_dirs(self, files):
-        """Create sub-directories for files in column, if they don't exist.
-        :return:
-        """
-        for f in files:
-            if pandas.notnull(f):
-                d = self.full(os.path.dirname(f))
-                if not os.path.exists(d):
-                    os.makedirs(d)
-                    print 'created directory', d
-
-    def lookup(self, column, **kwargs):
-        """Convenient search.
-            :param column: column to return item from
-            :param kwargs: search_column=value
-            :return:
-            """
-        source, value = kwargs.items()[0]
-        return self.table[self.table[source] == value][column][0]
-
-
+# ANNOTATE
 def watermark(shape, text, spacing=1, corner='top left'):
     """ Add rasterized text to empty 2D numpy array.
     :param shape: (height, width)
@@ -574,28 +347,20 @@ def mark_blobs(row, n):
     return im
 
 
-def compress_obj(obj):
-    s = StringIO.StringIO()
-    pickle.dump(obj, s)
-    out = zlib.compress(s.getvalue())
-    s.close()
-    return out
 
 
-def decompress_obj(string):
-    return pickle.load(StringIO.StringIO(zlib.decompress(string)))
-
-
-def load_lut(name):
+def read_lut(name):
     file_name = os.path.join(config.luts, name + '.txt')
     with open(file_name, 'r') as fh:
         lines = fh.readlines()
         values = [line[:-1].split() for line in lines]
     return [int(y) for x in zip(*values) for y in x]
 
+# DEPRECATED
+def read_registered(path):
+    """DEPRECATED
 
-def load_tile_configuration(path):
-    """Reads output of Fiji Grid/Collection stitching (TileConfiguration.registered.txt),
+    Reads output of Fiji Grid/Collection stitching (TileConfiguration.registered.txt),
     returns list of tile coordinates.
     :param path:
     :return:
@@ -606,19 +371,22 @@ def load_tile_configuration(path):
     translations = [[float(x) for x in pos[1:-1].split(',')] for pos in m]
     return translations
 
-GLASBEY = load_lut('glasbey')
+GLASBEY = read_lut('glasbey_inverted')
 
 hash_cache = {}
-fiji_target = '/Users/feldman/Downloads/20151219_96W-G024/transfer/'
 # decorate to store hash_cache in function
-def show_hyperstack(data, title='image', imp=None, check_cache=True, **kwargs):
-    """Display image in linked ImageJ instance. If target_imp is a
-    ij.ImagePlus, replaces contents; otherwise opens new ij.ImagePlus. 
+def show_IJ(data, title='image', imp=None, check_cache=False, **kwargs):
+    """Display image in linked ImageJ instance. If imp is provided,
+    replaces contents; otherwise opens new ij.ImagePlus. 
 
     Images are first exported to .tif, then loaded in ImageJ. Default behavior is to
     check the file cache using a hash of metadata and sparsely sampled pixels, and only 
     export if not found in cache.
     """
+    
+    if not isinstance(data, np.ndarray):
+        data = np.array(data) # for pandas and xarray, could use data.values
+
     # have we done this before?
     skip = min(100, data.size)
     key = hash(str(kwargs)) + \
@@ -629,14 +397,15 @@ def show_hyperstack(data, title='image', imp=None, check_cache=True, **kwargs):
         savename = hash_cache[key]
     else:
         # export .tif
-        savename = fiji_target + title + time.strftime('_%Y%m%d_%s.tif')
-        save_hyperstack(savename, data, **kwargs)
+        savename = config.fiji_target + title + time.strftime('_%Y%m%d_%s.tif')
+        save_stack(savename, data, **kwargs)
         hash_cache[key] = savename
     
     new_imp = config.j.ij.IJ.openImage(savename)
 
     if imp:
         # rather than convert from grayscale to composite, just replace
+        # TODO: remove this sketchy shit
         if new_imp.getDisplayMode() != imp.getDisplayMode():
 
             # move the old listeners over
@@ -652,19 +421,42 @@ def show_hyperstack(data, title='image', imp=None, check_cache=True, **kwargs):
                 
         else:
             imp.setImage(new_imp)
-            imp.updateAndRepaintWindow()
+            imp.updateAndRepaintWindow() # TODO: sometimes this doesn't redraw. flipping Z frame manually fixes it.
             imp.setTitle(title)
             new_imp.close()
             return imp
 
     new_imp.setTitle(title)
     new_imp.show()
+    # set contrast for single channel images
+    if data.ndim == 2:
+        new_imp.setDisplayRange(data.min(), data.max())
+        new_imp.updateAndDraw()
     return new_imp
 
 
+def read_stack(filename, memmap=False, copy=True):
+    """Read a .tif file into a numpy array, with optional memory mapping.
+    """
+    if memmap:
+        data = _get_mapped_tif(filename)
+    else:
+        # os.stat detects if file has been updated
+        # data = _imread(filename, hash(os.stat(filename)))
+        data = _imread(filename, 0, copy=copy)
+        while data.shape[0] == 1:
+            data = np.squeeze(data, axis=(0,))
+    return data
+
+# @lasagna.utils.Memoized
+def _imread(filename, dummy, copy=True):
+    """Call TiffFile imread. Dummy arg to separately memoize calls.
+    """
+    return imread(filename, multifile=False)
+
 @lasagna.utils.Memoized
-def get_mapped_tif(f):
-    TF = TiffFile(lasagna.config.paths.full(f))
+def _get_mapped_tif(filename):
+    TF = TiffFile(filename)
     # check the offsets
     offsets = []
     for i in range(len(TF.pages) - 1):
@@ -677,14 +469,134 @@ def get_mapped_tif(f):
     # adjust strides to account for offset
     shape = [x for x in TF.series[0].shape if x != 1]
     strides = np.r_[np.cumprod(shape[::-1])[::-1][1:], [1]] * 2
-    strides[:-2] += np.r_[[1], np.cumprod(shape[-3:0:-1])][::-1] * stride_offset
-    strides
+    # TODO: figure out what the fuck is going on here
+    skip_count = np.cumprod(shape[-3:0:-1]) # of IFDs skipped over in leading dimensions
+    skip_count = np.r_[[1], skip_count][::-1]
+    strides[:-2] += skip_count.astype(int) * stride_offset
+
     # make the initial memmap
     fh = TF.filehandle
     offset = TF.pages[0].is_contiguous[0]
-    mm = np.memmap(fh, dtype=np.uint16, mode='r',
+    
+    # RHEL and osx are little-endian, ImageJ defaults to big-endian
+    dtype = np.dtype(TF.byteorder + 'u2')
+
+    mm = np.memmap(fh, dtype=dtype, mode='r',
                                     offset=offset,
                                     shape=np.prod(shape), order='C')
     # update the memmap with adjusted strides
     return as_strided(mm, shape=shape, strides=strides)
+
+def grab_image():
+    """Return contents of currently selected ImageJ window.
+    """
+    path = os.path.join(lasagna.config.fiji_target, 'tmp.tif')
+
+    imp = lasagna.config.j.ij.IJ.getImage()
+    lasagna.config.j.ij.IJ.save(imp, path)
+    data = lasagna.io.read_stack(path, memmap=True)
+    os.remove(path)
+    
+    # title = imp.getTitle()
+    # if title:
+    #     print 'grabbed image "%s"' % title
+
+    if data.dtype == np.dtype('>u2'):
+        data = data.astype(np.uint16)
+    return data
+
+file_pattern = [
+        r'((?P<home>.*)\/)?',
+        r'(?P<dataset>(?P<date>[0-9]{8}).*?)\/',
+        r'(?:(?P<subdir>.*)\/)*',
+        r'(MAX_)?(?P<mag>[0-9]+X).',
+        r'(?:(?P<cycle>[^_\.]*).*?(?:.*MMStack)?.)?',
+        r'(?P<well>[A-H][0-9]*)',
+        r'(?:[_-]Site[_-](?P<site>([0-9]+)))?',
+        r'(?:_Tile-(?P<tile>([0-9]+)))?',
+        r'(?:\.(?P<tag>.*))*\.(?P<ext>tif|pkl|csv|fastq)']
+
+file_pattern_abs = ''.join(file_pattern)
+file_pattern_rel = ''.join(file_pattern[2:])
+        
+
+# FILEPATHS
+
+def parse_filename(filename):
+    """Parse filename into dictionary. Some entries in dictionary optional, e.g., cycle and tile.
+    """
+    filename = os.path.normpath(filename)
+    filename = filename.replace('\\', '/')
+    if os.path.isabs(filename):
+        pattern = file_pattern_abs
+    else:
+        pattern = file_pattern_rel
+
+    match = re.match(pattern, filename)
+    try:
+        result = {k:v for k,v in match.groupdict().items() if v is not None}
+        return result
+    except AttributeError:
+        raise ValueError('failed to parse filename: %s' % filename)
+
+
+def name(description, **more_description):
+    """Name a file from a dictionary of filename parts. Can override dictionary with keyword arguments.
+    """
+    d = dict(description)
+    d.update(more_description)
+
+    assert 'tag' in d
+
+    if 'cycle' in d:
+        a = '%s_%s_%s' % (d['mag'], d['cycle'], d['well'])
+    else:
+        a = '%s_%s' % (d['mag'], d['well'])
+
+    # only one
+    if 'tile' in d:
+        b = 'Tile-%s' % d['tile']
+    elif 'site' in d:
+        b = 'Site-%s' % d['site']
+    else:
+        b = None
+
+    if b:
+        basename = '%s_%s.%s.%s' % (a, b, d['tag'], d['ext'])
+    else:
+        basename = '%s.%s.%s' % (a, d['tag'], d['ext'])
+    
+    optional = lambda x: d.get(x, '')
+    filename = os.path.join(optional('home'), optional('dataset'), optional('subdir'), basename)
+    return os.path.normpath(filename)
+
+
+def get_file_list(str_or_list):
+    """Get a list of files from a single filename or iterable of filenames. Glob expressions accepted.
+    :param str_or_list: filename, glob, list of filenames, or list of globs
+    :return:
+    """
+    if type(str_or_list) is str:
+        return glob(str_or_list)
+    return [y for x in str_or_list for y in glob(x)]
+
+
+def add_dir(path, dir_to_add):
+    x = path.split('/')
+    return '/'.join(x[:-1] + [dir_to_add] + [x[-1]])
+
+
+def find_files(start='', include='', exclude='', depth=2):
+    # or require glob2
+    files = []
+    for d in range(depth):
+        path_str = '*/' * d + '*.tif'
+        files += glob(os.path.join(start, path_str))
+
+    def keep(f):
+        flag1 = include and not re.findall(include, f)
+        flag2 = exclude and re.findall(exclude, f)
+        return (not flag1 or flag2)
+
+    return filter(keep, files)
 

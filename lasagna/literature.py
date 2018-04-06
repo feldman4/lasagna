@@ -3,6 +3,8 @@ import requests
 import warnings
 import pandas as pd
 from bs4 import BeautifulSoup as bs
+from lasagna.utils import Memoized
+import lasagna.config
 
 
 
@@ -76,3 +78,32 @@ def primerbank(query, kind='NCBI Gene Symbol', species='Human'):
         result['Reverse Primer'] = tuple(table.loc['Reverse Primer'])
         results += [result]
     return results
+
+wolfram_client = None
+
+def _wolfram_setup():
+    import wolframalpha
+    with open(lasagna.config.wolfram, 'r') as fh:
+        app_id = fh.read().splitlines()[0]
+    
+    client = wolframalpha.Client(app_id)
+    return client
+
+def wolfram(query, show=True):
+    from IPython import display
+    global wolfram_client
+    if wolfram_client is None:
+        wolfram_client = _wolfram_setup()
+    result = _wolfram(query, wolfram_client)
+    if len(result.pods)<2:
+        return 'no result'
+    pod = result.pods[1]
+    if show:
+        display.display(display.Image(url=pod.img, format='.gif'))
+    return pod.text
+
+@Memoized
+def _wolfram(query, client):
+    return client.query(query)
+
+

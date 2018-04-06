@@ -1,0 +1,64 @@
+###########
+#
+# User customization file for bash
+#
+############
+
+umask 002
+
+
+    
+
+export EDITOR=vim
+export VISUAL=$EDITOR
+
+alias	l='ls -lg -h -a -G'
+alias	ls='ls -CF'
+alias	ll='ls -lg'
+alias	la='ls -A'
+alias	lla='ls -Alg'
+alias	tree='tree --dirsfirst'
+alias	treed='tree -d --dirsfirst'
+alias	treedu='tree --du -h --dirsfirst'
+alias	xtitle='echo -n "]0;\!*"'
+alias	rsync='rsync -Rr --progress --update'
+alias   rename='rename -s'
+
+PS1='\[\033[0;33m\]\u@\h \[\033[1;31m\]\w\[\033[${?/[^0]/39}m\]\$ \[\033[0;38m'
+
+
+alias kol="column -s, -t"
+
+
+set bell-style none
+bind 'TAB: menu-complete'
+
+alias hist="sort | uniq -c | sort -r"
+alias tar='tar -zxvf'
+
+
+export TERM=xterm-color
+
+
+# added by Anaconda 2.2.0 installer
+export PATH="/Users/feldman/anaconda/bin:$PATH"
+
+export JAVA_HOME=$(/usr/libexec/java_home)
+export CLASSPATH=$CLASSPATH:'/Users/feldman/anaconda/share/py4j/*:/Users/feldman/Downloads/py4j/*:/Applications/Fiji.app/jars/*'
+export CLASSPATH=$CLASSPATH:'/Applications/Fiji.app/jars/bioformats/*'
+
+export PYTHONPATH="/Users/feldman/PycharmProjects/lasagna:$PYTHONPATH"
+
+weather(){ curl wttr.in/cambridge_ma; }
+
+if [ ! -d /broad/blainey_lab/David ]; then
+	mkdir /Volumes/blainey_lab
+    mount_smbfs //neon-cifs/blainey_lab /Volumes/blainey_lab/
+fi
+
+if [ ! -d /broad/blainey_lab_storage/David ]; then
+	mkdir /Volumes/blainey_lab_storage
+    mount_smbfs //flynn-cifs/broad_blainey_lab_storage /Volumes/blainey_lab_storage
+fi
+
+

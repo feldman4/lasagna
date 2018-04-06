@@ -39,7 +39,7 @@ def test_nuclei_stitch(well=(('A2',),0)):
 
     offsets = process.register_images(data.values())
 
-    C = io.compose_stacks([io.offset_stack(d, offset)
+    C = io.compose_stacks([io.offset(d, offset)
                            for d, offset in zip(data.values(), offsets)])
     return data, offsets, C
 

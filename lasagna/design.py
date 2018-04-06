@@ -2,17 +2,10 @@ import IPython.display
 import numpy as np
 import os
 import regex as re
-# import RNA
-# import matplotlib.pyplot as plt
-# import pandas as pd
-#
-# from pprint import pprint as pp
-#
-# import csv
-# import platform, time
-# # import pygraphviz as pgv
+
 import networkx as nx
 import lasagna.utils
+from itertools import product
 
 
 def greedyTSP(G):
@@ -66,15 +59,7 @@ def generate_sequence(GC_content, length):
     return ''.join(DNA[seq])
 
 
-watson_crick = {'A': 'T',
-                'T': 'A',
-                'C': 'G',
-                'G': 'C',
-                'N': 'N'}
-watson_crick.update({k.lower(): v.lower() for k, v in watson_crick.items()})
-
-
-def rc(seq):
+def reverse_complement(seq):
     return ''.join(watson_crick[x] for x in seq)[::-1]
 
 
@@ -82,11 +67,7 @@ def energy(a):
     return np.vectorize(lambda x: x.energy if x else 0.)(a)
 
 
-duplex_re = re.compile('(\S*)\s*([0-9]+,[0-9]+)\s*:\s*([0-9]+,[0-9]+)\s*\(\s*(.*)\)')
-fold_re = re.compile('\s*(.*)\n(.*)\s\(\s*(.*)\)')
-
-
-def RNAduplex(a, b, full=True):
+def RNAduplex(a, b, full=True, noGU=False, cmd_args=None):
     """Returns RNAResult from folding query strands. Provide full=True to save
     full sequence, otherwise truncated to window around bound bases.
     :param a: single str or list of str
@@ -104,9 +85,18 @@ def RNAduplex(a, b, full=True):
             a = [a] * len(b)
 
     arg = ['RNAduplex']
+
+    if noGU:
+        arg[0] += ' --noGU'
+
+    if cmd_args:
+        # arg = arg + cmd_args
+        arg[0] = ' '.join(arg + cmd_args)
+
     stdin = '\n'.join(sum(zip(a, b), tuple()))
     out = lasagna.utils.call(arg, stdin)
     arr = []
+
     for a_i, b_i, (structure, i0, i1, energy) in zip(a, b, duplex_re.findall(out)):
         i0, i1 = i0.split(','), i1.split(',')
         i0 = slice(int(i0[0]) - 1, int(i0[1]))
@@ -127,7 +117,7 @@ def RNAduplex(a, b, full=True):
     return arr[ix]
 
 
-def RNAfold(a):
+def RNAfold(a, noGU=False, cofold=False, partition=False, cmd_args=None):
     """Returns dot structure and energy.
     :param a:
     :return:
@@ -138,62 +128,74 @@ def RNAfold(a):
         a = [a]
         ix = slice(1)
 
+    compiled_regex = fold_re
+
     # default behavior is to save rna.ps
     arg = ['RNAfold --noPS']
+    if cofold:
+        arg = ['RNAcofold --noPS']
+
+    if cmd_args:
+        arg[0] += ' ' + cmd_args
+
+    if noGU:
+        arg[0] += ' --noGU'
+
+    if partition:
+        arg[0] += ' -p0'
+
     stdin = '\n'.join(a)
     out = lasagna.utils.call(arg, stdin)
 
     arr = []
-    for sequence, structure, energy in fold_re.findall(out):
-        arr += [RNAResult(sequence=sequence, structure=structure,
-                          energy=float(energy))]
+    if not partition:
+        for sequence, structure, energy in fold_re.findall(out):
+            arr += [RNAResult(sequence=sequence, structure=structure,
+                              energy=float(energy))]
+
+    else:
+        for (sequence, structure, energy, 
+            ensemble_energy, frequency) in fold_re_p0.findall(out):
+            result = RNAResult(sequence=sequence, structure=structure,
+                              energy=float(energy))
+            result.frequency = float(frequency)
+            result.ensemble_energy = float(ensemble_energy)
+            arr += [result]
 
     return arr[ix]
 
 
-class RNAResult(object):
-    def __init__(self, sequence=None, structure=None, energy=None,
-                 ix=None, duplex=None):
-        self.sequence = sequence
-        self.structure = structure
-        self.energy = energy
-        self.ix = ix
-        self.duplex = duplex
+def RNAcofold(a, b, noGU=False):
+    
+    is_str = np.lib._iotools._is_string_like
 
-    def plot(self, path, output_format='ps'):
-        name = os.path.basename(path)
-        dir_name = os.path.dirname(path)
-        arg = ['RNAplot -o %s' % output_format]
-        stdin = '>%s\n%s\n%s\n' % (name, self.sequence, self.structure)
-        if dir_name:
-            cwd = os.getcwd()
-            os.chdir(dir_name)
-            print stdin
-            print os.getcwd()
-            lasagna.utils.call(arg, stdin)
-            os.chdir(cwd)
-        else:
-            lasagna.utils.call(arg, stdin)
+    single_input = is_str(a) and is_str(b)
 
-    def svg(self):
-        self.plot('dummy', output_format='svg')
-        svg = IPython.display.SVG('dummy_ss.svg')
-        os.remove('dummy_ss.svg')
+    a = [a] if is_str(a) else a
+    b = [b] if is_str(b) else b
 
-        # polyline representing backbone is automatically split at '.' in ps but not svg
-        dot = re.findall('(<text x=\"(.*)\" y=\"(.*)\">\.<\/text>\n)', svg.data)
-        if dot:
-            svg.data = svg.data.replace(dot[0][0], '')
-            coordinates = ','.join(dot[0][1:3])
-            svg_patch = ' " style="stroke: black; fill: none; stroke-width: 1.5"/> \n' + \
-                        '   <polyline id="outline2" points=" '
-            svg.data = svg.data.replace(coordinates, svg_patch)
+    queries = []
+    for a_, b_ in product(a, b):
+        queries += [a_ + '&' + b_]
 
-        return svg
+    # default behavior is to save rna.ps
+    arg = ['RNAcofold --noPS']
+    if noGU:
+        arg[0] += ' --noGU'
 
-    def __repr__(self):
-        return "%s\n%s\n(%.2f)\t%s" % (self.sequence, self.structure,
-                                       self.energy, self.ix)
+    stdin = '\n'.join(queries)
+    out = lasagna.utils.call(arg, stdin)
+
+    arr = []
+    for sequence, structure, energy in fold_re.findall(out):
+        sequence = sequence.replace('&', '.') # helps RNAplot
+        arr += [RNAResult(sequence=sequence, structure=structure,
+                          energy=float(energy))]
+
+    if single_input:
+        return arr[0]
+
+    return arr
 
 
 def suboptimal_clique(energy, threshold):
@@ -259,3 +261,61 @@ def plot_energies(antisense_fold, energy_thresholds=tuple(range(-30, 0)), ax=Non
     ax.set_title('probes remaining after iterative exclusion by off-target energy')
 
     return ax
+
+
+class RNAResult(object):
+    def __init__(self, sequence=None, structure=None, energy=None,
+                 ix=None, duplex=None):
+        self.sequence = sequence
+        self.structure = structure
+        self.energy = energy
+        self.ix = ix
+        self.duplex = duplex
+
+    def plot(self, path, output_format='ps'):
+        name = os.path.basename(path)
+        dir_name = os.path.dirname(path)
+        arg = ['RNAplot -o %s' % output_format]
+        stdin = '>%s\n%s\n%s\n' % (name, self.sequence, self.structure)
+        if dir_name:
+            cwd = os.getcwd()
+            os.chdir(dir_name)
+            print stdin
+            print os.getcwd()
+            lasagna.utils.call(arg, stdin)
+            os.chdir(cwd)
+        else:
+            lasagna.utils.call(arg, stdin)
+
+    def svg(self):
+        self.plot('dummy', output_format='svg')
+        svg = IPython.display.SVG('dummy_ss.svg')
+        os.remove('dummy_ss.svg')
+
+        # polyline representing backbone is automatically split at '.' in ps but not svg
+        dot = re.findall('(<text x=\"(.*)\" y=\"(.*)\">\.<\/text>\n)', svg.data)
+        if dot:
+            svg.data = svg.data.replace(dot[0][0], '')
+            coordinates = ','.join(dot[0][1:3])
+            svg_patch = ' " style="stroke: black; fill: none; stroke-width: 1.5"/> \n' + \
+                        '   <polyline id="outline2" points=" '
+            svg.data = svg.data.replace(coordinates, svg_patch)
+
+        return svg
+
+    def __repr__(self):
+        return "%s\n%s\n(%.2f)\t%s" % (self.sequence, self.structure,
+                                       self.energy, self.ix)
+
+watson_crick = {'A': 'T',
+                'T': 'A',
+                'C': 'G',
+                'G': 'C',
+                'U': 'A',
+                'N': 'N'}
+watson_crick.update({k.lower(): v.lower() for k, v in watson_crick.items()})
+
+duplex_re  = re.compile('(\S*)\s*([0-9]+,[0-9]+)\s*:\s*([0-9]+,[0-9]+)\s*\(\s*(.*)\)')
+fold_re    = re.compile('\s*(.*)\n(.*)\s\(\s*(.*)\)')
+fold_re_p  = re.compile('\s*(.*)\n(.*)\s\(\s*(.*)\)\n(.*)\s\[\s*(.*)\]\n(.*)\s\{\s*(.*)\}\n.*ensemble\s(.*);.*diversity\s([^\s]*)\s*')
+fold_re_p0 = re.compile('\s*(.*)\n(.*)\s\(\s*(.*)\)\n.*(-[^\s]*).*\n.*ensemble\s([^\s]*);')
