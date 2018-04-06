@@ -4,7 +4,6 @@ def load_well_site_list():
     well_site_list = map(tuple, pd.read_pickle('well_site_list_MM.pkl').as_matrix())       
     return well_site_list
 
-
 def filter_well_site_filename(f, well_site_list):
     """
     files = glob('10X_c1-SBS-1_1/*tif')
@@ -15,7 +14,6 @@ def filter_well_site_filename(f, well_site_list):
     d = parse(f)
     key = d['well'], d['site']
     return key in well_site_list
-
 
 def copy_tif_to_process_dir(f, rows, cols):
     d = parse(f)
@@ -28,7 +26,6 @@ def copy_tif_to_process_dir(f, rows, cols):
     f_ph = name(d, tag='max')
     
     save(f_SBS, read(f))
-
 
 def select(x):
     return ''.join(x[i-1] for i in (1,2,3,6,7,8,9,10,11,12))
@@ -69,7 +66,6 @@ def calculate_barcode_stats(df_reads, df_cells):
     d = gb.size().rename('cell_count')
     return pd.concat([a,b,c,d], axis=1)
 
-
 def calculate_barcode_stats_NGS(df_ngs):
     cols = {'A1_NGS': 'NGS_count_A1',
             'A2_NGS': 'NGS_count_A2',
@@ -90,7 +86,6 @@ def barcode_stats_by_well(df_reads, df_cells, wells=('A1', 'A2', 'A3')):
             .pipe(arr.append))
 
     return pd.concat(arr, axis=1).sort_index(axis=1).fillna(0)
-
 
 def barcode_stats(df_reads, df_cells, good_barcodes):
 

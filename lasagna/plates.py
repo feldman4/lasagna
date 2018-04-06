@@ -100,7 +100,11 @@ def add_row_col(df, in_place=False, col_to_int=True):
 
 def plate_coordinate(well, site, well_spacing, grid_spacing, grid_shape):
     site = int(site)
-    well_spacing
+    if well_spacing == '96w':
+        well_spacing = 9000
+    if well_spacing == '6w':
+        well_spacing = 39120
+        
     if grid_spacing == '20X':
         delta = 643
     elif grid_spacing == '10X':
