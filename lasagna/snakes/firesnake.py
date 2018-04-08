@@ -12,6 +12,7 @@ if sys.version_info.major == 2:
     # python 2
     import numpy as np
     import pandas as pd
+    import skimage
     import lasagna.bayer
     import lasagna.process
     import lasagna.io
@@ -79,6 +80,7 @@ def load_arg(x):
         try:
             return f(x)
         except (ValueError, TypeError) as e:
+            # print(x)
             # print(e)
             pass
     else:
@@ -136,6 +138,10 @@ def call_from_fire(f):
 
         # provide all arguments as keyword arguments
         kwargs = {x: load_arg(inputs[x]) for x in inputs}
+        try:
+            kwargs['wildcards']['tile'] = int(kwargs['wildcards']['tile'])
+        except KeyError:
+            pass
         result = f(**kwargs)
 
         if output:
@@ -181,29 +187,26 @@ class Snake():
         return stitched
 
     @staticmethod
-    def _align(data, channel_offsets=None):
+    def _align(data, index_align=0, channel_offsets=None):
         """Align data using first channel. If data is a list of stacks with different 
         IJ dimensions, the data will be piled first. Optional channel offset.
+        Images are aligned to the image at `index_align`.
+
         """
 
         # shapes might be different if stitched with different configs
         # keep shape consistent with DO
 
         shape = data[0].shape
-        data = lasagna.io.pile(data)
+        data = lasagna.utils.pile(data)
         data = data[..., :shape[-2], :shape[-1]]
 
-        arr = []
-        for d in data:
-            # DO
-            if d.shape[0] == 3:
-                d = np.insert(d, [1, 2], 0, axis=0)
-            arr.append(d)
-
-        data = np.array(arr)
-        dapi = data[:,0]
-        aligned = lasagna.bayer.register_and_offset(data, registration_images=data[:, 0])
-
+        indices = range(len(data))
+        indices.pop(index_align)
+        indices_fwd = [index_align] + indices
+        indices_rev = np.argsort(indices_fwd)
+        aligned = lasagna.process.register_and_offset(data[indices_fwd], registration_images=data[indices_fwd,0])
+        aligned = aligned[indices_rev]
         if channel_offsets:
             aligned = fix_channel_offsets(aligned, channel_offsets)
 
@@ -330,7 +333,7 @@ class Snake():
         """Align using DAPI.
         """
         _, offset = lasagna.process.register_images([data_DO[0], data_phenotype[0]])
-        aligned = lasagna.io.offset(data_phenotype, offset)
+        aligned = lasagna.utils.offset(data_phenotype, offset)
         return aligned
 
     @staticmethod
@@ -367,6 +370,19 @@ class Snake():
 
         return Snake._extract_phenotype(data_phenotype, nuclei, wildcards, features)       
 
+
+    @staticmethod
+    def _extract_phenotype_translocation_ring(data_phenotype, nuclei, wildcards, width=3):
+        selem = np.ones((width, width))
+        perimeter = skimage.morphology.dilation(nuclei, selem)
+        perimeter[nuclei > 0] = 0
+
+        inside = skimage.morphology.erosion(nuclei, selem)
+        inner_ring = nuclei.copy()
+        inner_ring[inside > 0] = 0
+
+        return Snake._extract_phenotype_translocation(data_phenotype, inner_ring, perimeter, wildcards)
+
     @staticmethod
     def _extract_phenotype_translocation(data_phenotype, nuclei, cells, wildcards):
         from lasagna.pipelines._20170914_endo import feature_table_stack
@@ -386,24 +402,28 @@ class Snake():
 
             return corr.mean()
 
-        gfp_bkgd = np.median(data_phenotype[1])
         
+        def masked(region, index):
+            return region.intensity_image_full[index][region.filled_image]
+
         features_nuclear = {
             'dapi_gfp_nuclear_corr' : correlate_dapi_gfp,
-            'dapi_nuclear_median': lambda r: np.median(r.intensity_image_full[0]),
-            'gfp_nuclear_median' : lambda r: np.median(r.intensity_image_full[1]) - gfp_bkgd,
-            'dapi_nuclear_int'   : lambda r: r.intensity_image_full[0].sum(),
-            'gfp_nuclear_int'    : lambda r: (r.intensity_image_full[1] - gfp_bkgd).sum(),
-            'dapi_nuclear_max'   : lambda r: r.intensity_image_full[0].max(),
-            'gfp_nuclear_max'    : lambda r: r.intensity_image_full[1].max(),
+            'dapi_nuclear_median': lambda r: np.median(masked(r, 0)),
+            'gfp_nuclear_median' : lambda r: np.median(masked(r, 1)),
+            'gfp_nuclear_mean' : lambda r: masked(r, 1).mean(),
+            'dapi_nuclear_int'   : lambda r: masked(r, 0).sum(),
+            'gfp_nuclear_int'    : lambda r: masked(r, 1).sum(),
+            'dapi_nuclear_max'   : lambda r: masked(r, 0).max(),
+            'gfp_nuclear_max'    : lambda r: masked(r, 1).max(),
             'area_nuclear'       : lambda r: r.area,
             'cell'               : lambda r: r.label
         }
 
         features_cell = {
             'dapi_gfp_cell_corr' : correlate_dapi_gfp,
-            'gfp_cell_median' : lambda r: np.median(r.intensity_image_full[1]) - gfp_bkgd,
-            'gfp_cell_int'    : lambda r: (r.intensity_image_full[1] - gfp_bkgd).sum(),
+            'gfp_cell_median' : lambda r: np.median(masked(r, 1)),
+            'gfp_cell_mean' : lambda r: masked(r, 1).mean(),
+            'gfp_cell_int'    : lambda r: masked(r, 1).sum(),
             'area_cell'       : lambda r: r.area,
             'cell'            : lambda r: r.label
         }
@@ -439,7 +459,7 @@ class Snake():
 
 def fix_channel_offsets(data, channel_offsets):
     d = data.transpose([1, 0, 2, 3])
-    x = [lasagna.io.offset(a, b) for a,b in zip(d, channel_offsets)]
+    x = [lasagna.utils.offset(a, b) for a,b in zip(d, channel_offsets)]
     x = np.array(x).transpose([1, 0, 2, 3])
     return x
 

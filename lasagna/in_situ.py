@@ -27,7 +27,8 @@ def do_median_call(df_raw, cycles=12):
 def clean_up_raw(df_raw):
     """Categorize, sort. Pre-processing for `dataframe_to_values`.
     """
-    df_raw = categorize(df_raw)
+    exclude_subset = ['well', 'tile', 'cell'] # causes issues with later joins, maybe a pandas bug
+    df_raw = categorize(df_raw, exclude_subset=exclude_subset)
     order = natsorted(df_raw['cycle'].cat.categories)
     df_raw['cycle'] = (df_raw['cycle']
                    .cat.as_ordered()
@@ -123,14 +124,11 @@ def reads_to_fastq(df, dataset):
     e = '\n{barcode}\n+\n{phred}'
     fmt = a + b + c + e
     
-
     wells = list(lasagna.plates.microwells()['96_well'])
-    it = zip(df['well'], df['tile'])
     tile_spacing = 1000
-    df['well_tile'] = [wells.index(w) * tile_spacing + int(t) for w, t in it]
-    fields = [WELL, 'well_tile', BLOB,
+    fields = [WELL, TILE, CELL, BLOB,
               'position_i', 'position_j', 
-              BARCODE, CELL]
+              BARCODE]
     
     Q = df.filter(like='Q_').as_matrix()
     
@@ -138,6 +136,7 @@ def reads_to_fastq(df, dataset):
     for i, row in enumerate(df[fields].as_matrix()):
         d = dict(zip(fields, row))
         d['phred'] = ''.join(phred(q) for q in Q[i])
+        d['well_tile'] = wells.index(d['well']) * tile_spacing + int(d['tile'])
         reads.append(fmt.format(**d))
     
     return reads
