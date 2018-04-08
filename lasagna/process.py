@@ -31,7 +31,7 @@ default_object_features = {
     'y':        lambda region: region.centroid[0],
     'x':        lambda region: region.centroid[1],
     'bounds':   lambda region: region.bbox,
-    'contour':  lambda region: binary_contours(region.image, fix=True, labeled=False)[0],
+    'contour':  lambda region: lasagna.io.binary_contours(region.image, fix=True, labeled=False)[0],
     'label':    lambda region: region.label,
     'mask':     lambda region: lasagna.utils.Mask(region.image),
     'hash':     lambda region: hex(random.getrandbits(128)) }
@@ -42,7 +42,7 @@ def feature_table(data, mask, features, global_features=None):
     """Apply functions in features to regions in data specified by
     integer mask.
     """
-    regions = lasagna.utils.regionprops(mask, intensity_image=data)
+    regions = regionprops(mask, intensity_image=data)
     results = {feature: [] for feature in features}
     for region in regions:
         for feature, func in features.items():
@@ -135,6 +135,18 @@ def register_images(images, index=None, window=(500, 500), upsample=1.):
         offsets[-1][-2:] = shift + pad_width  # automatically cast to uint64
 
     return offsets
+
+
+
+def register_and_offset(images, registration_images=None, verbose=False):
+    if registration_images is None:
+        registration_images = images
+    offsets = register_images(registration_images)
+    if verbose:
+        print np.array(offsets)
+    aligned = [lasagna.utils.offset(d, o) for d,o in zip(images, offsets)]
+    return np.array(aligned)
+
 
 
 def stitch_grid(arr, overlap, upsample=1):
@@ -409,7 +421,7 @@ def peak_to_region(peak, data, threshold=2000, n=5):
     peak[peak<threshold] = 0
     
     labeled = skimage.measure.label(peak)
-    regions = lasagna.utils.regionprops(labeled, intensity_image=data)
+    regions = regionprops(labeled, intensity_image=data)
     # hack for rare peak w/ more than 1 pixel
     for r in regions:
         if r.area > 1:

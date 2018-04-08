@@ -13,7 +13,6 @@ def plot_reads_per_cell(df_cells, **line_kwargs):
     ax.set_ylim([0, 1.05])
     return ax
 
-<<<<<<< HEAD
 
 def plot_red_blue_scatter(df_cells, df_design):
     stats = calculate_barcode_stats(df_cells, df_design)
@@ -73,12 +72,9 @@ def calculate_barcode_stats(df_cells, df_design):
 
 
 
-
-=======
->>>>>>> e22d86573683cdaf9bd8bacea25fe5d345cc9022
 def plot_mean_quality_per_tile(df_reads):
     stats_q = (df_reads
-               .filter(regex='Q_\d+|well|tile')
+               .filter(regex='Q_\d+|^well$|^tile$')
                .groupby(['well', 'tile'])
                .mean().dropna()
                .stack().rename('mean quality per tile').reset_index()
@@ -88,7 +84,8 @@ def plot_mean_quality_per_tile(df_reads):
     ax = sns.boxplot(data=stats_q, x='cycle', y='mean quality per tile', 
                      whis=[10, 90])
     ax.set_ylim([0.3, 1])
-    ax.set_xticklabels(range(1, 11))
+    num_cycles = len(stats_q['cycle'].value_counts())
+    ax.set_xticklabels(range(1, num_cycles + 1))
     ax.figure.tight_layout()
 
     return stats_q, ax

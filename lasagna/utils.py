@@ -467,10 +467,12 @@ def ndarray_to_dataframe(values, index):
     df = pd.DataFrame(values.reshape(values.shape[0], -1), columns=columns)
     return df
 
-def categorize(df, subset=None, **custom_order):
+def categorize(df, subset=None, exclude_subset=None, **custom_order):
     from pandas.api.types import is_object_dtype
+    exclude_subset = [] if exclude_subset is None else exclude_subset
     if subset is None:
-        subset = df.columns
+        subset = set(df.columns) - set(exclude_subset)
+
     for col in subset:
         df[col] = df[col].astype('category')
 

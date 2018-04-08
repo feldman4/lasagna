@@ -243,7 +243,7 @@ def grid_view(files, bounds, padding=40, with_mask=False):
     arr = []
     for filename, bounds_ in zip(files, bounds):
         I = read_stack(filename, memmap=False, copy=False) # some memory issue right now
-        I_cell = subimage(I, bounds_, pad=padding)
+        I_cell = lasagna.utils.subimage(I, bounds_, pad=padding)
         arr.append(I_cell.copy())
 
     if with_mask:
@@ -252,9 +252,9 @@ def grid_view(files, bounds, padding=40, with_mask=False):
             shape = i1 - i0 + padding, j1 - j0 + padding
             img = np.zeros(shape, dtype=np.uint16) + i + 1
             arr_m += [img]
-        return pile(arr), pile(arr_m)
+        return lasagna.utils.pile(arr), lasagna.utils.pile(arr_m)
 
-    return pile(arr)
+    return lasagna.utils.pile(arr)
 
 
 # ANNOTATE
