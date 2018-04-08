@@ -82,7 +82,6 @@ def fixed_contour(contour):
 
     return np.array(xy)
 
-    
 
 @lasagna.utils.Memoized
 def _get_stack(name):
@@ -234,7 +233,6 @@ def parse_MM(s):
         raise ValueError('Filename %s does not match MM pattern' % s)
     
 
-
 def grid_view(files, bounds, padding=40, with_mask=False):
     """Mask is 1-indexed. Zero values indicate background.
     """
@@ -345,8 +343,6 @@ def mark_blobs(row, n):
             i = channels.index(channel)
             im += mark_disk(im.shape, blobs) * 2 ** i
     return im
-
-
 
 
 def read_lut(name):

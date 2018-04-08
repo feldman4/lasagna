@@ -15,16 +15,16 @@ if False:
     home_dir = '/Volumes/Samsung_T5/lasagna/20171024_24W-endocytosis/MAX/'
 else:
     # windows
-    home_dir = 'D:\\David\\lasagna\\20180325_A375\\'
+    home_dir = 'D:\\David\\lasagna\\20180402_6W-G161\\'
     filesep = '\\'
 
 # C
 #channel_luts = (('Grays', (400, 8000)),)
 channel_luts = (('Grays', (400, 20000)),
                ('Green',  (400, 10000)),
-               ('Red',    (400, 10000)),
-               ('Magenta',(400, 10000)),
-                ('Cyan',  (400, 10000)),
+               # ('Red',    (400, 10000)),
+               # ('Magenta',(400, 10000)),
+               #  ('Cyan',  (400, 10000)),
                )
 #channel_luts = (('Blue', (400, 40000)),
 #                ('Green', (400, 6000)),
@@ -43,13 +43,13 @@ frames = 1;  # T
 #pixel_width = 0.175 * 2
 #
 
-###### 20X
-#tiles, overlap = (5, 5), int(100 * (1. - 600. / 675))
-#pixel_width = 0.35 * 2
+##### 20X
+tiles, overlap = (3, 3), int(100 * (1. - 600. / 675))
+pixel_width = 0.35 * 2
 
-##### 10X
-tiles, overlap = (27, 4), int(100 * (1. - 1240. / 1286))
-pixel_width = 0.7 * 2
+# ##### 10X
+# tiles, overlap = (27, 4), int(100 * (1. - 1240. / 1286))
+# pixel_width = 0.7 * 2
 
 ### 4X
 #tiles, overlap = (5, 5), int(100*(1. - 3000./3379))
@@ -88,9 +88,9 @@ def make_template(well, data_dir):
 # first well stitched. to use a specific file as template, stitch it separately and 
 # call template=make_template(well, data_dir) here.
 use_template = True
-template = None or make_template('B1', '10X_c2-SBS-2_2')
+template = None #or make_template('B1', '10X_c2-SBS-2_2')
 
-data_dirs = ['10X_c1-SBS-1_2', '10X_c3-SBS-3_1', '10X_c4-SBS-4_10', '10X_c5-SBS-5_1', '10X_c6-SBS-6_1', '10X_c7-SBS-7_1']
+data_dirs = ['test']
 
 # usually xyzct, except on bad days when it's xyczt(default)
 # order = 'xyzct'
@@ -98,7 +98,7 @@ order = 'xyczt(default)'
 rows = 'ABH'
 columns = [str(x) for x in range(1, 13)]
 wells = [row + column for row in rows for column in columns]
-wells = ['B1', 'B3']
+wells = ['A1']
 
 cal = Calibration()
 cal.setUnit('um')
@@ -119,7 +119,7 @@ def macro_dir(s):
 	return '[%s]' % (s.replace('\\', '\\\\'))
 
 def stitch_cmd(grid_size, overlap, directory, file_pattern, config):
-    s = """type=[Grid: snake by rows] order=[Right & Down                ]
+    s = """type=[Grid: row-by-row] order=[Right & Down                ]
     grid_size_x=%d grid_size_y=%d tile_overlap=%d first_file_index_i=0 directory=[%s]
     file_names=%s output_textfile_name=TileConfiguration_%s.txt fusion_method=[Linear Blending]
     regression_threshold=0.30 max/avg_displacement_threshold=2.50

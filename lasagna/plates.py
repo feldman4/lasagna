@@ -37,19 +37,20 @@ def microwells(width=None, base=(8, 12), downsample=((2, 2), (4, 4))):
     return pd.concat(arr, axis=1)
 
 
-def remap_snake(site, rows=25, cols=25):
+def remap_snake(site, grid_shape):
     """Maps site names from snake order to regular order.
     """
 
+    rows, cols = grid_shape
     import math
     site = int(site)
-    j = math.floor(site / n)
-    rem = site - j*n
+    j = math.floor(site / cols)
+    rem = site - j*cols
     if j % 2 == 0: # even
         site_ = site
     else:
-        i = n - rem
-        site_ = j * n + i - 1
+        i = cols - rem
+        site_ = i * cols + j - 1
 
     import numpy as np
     grid = np.arange(rows*cols).reshape(rows, cols)
@@ -133,8 +134,8 @@ def add_global_xy(df, well_spacing, grid_spacing='10X', grid_shape=(7, 7)):
     
     df = df.copy()
     wt = zip(df['well'], df['tile'])
-    d = {(w,t): plate_coordinate(w, t, well_spacing, grid_spacing, grid_shape) for w,t in set(zip(df['well'], df['tile']))}
-    y, x = zip(*[d[k] for k in zip(df['well'], df['tile'])])
+    d = {(w,t): plate_coordinate(w, t, well_spacing, grid_spacing, grid_shape) for w,t in set(wt)}
+    y, x = zip(*[d[k] for k in wt])
 
     if 'x' in df:
         df['global_x'] = x + df['x']
@@ -146,5 +147,6 @@ def add_global_xy(df, well_spacing, grid_spacing='10X', grid_shape=(7, 7)):
         df['global_x'] = x
         df['global_y'] = y
 
+    df['global_y'] *= -1
     return df
 
