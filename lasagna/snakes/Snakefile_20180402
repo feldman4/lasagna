@@ -12,7 +12,7 @@ from lasagna.snakes.firesnake3 import call_firesnake
 # snakemake.ignore_missing = True
 
 # UPDATE: set to number of cycles used
-CYCLES = ['c{cycle}-SBS-{cycle}'.format(cycle=c) for c in range(1, 9)]
+CYCLES = ['c{cycle}-SBS-{cycle}'.format(cycle=c) for c in range(1, 10)]
 
 THRESHOLD_DO = 2000
 THRESHOLD_DAPI = 1200
@@ -40,9 +40,9 @@ INDEX_ALIGN = 1
 
 rule all:
     input:
-        # expand('process/10X_{well}_Tile-{tile}.barcodes.csv', zip, well=WELLS_, tile=TILES_),
-        expand('process/10X_{well}_Tile-{tile}.phenotype_ring_3x3.pkl', zip, well=WELLS_, tile=TILES_),
-        expand('process/10X_{well}_Tile-{tile}.phenotype.pkl', zip, well=WELLS_, tile=TILES_)
+        expand('process/10X_{well}_Tile-{tile}.barcodes.csv', zip, well=WELLS_, tile=TILES_),
+        # expand('process/10X_{well}_Tile-{tile}.phenotype_ring_3x3.pkl', zip, well=WELLS_, tile=TILES_),
+        # expand('process/10X_{well}_Tile-{tile}.phenotype.pkl', zip, well=WELLS_, tile=TILES_)
 
 
 rule segment_nuclei:
