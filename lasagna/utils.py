@@ -632,7 +632,7 @@ def inscribe(mask):
         a = mask[i_0, j_0:j_1 + 1].sum()
         b = mask[i_1, j_0:j_1 + 1].sum()
         c = mask[i_0:i_1 + 1, j_0].sum()
-        d = mask[i_0:i_1 + 1, j_1].sum()        
+        d = mask[i_0:i_1 + 1, j_1].sum()  
         return a,b,c,d
     
     def area(i_0, i_1, j_0, j_1):

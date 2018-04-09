@@ -7,6 +7,15 @@ import skimage.measure
 import scipy.spatial
 from lasagna.utils import applyXY
 
+def register_and_offset(images, registration_images=None, verbose=False):
+    if registration_images is None:
+        registration_images = images
+    offsets = register_images(registration_images)
+    if verbose:
+        print np.array(offsets)
+    aligned = [lasagna.utils.offset(d, o) for d,o in zip(images, offsets)]
+    return np.array(aligned)
+
 def align(data, verbose=False):
     # initial cycle alignment
     if verbose:
