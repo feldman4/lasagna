@@ -1,6 +1,10 @@
 from lasagna.imports import *
 
-gate_cells = '(3000 < dapi_nuclear_max < 12000)&(60 < area_nuclear < 140)&(2000 < gfp_cell_median < 8000)'
+gate_cells = and_join(['3000 < dapi_nuclear_max < 12000',
+                       '60 < area_nuclear < 140', 
+                       '2000 < gfp_cell_median < 8000',
+                       'duplicated == False'])
+
 gate_NT = 'dapi_gfp_nuclear_corr < -0.5'
 
 stimulant = {'A': 'TNFa', 'B': 'IL1b'}
@@ -8,6 +12,10 @@ positive_genes = {'IL1b': ['MAP3K7', 'NFKBIA', 'IKBKG',
                      'IRAK1', 'MYD88', 'IRAK4', 'TRAF6'],
             'TNFa': ['MAP3K7', 'NFKBIA', 'IKBKG', 'TRADD', 
                      'TNFRSF1A', 'TRAF2', 'IKBKB', 'CHUK', 'RIPK1']}
+
+positive_gene_list = ['MAP3K7', 'NFKBIA', 'IKBKG', 'TRADD', 'TNFRSF1A', 
+                      'IRAK1', 'MYD88', 'IRAK4', 'TRAF2', 'TRAF6', 'IKBKB', 
+                      'CHUK', 'RIPK1', 'CRKL',]
 
 tilemap_features = ['gfp_cell_median', 'gfp_nuclear_median', 
                     'dapi_gfp_cell_corr', 'dapi_gfp_nuclear_corr']
@@ -68,6 +76,9 @@ def annotate_cells(df_cells):
     def get_stimulant(well):
         return stimulant[well[0]]
 
+    def categorize_stimulant(s):
+        return s.astype('category').cat.reorder_categories(['TNFa', 'IL1b'])
+
     def get_positive(df_cells):
         TNFa_pos = positive_genes['TNFa']
         IL1b_pos = positive_genes['IL1b']
@@ -79,7 +90,7 @@ def annotate_cells(df_cells):
         .assign(gate_NT=lambda x: x.eval(gate_NT))
         .assign(gene=lambda x: x['sgRNA_name'].apply(get_gene))
         .assign(targeting=lambda x: x['sgRNA_name'].apply(get_targeting))
-        .assign(stimulant=lambda x: x['well'].apply(get_stimulant))
+        .assign(stimulant=lambda x: x['well'].apply(get_stimulant).pipe(categorize_stimulant))
         .assign(positive=get_positive)
         )
 
@@ -97,5 +108,29 @@ def plot_correlation_features(df_cells):
 
     return pg
 
+def plot_sgRNAs_by_gene(df_cells, genes):
+    import seaborn as sns
 
+    df = (df_cells
+      .query(gate_cells)
+      .query('gene == @genes'))
     
+    df['gene'] = df['gene'].astype('category').cat.reorder_categories(genes)
+
+    df.groupby(['gene'])['gate_NT'].mean()
+
+    fig, ax = plt.subplots(figsize=(12, 5))
+    ax = (df
+          .groupby(['gene', 'stimulant', 'sgRNA_name'])['gate_NT']
+          .pipe(groupby_reduce_concat, fraction='mean', cell_count='size')
+          .reset_index()
+          .sort_values('gene')
+          .pipe(lambda x: (sns.swarmplot(data=x, x='gene', y='fraction',
+                                         hue='stimulant', dodge=True, ax=ax)))
+        )
+    ax.set_xlabel('')
+    ax.set_title('fraction of cells scored positive per sgRNA')
+    ax.legend(loc='upper left')
+    plt.xticks(rotation=30);
+    
+    return fig
