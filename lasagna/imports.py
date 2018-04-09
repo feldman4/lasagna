@@ -30,6 +30,7 @@ from lasagna.io import name, grid_view
 from lasagna.process import register_images
 
 from lasagna.utils import standardize, int_mode, categorize, apply_subset
+from lasagna.utils import or_join, and_join, groupby_reduce_concat
 from lasagna.utils import pile, montage, tile, trim
 from lasagna.utils import start_client
 

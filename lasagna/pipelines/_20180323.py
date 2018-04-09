@@ -113,3 +113,22 @@ def barcode_stats(df_reads, df_cells, good_barcodes):
         stats['cells_per_NGS_' + well] = stats.eval(cell_col + ' - ' + ngs_col)
 
     return stats
+
+def calculate_barcode_stats(df_cells, df_design):
+    """moved from lasagna.in_situ_plotting
+    """
+    gb = (df_cells
+      .query('subpool == "pool2_1"')
+      .groupby('cell_barcode_0'))
+    A = (gb.size().rename('cells per barcode'))
+    B = (gb['FR_pos']
+         .mean().clip(upper=0.13)
+         .rename('fraction positive cells'))
+
+    s = df_design.set_index('barcode')[['sgRNA_design', 'sgRNA_name']]
+    stats = (pd.concat([A, B], axis=1).reset_index()
+               .join(s, on='cell_barcode_0'))
+
+    rename = lambda x: 'targeting' if x == 'FR_GFP_TM' else 'nontargeting'
+    stats['sgRNA type'] = stats['sgRNA_design'].apply(rename)
+    return stats

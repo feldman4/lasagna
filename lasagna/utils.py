@@ -201,7 +201,26 @@ def comma_split(df, column, split=', '):
         df_out.index.name = df.index.name
     return df_out
 
+def bin_join(xs, symbol):
+    symbol = ' ' + symbol + ' ' 
+    return symbol.join('(%s)' % x for x in xs)
+        
+or_join  = functools.partial(bin_join, symbol='|')
+and_join = functools.partial(bin_join, symbol='&')
 
+def groupby_reduce_concat(gb, **kwargs):
+    """
+    df = (df_cells
+          .groupby(['stimulant', 'gene'])['gate_NT']
+          .pipe(groupby_reduce_concat, 
+                fraction_gate_NT='mean', 
+                cell_count='size'))
+    """
+    reductions = {'mean': lambda x: x.mean(),
+                  'size': lambda x: x.count()}
+    
+    arr = [reductions[f](gb).rename(name) for name, f in kwargs.items()]
+    return pd.concat(arr, axis=1)
 
 
 # GLUE

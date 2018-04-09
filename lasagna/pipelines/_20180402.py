@@ -4,6 +4,18 @@ gate_cells = '(3000 < dapi_nuclear_max < 12000)&(60 < area_nuclear < 140)&(2000 
 gate_NT = 'dapi_gfp_nuclear_corr < -0.5'
 
 stimulant = {'A': 'TNFa', 'B': 'IL1b'}
+positive_genes = {'IL1b': ['MAP3K7', 'NFKBIA', 'IKBKG', 
+                     'IRAK1', 'MYD88', 'IRAK4', 'TRAF6'],
+            'TNFa': ['MAP3K7', 'NFKBIA', 'IKBKG', 'TRADD', 
+                     'TNFRSF1A', 'TRAF2', 'IKBKB', 'CHUK', 'RIPK1']}
+
+tilemap_features = ['gfp_cell_median', 'gfp_nuclear_median', 
+                    'dapi_gfp_cell_corr', 'dapi_gfp_nuclear_corr']
+
+def filter_good_tiles(df):
+    index = (pd.read_csv('well_tiles_filtered_by_cluster.csv')
+        .pipe(lambda x: map(tuple, x.as_matrix())))
+    return df.set_index(['well', 'tile']).loc[index].reset_index()
 
 def combine_phenotypes(df_ph_full, df_ph_perimeter):
     """Combine phenotype data from `Snake._extract_phenotype_translocation` and 
@@ -33,7 +45,6 @@ def combine_phenotypes(df_ph_full, df_ph_perimeter):
                        .rename(columns=lambda x: x + '_perimeter'))
     
     return df_ph_full.join(df_ph_perimeter, on=key_cols)
-    
 
 def add_phenotype_cols(df_ph):
     return (df_ph
@@ -54,9 +65,37 @@ def annotate_cells(df_cells):
         else:
             return 'LG_sg' not in sgRNA_name
 
+    def get_stimulant(well):
+        return stimulant[well[0]]
+
+    def get_positive(df_cells):
+        TNFa_pos = positive_genes['TNFa']
+        IL1b_pos = positive_genes['IL1b']
+        gate_pos = or_join(['stimulant == "TNFa" & gene == @TNFa_pos',
+                            'stimulant == "IL1b" & gene == @IL1b_pos'])
+        return df_cells.eval(gate_pos)
+
     return (df_cells
         .assign(gate_NT=lambda x: x.eval(gate_NT))
         .assign(gene=lambda x: x['sgRNA_name'].apply(get_gene))
         .assign(targeting=lambda x: x['sgRNA_name'].apply(get_targeting))
+        .assign(stimulant=lambda x: x['well'].apply(get_stimulant))
+        .assign(positive=get_positive)
         )
 
+def plot_correlation_features(df_cells):
+    import seaborn as sns
+    corr_vars = df_cells.filter(regex='corr').columns
+    pg = \
+    (df_cells
+     .query(gate_cells)
+     .dropna(subset=['subpool'])
+     .dropna(subset=corr_vars)
+     .sample(5000)
+     .pipe(sns.pairplot, vars=corr_vars, hue='positive', size=6, diag_kind='kde')
+    )
+
+    return pg
+
+
+    
