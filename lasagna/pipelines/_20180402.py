@@ -134,3 +134,38 @@ def plot_sgRNAs_by_gene(df_cells, genes):
     plt.xticks(rotation=30);
     
     return fig
+
+def plot_NT_fraction_vs_count(df_cells, min_count=30):
+    import seaborn as sns
+    def classify(positive, gene):
+        if positive:
+            return 'positive'
+        if gene == 'LG':
+            return 'nontargeting'
+        else:
+            return 'negative'
+
+
+    cols = ['stimulant', 'barcode', 'positive', 'gene']
+    df = \
+    (df_cells
+      .query(gate_cells)
+      .groupby(cols)['gate_NT']
+      .pipe(groupby_reduce_concat, fraction='mean', count='size')
+      .reset_index()
+      .assign(sgRNA_class=lambda x: 
+              [classify(p,g) for p,g in zip(x['positive'], x['gene'])])
+      .assign(log10_count=lambda x: np.log10(1 + x['count']))
+    )
+
+    fg = \
+    (df
+     .query('count > @min_count')
+     .pipe(sns.pairplot, size=5, vars=['fraction', 'log10_count'], hue='sgRNA_class', 
+           diag_kind='hist', diag_kws=dict(histtype='step', lw=2, log=False, bins=20, normed=True))
+     .add_legend()
+    )
+    return fg
+
+
+    

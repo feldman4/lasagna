@@ -247,3 +247,13 @@ def add_quality(df):
     df['Q_mean'] = df.filter(regex='Q_\d+', axis=1).mean(axis=1)
     return df
 
+def load_NGS_hist(f):
+    return (pd.read_csv(f, header=None, sep='\s+')
+     .rename(columns={0: 'count', 1: 'barcode_full'})
+     .assign(file=f)
+     .assign(length=lambda x: x['barcode_full'].map(len))
+     .query('length == 12')
+     .assign(fraction=lambda x: np.log10(x['count']/x['count'].sum()))
+     )
+
+    
