@@ -11,7 +11,7 @@ from lasagna.io import read_stack as read
 
 keras.backend.set_image_data_format('channels_first')
 
-input_shape = (3, 51, 51)
+input_shape = (3, 32, 32)
 
 def load_data():
     pad_zero = lambda x: np.append(x, np.zeros_like(x)[:,:1], axis=1)
@@ -21,6 +21,8 @@ def load_data():
     X = pad_zero(np.concatenate((X_pos, X_neg)))
     y = np.concatenate((np.ones (len(X_pos), dtype=bool),
                         np.zeros(len(X_neg), dtype=bool)))
+
+    X = X[:, :, 11:11+32, 11:11+32]
 
     return X, y
 
