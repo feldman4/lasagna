@@ -540,7 +540,12 @@ def name(description, **more_description):
     """Name a file from a dictionary of filename parts. Can override dictionary with keyword arguments.
     """
     d = dict(description)
-    d.update(more_description)
+    
+    for k, v in more_description.items():
+        if v is None and k in d:
+            d.pop(k)
+        else:
+            d[k] = v
 
     assert 'tag' in d
 

@@ -1,6 +1,7 @@
 from lasagna.imports_ipython import *
 
-def plot_reads_per_cell(df_cells, **line_kwargs):
+
+def plot_reads_per_cell(df_cells, ax=None):
     ax = \
     (df_cells
      ['cell_barcode_count_0'].value_counts()
@@ -8,11 +9,10 @@ def plot_reads_per_cell(df_cells, **line_kwargs):
      .rename('cumulative fraction of cells')
      .rename_axis('reads per cell', axis=0)
      [:10]
-     .plot.line(**line_kwargs)
+     .plot.line(ax=ax)
     )
     ax.set_ylim([0, 1.05])
     return ax
-
 
 def plot_red_blue_scatter(df_cells, df_design):
     stats = calculate_barcode_stats(df_cells, df_design)
@@ -48,31 +48,82 @@ def plot_sgRNA_phenotype_box(df_cells, df_design):
     
     return ax
 
+def plot_quality_tile_clustermap(df_reads):
+    def color_unique(s, cmap):
+        uniq = s.unique()
+        pal = sns.color_palette(cmap, len(uniq))
+        return list(s.map(dict(zip(uniq, pal))))
+    
+    cols = list(df_reads.filter(axis=1, regex='Q_\d+').columns)
+    df_plot = df_reads.groupby(['well', 'tile'])[cols].mean()
+    colors = color_unique(df_plot.reset_index()['well'], 'viridis')
 
-def calculate_barcode_stats(df_cells, df_design):
-    gb = (df_cells
-      .query('subpool == "pool2_1"')
-      .groupby('cell_barcode_0'))
-    A = (gb.size().rename('cells per barcode'))
-    B = (gb['FR_pos']
-         .mean().clip(upper=0.13)
-         .rename('fraction positive cells'))
+    cg = sns.clustermap(df_plot, 
+                   row_colors=colors,
+                   col_cluster=False)
 
-    s = df_design.set_index('barcode')[['sgRNA_design', 'sgRNA_name']]
-    stats = (pd.concat([A, B], axis=1).reset_index()
-               .join(s, on='cell_barcode_0'))
+    cg.ax_heatmap.set_title('tiles clustered by mean quality')
+    cg.ax_row_colors.set_xlabel('well')
+    cg.ax_row_dendrogram.set_visible(False)
+    return cg
 
-    rename = lambda x: 'targeting' if x == 'FR_GFP_TM' else 'nontargeting'
-    stats['sgRNA type'] = stats['sgRNA_design'].apply(rename)
-    return stats
+def plot_combined_clustermap(df_reads, df_ph, n_clusters=5):
+    from sklearn.cluster import AgglomerativeClustering
+    from sklearn.preprocessing import scale
+
+    x = (df_ph.fillna(0)
+              .groupby(['well', 'tile']).mean()
+        )
+
+    cols = list(df_reads.filter(axis=1, regex='Q_\d+').columns)
+    y = df_reads.groupby(['well', 'tile'])[cols].mean()
+
+    df_plot = pd.concat([x, y], axis=1, join='inner')
+    # return df_plot
+    X = standardize(df_plot)
+    ag = AgglomerativeClustering(n_clusters)
+    ag.fit(X)
+    labels = ag.labels_
+    ix = np.argsort(labels)
+    palette = np.array(sns.color_palette('Set2', n_clusters))
+    colors = palette[labels]
+    row_colors = colors[ix]
+
+    cg = sns.clustermap(df_plot.iloc[ix], 
+                   standard_scale=True,
+                   row_colors=row_colors,
+                   row_cluster=False,
+                   col_cluster=False)
+
+    
+    cg.ax_row_colors.set_xlabel('well', rotation=90)
+    cg.ax_row_dendrogram.set_visible(False)    
+
+    cg.cax.set_visible(False)
+
+    ax = cg.fig.add_axes([-.27, 0.2, 0.5, 0.5])
+    cluster_series = (
+        pd.Series(labels, index=X.index)
+         .rename('cluster')
+         .reset_index()
+         .pipe(lasagna.plates.add_global_xy, '6w', grid_shape=(25, 25))
+         .assign(global_x=lambda x: x['global_x'] / 1000, 
+                 global_y=lambda x: x['global_y'] / 1000)
+         )
+    cluster_series.plot.scatter(x='global_x', y='global_y', 
+                       c=colors, s=40, ax=ax)
+
+    ax.set_xlabel('x (mm)')
+    ax.set_ylabel('y (mm)')
+    ax.set_title('tiles clustered by quality and phenotype')
+    ax.axis('equal')
+
+    return cg, cluster_series
 
 
-####
-
-
-
-
-def plot_mean_quality_per_tile(df_reads):
+def plot_mean_quality_per_tile(df_reads, ax=None):
+    """compatible with sns.FacetGrid
+    """
     stats_q = (df_reads
                .filter(regex='Q_\d+|^well$|^tile$')
                .groupby(['well', 'tile'])
@@ -82,11 +133,12 @@ def plot_mean_quality_per_tile(df_reads):
               )
 
     ax = sns.boxplot(data=stats_q, x='cycle', y='mean quality per tile', 
-                     whis=[10, 90])
+                     whis=[10, 90], ax=ax)
     ax.set_ylim([0.3, 1])
     num_cycles = len(stats_q['cycle'].value_counts())
     ax.set_xticklabels(range(1, num_cycles + 1))
-    ax.figure.tight_layout()
+    ax.set_xlabel('cycle')
+    ax.set_ylabel('mean quality per tile')
 
     return stats_q, ax
 
@@ -121,6 +173,9 @@ def plot_roc(y_true, y_score, **kwargs):
     fpr,tpr,thresholds = roc_curve(y_true, y_score, pos_label='FR_GFP_TM')
     plt.plot(fpr, tpr, **kwargs)
 
+
+### UTILITIES
+
 # from https://github.com/pandas-dev/pandas/issues/18124
 from functools import wraps
 
@@ -143,3 +198,16 @@ def monkey_patch_series_plot():
         return res
     pd.Series.plot.__call__ = _decorator
 
+def sns_wrap(f):
+    def restrict_kwargs(kwargs, f):
+        import inspect
+        f_kwargs = set(get_kwarg_defaults(f).keys()) | set(get_arg_names(f))
+        keys = f_kwargs & set(kwargs.keys())
+        return {k: kwargs[k] for k in keys}
+
+    argspec = inspect.getargspec(f)
+    arg_df = argspec.args[0]
+    def inner(data, **kwargs):
+        kwargs_ = firesnake.restrict_kwargs(kwargs, f)
+        return f(data, **kwargs_)
+    return inner   

@@ -16,6 +16,9 @@ BARCODE_0 = 'cell_barcode_0'
 BARCODE_1 = 'cell_barcode_1'
 BARCODE_COUNT_0 = 'cell_barcode_count_0'
 BARCODE_COUNT_1 = 'cell_barcode_count_1'
+GLOBAL_X = 'global_x'
+GLOBAL_Y = 'global_y'
+CLUSTER = 'cluster'
 
 def do_median_call(df_raw, cycles=12):
   X = dataframe_to_values(df_raw)
@@ -247,3 +250,42 @@ def add_quality(df):
     df['Q_mean'] = df.filter(regex='Q_\d+', axis=1).mean(axis=1)
     return df
 
+def load_NGS_hist(f):
+    return (pd.read_csv(f, header=None, sep='\s+')
+     .rename(columns={0: 'count', 1: 'barcode_full'})
+     .assign(file=f)
+     .assign(length=lambda x: x['barcode_full'].map(len))
+     .query('length == 12')
+     .assign(fraction=lambda x: np.log10(x['count']/x['count'].sum()))
+     )
+
+    
+def add_clusters(df_cells, neighbor_dist=50):
+    """Assigns -1 to clusters with only one cell.
+    """
+    from scipy.spatial.kdtree import KDTree
+    import networkx as nx
+
+    xy = df_cells[[GLOBAL_X, GLOBAL_Y]]
+    barcodes = df_cells[BARCODE_0]
+    barcodes = np.array(barcodes)
+
+    kdt = KDTree(xy)
+    print('searching for clusters among %d cells' % len(xy))
+    pairs = kdt.query_pairs(neighbor_dist)
+    pairs = np.array(list(pairs))
+
+    x = barcodes[pairs]
+    y = x[:, 0] == x[:, 1]
+
+    G = nx.Graph()
+    G.add_edges_from(pairs[y])
+
+    clusters = list(nx.connected_components(G))
+
+    cluster_index = np.zeros(len(xy), dtype=int) - 1
+    for i, c in enumerate(clusters):
+        cluster_index[list(c)] = i
+
+    df_cells[CLUSTER] = cluster_index
+    return df_cells

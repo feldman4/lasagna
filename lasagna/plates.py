@@ -109,7 +109,8 @@ def plate_coordinate(well, site, well_spacing, grid_spacing, grid_shape):
     if grid_spacing == '20X':
         delta = 643
     elif grid_spacing == '10X':
-        delta = 1286
+        # delta = 1286
+        delta = 1280
     else:
         delta = grid_spacing
 
