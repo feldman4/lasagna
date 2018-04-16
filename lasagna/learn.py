@@ -1,9 +1,13 @@
 from keras.models import Sequential
 from keras.layers import Conv2D, MaxPooling2D
 from keras.layers import Activation, Dropout, Flatten, Dense
-from lasagna.imports import *
+
 from keras.preprocessing.image import ImageDataGenerator
 import keras.backend
+
+import numpy as np
+import pandas as pd
+from lasagna.io import read_stack as read
 
 keras.backend.set_image_data_format('channels_first')
 
