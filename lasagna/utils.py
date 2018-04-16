@@ -217,7 +217,10 @@ def groupby_reduce_concat(gb, **kwargs):
                 cell_count='size'))
     """
     reductions = {'mean': lambda x: x.mean(),
-                  'size': lambda x: x.count()}
+                  'size': lambda x: x.size(),
+                  'count': lambda x: x.size(),
+                  'sum': lambda x: x.sum(),
+                  'sum_int': lambda x: x.sum().astype(int)}
     
     arr = [reductions[f](gb).rename(name) for name, f in kwargs.items()]
     return pd.concat(arr, axis=1)

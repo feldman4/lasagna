@@ -94,6 +94,129 @@ def annotate_cells(df_cells):
         .assign(positive=get_positive)
         )
 
+def annotate_hits(df_cells):
+    def classify(positive, gene):
+      if positive:
+          return 'positive'
+      if gene == 'LG':
+          return 'nontargeting'
+      else:
+          return 'negative'
+    return (df_cells
+        .assign(sgRNA_class=lambda x: 
+              [classify(p,g) for p,g in zip(x['positive'], x['gene'])]))
+
+def annotate_clusters(df_cells):
+    features = \
+    (df_cells
+     .groupby('cluster')['gate_NT']
+     .pipe(groupby_reduce_concat,  
+            cluster_size='size', cluster_NT='sum_int')
+    )
+    cols = ['cluster_size', 'cluster_NT']
+    return (df_cells.drop(cols, axis=1, errors='ignore').join(features, on='cluster'))
+
+
+def get_edge_dist(x, y, center):
+    x = center - np.abs(center - x)
+    y = center - np.abs(center - y)
+    return np.min(np.vstack((x, y)), axis=0)
+
+
+def dump_examples(df_cells, df_ph)
+    # selection criteria
+    tile_min_cell_count = 1000
+    wells = ['B2']
+    stimulants = ['IL1b']
+    min_edge_dist = 100
+    sgRNA_classes = ['positive', 'nontargeting']
+    
+    # output formatting
+    num_cells = 50
+    padding = 25
+    file_template = 'process/10X_c0-RELA-mNeon/10X_c0-RELA-mNeon_A1_Tile-103.aligned_phenotype.tif'
+    description = parse(file_template)
+    
+    def to_bounds(xy):
+        """1 pixel bounds, loaded with padding later. 
+        Doesn't use segmented region.
+        """
+        x, y = xy
+        i, j = int(np.floor(y)), int(np.floor(x))
+        return i, j, i + 1, j + 1
+    
+    # tiles with enough cells
+    good_wt = (df_ph
+               .groupby(['well', 'tile']).size()
+               .pipe(lambda x: list(x[x>tile_min_cell_count].index)))
+                    
+    df_cells = (df_cells
+     .query('stimulant == @stimulants')
+     # good wells
+     .query('well == @wells')
+     # good tiles
+     .set_index(['well', 'tile'])
+     .loc[good_wt].reset_index()
+     # OK cells
+     .query(gate_cells)
+     # label sgRNA classes
+     .pipe(annotate_hits)
+     .query('sgRNA_class == @sgRNA_classes')
+    )
+    
+    # no edge cells
+    df_ph = (df_ph
+         .assign(edge_dist=lambda x: get_edge_dist(x.x, x.y, 500))
+         .query('edge_dist > @min_edge_dist')
+    )
+    
+
+    to_tuples = lambda x: map(tuple, x.as_matrix())
+    
+    df_ph_wtc = (df_ph[['well', 'tile', 'cell']]
+                 .pipe(to_tuples) 
+    
+    for class_ in classes:
+        # select cells
+        wtc = (df
+               .query('sgRNA_class == @class_')
+               .query('gate_NT')
+               
+               [['well', 'tile', 'cell']].pipe(to_tuples)
+              )
+        # only cells with phenotype data
+        assert len(set(wtc) - set(df_ph_wtc)) == 0
+        wtc = sorted(set(wtc) & set(df_ph_wtc))
+        wtc = np.random.choice(wtc, num_cells, replace=False, seed=0)
+
+        # retrieve x,y coordinates
+        xy = (df_ph
+              .set_index(['well', 'tile', 'cell'])
+              .loc[wtc, ['x', 'y']].as_matrix())
+        bounds = map(to_bounds, xy)
+
+        # files containing data
+        files_data, files_cells = [], []
+        for w,t,_ in wtc:
+            files_data .append(name(description, well=w, tile=t))
+            files_cells.append(name(description, well=w, tile=t, 
+                    tag='cells', subdir='process', cycle=None))
+                 
+        # load data, faster with memmap enabled
+        data  = grid_view(files_data,  bounds, padding=padding)
+        cells = grid_view(files_cells, bounds, padding=padding)
+
+        file_data  = name(d, cycle=class_, tag='phenotype_aligned', well='B2', 
+                 tile=None, subdir='B2_by_class')
+        file_cells = name(parse(file_data), tag='cells')
+                 
+        save(file_data,  data)
+        save(file_cells, cells[:, None, :, :])
+    
+
+
+### PLOTTING
+
 def plot_correlation_features(df_cells):
     import seaborn as sns
     corr_vars = df_cells.filter(regex='corr').columns
@@ -137,13 +260,7 @@ def plot_sgRNAs_by_gene(df_cells, genes):
 
 def plot_NT_fraction_vs_count(df_cells, min_count=30):
     import seaborn as sns
-    def classify(positive, gene):
-        if positive:
-            return 'positive'
-        if gene == 'LG':
-            return 'nontargeting'
-        else:
-            return 'negative'
+
 
 
     cols = ['stimulant', 'barcode', 'positive', 'gene']
@@ -153,8 +270,7 @@ def plot_NT_fraction_vs_count(df_cells, min_count=30):
       .groupby(cols)['gate_NT']
       .pipe(groupby_reduce_concat, fraction='mean', count='size')
       .reset_index()
-      .assign(sgRNA_class=lambda x: 
-              [classify(p,g) for p,g in zip(x['positive'], x['gene'])])
+      .pipe(annotate_hits)
       .assign(log10_count=lambda x: np.log10(1 + x['count']))
     )
 
@@ -168,4 +284,53 @@ def plot_NT_fraction_vs_count(df_cells, min_count=30):
     return fg
 
 
+def filter_clusters(df_cells):
+    return (df_cells
+            .dropna(subset=['gene'])
+            .query(gate_cells)
+            .query('cluster > -1')
+            .pipe(annotate_clusters)  
+            .pipe(annotate_hits))
+
+def plot_cluster_heatmaps(df_cells, x_range=(None,5), y_range=(1, 5)):
+    import seaborn as sns
+    def plot_heatmap(data, **kwargs):
+        ax = plt.gca()
+        (data.pivot_table(index='cluster_NT', columns='cluster_size', 
+                        values='cluster', aggfunc=len)
+         # ensure heatmap covers full range
+         .reindex(range(0, y_range[1] + 1), axis=0)
+         .reindex(range(0, x_range[1] + 1), axis=1)
+         .iloc[slice(*y_range), slice(*x_range)]
+         .pipe(lambda x: x / x.sum().sum())
+         .pipe(lambda x: x * 100)
+         .pipe(sns.heatmap, annot=True, ax=ax)
+        )
+        ax.invert_yaxis()
+
+    fg = (df_cells
+        .pipe(filter_clusters)
+        .query('gate_NT')
+        .pipe(sns.FacetGrid, row='sgRNA_class',
+            size=3, aspect=1.65)
+        .map_dataframe(plot_heatmap)
+        .set_xlabels('cluster size')
+        .set_ylabels('NT positive cells')
+    )
     
+    return fg
+    
+    
+def plot_NT_positive_histogram(df_cells):
+    import seaborn as sns
+    import matplotlib.pyplot as plt
+    return (df_cells
+       .pipe(filter_clusters)
+       .query('gate_NT')
+       .pipe(sns.FacetGrid, size=5, hue='sgRNA_class')
+       .map(plt.hist, 'cluster_NT', bins=np.arange(0.5, 8), 
+            histtype='step', lw=2, normed=True)
+       .add_legend()
+       .set_xlabels('# pos. cells in cluster')
+       .set_ylabels('fraction of pos. cells')
+       )

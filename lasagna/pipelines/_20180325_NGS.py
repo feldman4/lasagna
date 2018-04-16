@@ -17,16 +17,16 @@ def load_abundances(home='NGS/samples'):
                  .assign(library=lambda x: x['file'].map(file_to_library))
                  .assign(tag=tag))
         arr += [df_NGS]
-        
+
     return pd.concat(arr)
 
 def plot_and_export_abundance(df_NGS):
     for tag, df in df_NGS.groupby('tag'):
         fig, ax = plt.subplots()
-        df.groupby('library')['fraction'].plot(ax=ax)
+        df.reset_index(drop=True).groupby('library', as_index=False)['fraction'].plot(ax=ax)
         ax.set_xlabel('barcode rank')
         ax.set_ylabel('log10 fraction')
         plt.legend()
         fig.tight_layout()
-        f = '/Users/feldman/lasagna/NGS/samples/{tag}_abundance.pdf'
+        f = '/Users/feldman/lasagna/NGS/samples/{tag}_abundance_filt.pdf'
         fig.savefig(f.format(tag=tag))
