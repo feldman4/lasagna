@@ -123,7 +123,7 @@ def get_edge_dist(x, y, center):
     return np.min(np.vstack((x, y)), axis=0)
 
 
-def dump_examples(df_cells, df_ph)
+def dump_examples(df_cells, df_ph):
     # selection criteria
     tile_min_cell_count = 1000
     wells = ['B2']
@@ -132,7 +132,7 @@ def dump_examples(df_cells, df_ph)
     sgRNA_classes = ['positive', 'nontargeting']
     
     # output formatting
-    num_cells = 50
+    num_cells = 500
     padding = 25
     file_template = 'process/10X_c0-RELA-mNeon/10X_c0-RELA-mNeon_A1_Tile-103.aligned_phenotype.tif'
     description = parse(file_template)
@@ -149,19 +149,29 @@ def dump_examples(df_cells, df_ph)
     good_wt = (df_ph
                .groupby(['well', 'tile']).size()
                .pipe(lambda x: list(x[x>tile_min_cell_count].index)))
-                    
+                   
+    to_tuples = lambda x: map(tuple, x.as_matrix()) 
+    def select_multi(df, cols, values):
+      index = to_tuples(df[cols])
+      filt = [ix in values for ix in index]
+      return df[filt]
+
     df_cells = (df_cells
      .query('stimulant == @stimulants')
      # good wells
      .query('well == @wells')
      # good tiles
-     .set_index(['well', 'tile'])
-     .loc[good_wt].reset_index()
+     .pipe(select_multi, ['well', 'tile'], good_wt)
+     # pandas .loc with tuple list screws up index and column dtypes...
+     # set_index(['well', 'tile'])
+     # .loc[good_wt].reset_index()
+     # .rename(columns={'level_0': 'well', 'level_1': 'tile'})
      # OK cells
      .query(gate_cells)
      # label sgRNA classes
      .pipe(annotate_hits)
      .query('sgRNA_class == @sgRNA_classes')
+     .query('gate_NT == [True, False]')
     )
     
     # no edge cells
@@ -170,24 +180,21 @@ def dump_examples(df_cells, df_ph)
          .query('edge_dist > @min_edge_dist')
     )
     
-
-    to_tuples = lambda x: map(tuple, x.as_matrix())
     
     df_ph_wtc = (df_ph[['well', 'tile', 'cell']]
-                 .pipe(to_tuples) 
+                 .pipe(to_tuples))
     
-    for class_ in classes:
+    # for (class_, NT_status), df_cells_ in df_cells.groupby(['sgRNA_class', 'gate_NT']):
+    for class_, df_cells_ in df_cells.groupby('sgRNA_class'):
+        # NT_label = 'pos' if NT_status else 'neg'
+        NT_label = 'all'
         # select cells
-        wtc = (df
-               .query('sgRNA_class == @class_')
-               .query('gate_NT')
-               
+        wtc = (df_cells_
                [['well', 'tile', 'cell']].pipe(to_tuples)
               )
-        # only cells with phenotype data
-        assert len(set(wtc) - set(df_ph_wtc)) == 0
+        # only cells with phenotype data passing edge criterion
         wtc = sorted(set(wtc) & set(df_ph_wtc))
-        wtc = np.random.choice(wtc, num_cells, replace=False, seed=0)
+        wtc = pd.Series(wtc).sample(num_cells, replace=False, random_state=0).pipe(list)
 
         # retrieve x,y coordinates
         xy = (df_ph
@@ -206,12 +213,15 @@ def dump_examples(df_cells, df_ph)
         data  = grid_view(files_data,  bounds, padding=padding)
         cells = grid_view(files_cells, bounds, padding=padding)
 
-        file_data  = name(d, cycle=class_, tag='phenotype_aligned', well='B2', 
-                 tile=None, subdir='B2_by_class')
+        cycle = '{class_}-sgRNA-{NT_label}'.format(class_=class_, NT_label=NT_label)
+        file_data  = name(description, cycle=cycle, 
+                          tag='phenotype_aligned', well='B2', 
+                          tile=None, subdir='examples')
         file_cells = name(parse(file_data), tag='cells')
                  
         save(file_data,  data)
-        save(file_cells, cells[:, None, :, :])
+        print 'wrote %d examples to %s' % (len(data), file_data)
+        # save(file_cells, cells[:, None, :, :])
     
 
 
