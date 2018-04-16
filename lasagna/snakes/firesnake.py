@@ -269,6 +269,12 @@ class Snake():
         return loged
 
     @staticmethod
+    def _median_filter(data, index, width):
+        from scipy.ndimage import filters
+        data[index] = filters.median_filter(data[index], size=(width, width))
+        return data
+
+    @staticmethod
     def _find_peaks(data, cutoff=50):
         if data.ndim == 2:
             data = [data]
@@ -369,7 +375,6 @@ class Snake():
         }
 
         return Snake._extract_phenotype(data_phenotype, nuclei, wildcards, features)       
-
 
     @staticmethod
     def _extract_phenotype_translocation_ring(data_phenotype, nuclei, wildcards, width=3):
