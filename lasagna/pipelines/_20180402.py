@@ -58,7 +58,7 @@ def add_phenotype_cols(df_ph):
     return (df_ph
         .assign(gcm=lambda x: x.eval('gfp_cell_median - gfp_nuclear_median')))
 
-def annotate_cells(df_cells):
+def annotate_cells(df_cells, ):
     def get_gene(sgRNA_name):
         if sgRNA_name is np.nan:
             return sgRNA_name
@@ -77,7 +77,7 @@ def annotate_cells(df_cells):
         return stimulant[well[0]]
 
     def categorize_stimulant(s):
-        return s.astype('category').cat.reorder_categories(['TNFa', 'IL1b'])
+        return pd.Categorical(s, categories=['TNFa', 'IL1b'], ordered=True)
 
     def get_positive(df_cells):
         TNFa_pos = positive_genes['TNFa']
@@ -224,6 +224,25 @@ def dump_examples(df_cells, df_ph):
         # save(file_cells, cells[:, None, :, :])
     
 
+def rescale_20X_to_10X(stack_20X, dapi_10X, scale=0.5025):
+
+    rescale = lambda x: (skimage.transform.rescale(x, (scale, scale), preserve_range=True)
+                         .astype(np.uint16))
+    rescaled_ = np.array(map(rescale, stack_20X))
+
+    num_channels = len(stack_20X)
+    
+    dapi_10X_ = np.array([dapi_10X] * num_channels)
+    rescaled = np.zeros_like(dapi_10X_)
+    # pad with zeros, assuming rescaled stack_20X is smaller than dapi_10X
+    _, h, w = rescaled_.shape
+    rescaled[:, :h, :w] = rescaled_
+
+    images  = [dapi_10X_,  rescaled]
+    images_ = [dapi_10X, rescaled[0]]
+    result = lasagna.process.register_and_offset(images, registration_images=images_)
+
+    return result[1]
 
 ### PLOTTING
 

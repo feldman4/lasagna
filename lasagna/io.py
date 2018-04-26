@@ -35,7 +35,7 @@ MAGENTA = tuple(range(256) + [0] * 256 + range(256))
 GRAY = tuple(range(256) * 3)
 CYAN = tuple([0] * 256 + range(256) * 2)
 
-DEFAULT_LUTS = GRAY, CYAN, GREEN, RED, MAGENTA, GRAY, GRAY, GRAY
+DEFAULT_LUTS = GRAY, GREEN, RED, MAGENTA, CYAN, GRAY, GRAY, GRAY
 
 DIR = {}
 
@@ -352,20 +352,23 @@ def read_lut(name):
         values = [line[:-1].split() for line in lines]
     return [int(y) for x in zip(*values) for y in x]
 
-# DEPRECATED
-def read_registered(path):
-    """DEPRECATED
 
-    Reads output of Fiji Grid/Collection stitching (TileConfiguration.registered.txt),
-    returns list of tile coordinates.
-    :param path:
-    :return:
+def load_stitching_offsets(filename):
+    """Load i,j coordinates from the text file saved by the Fiji Grid/Collection stitching plugin.
     """
-    with open(path, 'r') as fh:
-        tile_config = fh.read()
-    m = re.findall('\(.*\)', tile_config)
-    translations = [[float(x) for x in pos[1:-1].split(',')] for pos in m]
-    return translations
+    from ast import literal_eval
+    
+    with open(filename, 'r') as fh:
+        txt = fh.read()
+    txt = txt.split('# Define the image coordinates')[1]
+    lines = txt.split('\n')
+    coordinates = []
+    for line in lines:
+        parts = line.split(';')
+        if len(parts) == 3:
+            coordinates += [parts[-1].strip()]
+    
+    return [(i,j) for j,i in map(literal_eval, coordinates)]
 
 GLASBEY = read_lut('glasbey_inverted')
 

@@ -1,0 +1,122 @@
+from glob import glob
+import json
+
+import snakemake
+# from lasagna.snakes.firesnake3 import call_firesnake
+from firesnake3 import call_firesnake
+
+
+# if true, will run when the data is complete, doing what it can
+# snakemake.ignore_missing = True
+
+# UPDATE: set to number of cycles used
+CYCLES = ['c{cycle}-SBS-{cycle}'.format(cycle=c) for c in range(1, 13)]
+CYCLES = CYCLES[:1]
+
+THRESHOLD_DO = 2000
+INDEX_DO = None
+
+
+# UPDATE: more sites will take longer for the DAG to build (especially if ignore_missing is true)
+WELLS = ['B1', 'B2', 'B3']
+
+RANGE = lambda x: list(map(str, range(x[0] * x[1])))
+TILES = RANGE((15, 15))
+# take every 9th tile to speed up analysis
+# TILES = RANGE((7, 7))[::9]
+
+DISPLAY_RANGES=((500, 20000), 
+                (100, 20000), 
+                (100, 20000), 
+                (100, 20000), 
+                (100, 20000))
+
+
+CHANNEL_OFFSETS = [(0, 0), (0, 0), (0, 0), (0, 0), (0, 0)]
+
+
+rule all:
+    input:
+    # can request individual files here
+        expand('process/10X_{well}_Tile-{tile}.peaks.tif', well=WELLS, tile=TILES)
+
+rule segment_nuclei:
+    input:
+        'process/10X_{cycle}/10X_{cycle}_{{well}}_Tile-{{tile}}.max.tif'.format(cycle=CYCLES[0]),
+        # discarded input, to change run order
+        'process/10X_{well}_Tile-{tile}.aligned.tif'
+    output:
+        'process/10X_{well}_Tile-{tile}.nuclei.tif'
+    run:
+        call_firesnake('segment_nuclei', output, data=input[0], 
+            threshold=1200, area_min=0.25*150, area_max=0.25*800)
+
+rule segment_cells:
+    """segment_cells works best when fed data with the most cytoplasmic autofluorescence. SBS data is OK but
+    not the best if something else is available.
+    """
+    input:
+        expand('process/10X_{cycle}/10X_{cycle}_{{well}}_Tile-{{tile}}.max.tif', cycle=CYCLES[0]),
+        'process/10X_{well}_Tile-{tile}.nuclei.tif'
+    output:
+        'process/10X_{well}_Tile-{tile}.cells.tif'
+    run:
+        call_firesnake('segment_cells', output, 
+            data=input[0], nuclei=input[1], threshold=4*200)
+
+rule align:
+    priority: -1
+    input:
+        expand('process/10X_{cycle}/10X_{cycle}_{{well}}_Tile-{{tile}}.max.tif', cycle=CYCLES)
+    output:
+        temp('process/10X_{well}_Tile-{tile}.aligned.tif')
+    run:
+        call_firesnake('align', output, data=input,
+            display_ranges=DISPLAY_RANGES, channel_offsets=CHANNEL_OFFSETS)
+
+rule transform_LoG:
+    input:
+        'process/10X_{well}_Tile-{tile}.aligned.tif'
+    output:
+        temp('process/10X_{well}_Tile-{tile}.log.tif')
+    run:
+        call_firesnake('transform_LoG', output, data=input[0],
+            display_ranges=DISPLAY_RANGES)
+
+rule consensus_DO:
+    input:
+        'process/10X_{well}_Tile-{tile}.log.tif'
+    output:
+        'process/10X_{well}_Tile-{tile}.consensus_DO.tif'
+    run:
+        call_firesnake('consensus_DO', output, data=input[0])
+
+rule find_peaks:
+    input:
+        'process/10X_{well}_Tile-{tile}.consensus_DO.tif'
+    output:
+        'process/10X_{well}_Tile-{tile}.peaks.tif'
+    run:
+        call_firesnake('find_peaks', output, data=input[0], display_ranges=None) 
+
+rule max_filter:
+    input:
+        'process/10X_{well}_Tile-{tile}.log.tif'
+    output:
+        temp('process/10X_{well}_Tile-{tile}.maxed.tif')
+    run:
+        call_firesnake('max_filter', output, 
+            data=input[0], width=3, display_ranges=DISPLAY_RANGES) 
+
+rule extract_barcodes:
+    input:
+        'process/10X_{well}_Tile-{tile}.peaks.tif',
+        'process/10X_{well}_Tile-{tile}.maxed.tif',
+        'process/10X_{well}_Tile-{tile}.cells.tif'
+    output:
+        'process/10X_{well}_Tile-{tile}.barcodes.csv'
+    run:
+        call_firesnake('extract_barcodes', output, 
+            peaks=input[0], data_max=input[1], cells=input[2], 
+            cycles=CYCLES, threshold_DO=THRESHOLD_DO, index_DO=INDEX_DO,
+            wildcards=dict(wildcards)) 

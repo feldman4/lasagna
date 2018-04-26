@@ -59,11 +59,14 @@ def remap_snake(site, grid_shape):
     return '%d' % site_
 
 
-def filter_position_list(filename, well_site_list):
+def filter_micromanager_positions(filename, well_site_list):
     """Restrict micromanager position list to given wells and sites.
     """
     import json
-    well_site_list = set(well_site_list)
+    if isinstance(well_site_list, pd.DataFrame):
+        well_site_list = zip(well_site_list['well'], well_site_list['site'])
+
+    well_site_list = set((str(w), str(s)) for w,s in well_site_list)
     def filter_well_site(position):
         pat = '(.\d+)-Site_(\d+)'
         return re.findall(pat, position['LABEL'])[0] in well_site_list
@@ -74,7 +77,9 @@ def filter_position_list(filename, well_site_list):
     
     d['POSITIONS'] = filter(filter_well_site, d['POSITIONS'])
     
-    filename2 = filename + '.filtered.pos'
+    import datetime
+    timestamp = '{date:%Y%m%d_%I.%M%p}'.format( date=datetime.datetime.now() )
+    filename2 = '%s.%s.filtered.pos' % (filename, timestamp)
     with open(filename2, 'w') as fh:
         json.dump(d, fh)
         print '...'
@@ -100,6 +105,8 @@ def add_row_col(df, in_place=False, col_to_int=True):
 
 
 def plate_coordinate(well, site, well_spacing, grid_spacing, grid_shape):
+    """Returns i,j coordinate
+    """
     site = int(site)
     if well_spacing == '96w':
         well_spacing = 9000
@@ -127,7 +134,9 @@ def plate_coordinate(well, site, well_spacing, grid_spacing, grid_shape):
     return i, j
 
 
-def add_global_xy(df, well_spacing, grid_spacing='10X', grid_shape=(7, 7)):
+def add_global_xy(df, well_spacing, grid_shape, grid_spacing='10X'):
+    """df.pipe(add_global_xy, '6w', (25,25))
+    """
     if well_spacing == '96':
         well_spacing = 9000
     elif well_spacing == '6':

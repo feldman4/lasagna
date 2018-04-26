@@ -8,8 +8,10 @@ WELL = 'well'
 TILE = 'tile'
 CELL = 'cell'
 BLOB = 'blob'
+CHANNEL = 'channel'
+CYCLE = 'cycle'
+INTENSITY = 'intensity'
 CYCLES_IN_SITU = 'cycles_in_situ'
-QUALITY = 'quality'
 BARCODE = 'barcode'
 BARCODE_COUNT = 'barcode_count'
 BARCODE_0 = 'cell_barcode_0'
@@ -20,24 +22,26 @@ GLOBAL_X = 'global_x'
 GLOBAL_Y = 'global_y'
 CLUSTER = 'cluster'
 
-def do_median_call(df_raw, cycles=12):
-  X = dataframe_to_values(df_raw)
-  Y, W = transform_medians(X.reshape(-1, 4))
+IMAGING_ORDER = 'GTAC'
 
-  df_reads = call_barcodes(df_raw, Y, cycles=cycles)
-  return df_reads
+def do_median_call(df_raw, cycles=12, channels=4):
+  X = dataframe_to_values(df_raw, channels=channels)
+  Y, W = transform_medians(X.reshape(-1, channels))
+
+  df_reads = call_barcodes(df_raw, Y, cycles=cycles, channels=channels)
+  return df_reads.drop([CHANNEL, INTENSITY], axis=1)
 
 def clean_up_raw(df_raw):
     """Categorize, sort. Pre-processing for `dataframe_to_values`.
     """
-    exclude_subset = ['well', 'tile', 'cell'] # causes issues with later joins, maybe a pandas bug
-    df_raw = categorize(df_raw, exclude_subset=exclude_subset)
-    order = natsorted(df_raw['cycle'].cat.categories)
-    df_raw['cycle'] = (df_raw['cycle']
+    # exclude_subset = ['well', 'tile', 'cell', 'intensity', 'blob'] # causes issues with later joins, maybe a pandas bug
+    df_raw = categorize(df_raw, subset=[CYCLE])
+    order = natsorted(df_raw[CYCLE].cat.categories)
+    df_raw[CYCLE] = (df_raw[CYCLE]
                    .cat.as_ordered()
                    .cat.reorder_categories(order))
 
-    df_raw = df_raw.sort_values(['well', 'tile', 'cell', 'blob', 'cycle', 'channel'])
+    df_raw = df_raw.sort_values([WELL, TILE, CELL, BLOB, CYCLE, CHANNEL])
     return df_raw
 
 def call_cells(df_reads):
@@ -62,18 +66,18 @@ def call_cells(df_reads):
       .join(s['count'].sum() .rename(BARCODE_COUNT),             on=cols)
     )
 
-def dataframe_to_values(df, value='intensity'):
+def dataframe_to_values(df, value='intensity', channels=4):
     """Dataframe must be sorted on [cycles, channels]. 
     Returns N x cycles x channels.
     """
     cycles = df['cycle'].value_counts()
     assert len(set(cycles)) == 1
     n_cycles = len(cycles)
-    x = np.array(df[value]).reshape(-1, n_cycles, 4)
+    x = np.array(df[value]).reshape(-1, n_cycles, channels)
     return x
 
 def transform_medians(X):
-    """Find median of max along each dimension to define new axes. 
+    """For each dimension, find points where that dimension is max. Use median of those points to define new axes. 
     Describe with linear transformation W so that W * X = Y.
     """
 
@@ -90,12 +94,11 @@ def transform_medians(X):
     Y = W.dot(X.T).T.astype(int)
     return Y, W
 
-def call_barcodes(df_raw, Y, cycles=12):
+def call_barcodes(df_raw, Y, cycles=12, channels=4):
+    bases = sorted(IMAGING_ORDER[:channels])
     df_reads = df_raw.drop_duplicates([WELL, TILE, BLOB]).copy()
-    df_reads[CYCLES_IN_SITU] = call_bases_fast(Y.reshape(-1, cycles, 4))
-    Q = quality(Y.reshape(-1, cycles, 4))
-    # might want rank 0 or 1 instead
-    df_reads[QUALITY] = Q.mean(axis=1)
+    df_reads[CYCLES_IN_SITU] = call_bases_fast(Y.reshape(-1, cycles, channels), bases)
+    Q = quality(Y.reshape(-1, cycles, channels))
     # needed for performance later
     for i in range(len(Q[0])):
         df_reads['Q_%d' % i] = Q[:,i]
@@ -104,9 +107,11 @@ def call_barcodes(df_raw, Y, cycles=12):
     df_reads = df_reads.rename(columns={CYCLES_IN_SITU: BARCODE})
     return df_reads
 
-def call_bases_fast(values, bases='ACGT'):
+def call_bases_fast(values, bases):
+    """4-color: bases='ACGT'
+    """
     assert values.ndim == 3
-    assert values.shape[2] == 4
+    assert values.shape[2] == len(bases)
     calls = values.argmax(axis=2)
     calls = np.array(list(bases))[calls]
     return [''.join(x) for x in calls]

@@ -213,6 +213,16 @@ class Snake():
         return aligned
 
     @staticmethod
+    def _align_no_DAPI(data, index_align=0, channel_offsets=None):
+        aligned = Snake._align(data, index_align=index_align, channel_offsets=channel_offsets)
+
+        shape = list(aligned.shape)
+        shape[1] += 1 # channels
+        aligned_ = np.zeros(shape, dtype=aligned.dtype)
+        aligned_[:, 1:] = aligned
+        return aligned_
+
+    @staticmethod
     def _consensus_DO(data):
         """Use variance to estimate DO.
         """
@@ -292,10 +302,11 @@ class Snake():
 
         if data.ndim == 3:
             data = data[None]
+        
         maxed = np.zeros_like(data)
         maxed[:, 1:] = scipy.ndimage.filters.maximum_filter(data[:,1:], size=(1, 1, width, width))
         maxed[:, 0] = data[:, 0] # DAPI
-
+    
         return maxed
 
     @staticmethod
@@ -309,25 +320,33 @@ class Snake():
         if index_DO is None:
             index_DO = Ellipsis
 
-        data_max = data_max[:, 1:] # no DAPI
+        data_max = data_max[:, 1:]
+
         blob_mask = (peaks[index_DO] > threshold_DO) & (cells > 0)
         values = data_max[:, :, blob_mask].transpose([2, 0, 1])
         labels = cells[blob_mask]
         positions = np.array(np.where(blob_mask)).T
 
-        index = ('cycle', cycles), ('channel', list('GTAC'))
+        if data_max.shape[1] == 3:
+            bases = list('GTA')
+        else:
+            bases = list('GTAC')
+        index = ('cycle', cycles), ('channel', bases)
         try:
             df = lasagna.utils.ndarray_to_dataframe(values, index)
         except ValueError:
             print('extract_barcodes failed to reshape, writing dummy')
             return pd.DataFrame()
 
+        get_cycle = lambda x: int(re.findall('c(\d+)-', x)[0])
         df_positions = pd.DataFrame(positions, columns=['position_i', 'position_j'])
         df = (df.stack(['cycle', 'channel'])
            .reset_index()
            .rename(columns={0:'intensity', 'level_0': 'blob'})
            .join(pd.Series(labels, name='cell'), on='blob')
            .join(df_positions, on='blob')
+           .assign(cycle=lambda x: x['cycle'].apply(get_cycle))
+           .sort_values(['cell', 'blob', 'cycle'])
            )
         for k,v in wildcards.items():
             df[k] = v
