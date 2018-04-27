@@ -32,6 +32,7 @@ def call_firesnake(method, output, **info):
             '--input_json', json_name,
             '--output', str(output)]
     call(cmd)
+    os.remove(json_name)
 
 def find_python2():
     python2 = shutil.which('python2')

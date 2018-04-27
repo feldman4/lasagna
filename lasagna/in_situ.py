@@ -21,6 +21,8 @@ BARCODE_COUNT_1 = 'cell_barcode_count_1'
 GLOBAL_X = 'global_x'
 GLOBAL_Y = 'global_y'
 CLUSTER = 'cluster'
+SUBPOOL = 'subpool'
+SGRNA_NAME = 'sgRNA_name'
 
 IMAGING_ORDER = 'GTAC'
 
@@ -64,6 +66,8 @@ def call_cells(df_reads):
       .join(s.nth(1)[BARCODE].rename(BARCODE_1),                 on=cols)
       .join(s.nth(1)['count'].rename(BARCODE_COUNT_1).fillna(0), on=cols)
       .join(s['count'].sum() .rename(BARCODE_COUNT),             on=cols)
+      .drop_duplicates(cols)
+      .drop([BARCODE], axis=1) # drop the read barcode
     )
 
 def dataframe_to_values(df, value='intensity', channels=4):
@@ -105,6 +109,7 @@ def call_barcodes(df_raw, Y, cycles=12, channels=4):
  
     # cycles converted straight to barcodes
     df_reads = df_reads.rename(columns={CYCLES_IN_SITU: BARCODE})
+    df_reads['Q_min'] = df_reads.filter(regex='Q_\d+').min(axis=1)
     return df_reads
 
 def call_bases_fast(values, bases):
@@ -264,7 +269,6 @@ def load_NGS_hist(f):
      .assign(fraction=lambda x: np.log10(x['count']/x['count'].sum()))
      )
 
-    
 def add_clusters(df_cells, neighbor_dist=50):
     """Assigns -1 to clusters with only one cell.
     """
@@ -293,4 +297,16 @@ def add_clusters(df_cells, neighbor_dist=50):
         cluster_index[list(c)] = i
 
     df_cells[CLUSTER] = cluster_index
+    return df_cells
+
+def add_design(df_cells_all, df_design, 
+    design_barcode_col='barcode', 
+    cell_barcode_col='cell_barcode_0'):
+
+    s = (df_design.drop_duplicates(design_barcode_col)
+        .set_index(design_barcode_col)
+        [[SUBPOOL, SGRNA_NAME]])
+
+    cols = [WELL, TILE, CELL]
+    df_cells = df_cells_all.join(s, on=cell_barcode_col)
     return df_cells

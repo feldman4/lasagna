@@ -21,30 +21,62 @@ tilemap_features = ['gfp_cell_median', 'gfp_nuclear_median',
                     'dapi_gfp_cell_corr', 'dapi_gfp_nuclear_corr']
 
 
-def do_median_call_3(df_raw, cycles, constant_C):
+def do_median_call_3(df_raw, cycles, constant_C=1):
     n = len(df_raw)
-    X = np.zeros((n / (cycles * 3), cycles, 4), dtype=int)
-    X[:, :, :3] = in_situ.dataframe_to_values(df_raw, channels=3)
-    X[:, :, 3] = constant_C
-    Y, W = in_situ.transform_medians(X.reshape(-1, 4))
-
+    X = np.zeros((n / (cycles * 3), cycles, 4), dtype=float)
+    X_ = in_situ.dataframe_to_values(df_raw, channels=3)
+    X_ = X_ / X_.mean(axis=0)[None]
+    # now in A,C,G,T order
+    X[:, :, [0, 2, 3]] = X_
+    X[:, :, 1] = 1
+    # Y, W = in_situ.transform_medians(X.reshape(-1, 4))
+    Y = X.reshape(-1, 4)
     df_reads = in_situ.call_barcodes(df_raw, Y, cycles=cycles, channels=4)
     return df_reads.drop(['channel', 'intensity'], axis=1)
 
-def subset_cells(df_cells_all, df_design):
-    s = (df_design.drop_duplicates('barcode_in_situ')
-     .set_index('barcode_in_situ')
-     .rename(columns={'ambiguous': 'duplicated'})
-     [['subpool', 'sgRNA_name', 'duplicated']])
 
+def add_phenotype(df_cells, df_ph):
     cols = ['well', 'tile', 'cell']
-    df_cells = (df_cells_all
-     .drop_duplicates(cols)
-     .join(s, on='cell_barcode_0')
-     .join(df_ph.set_index(['well', 'tile', 'cell']), on=cols)
-     .pipe(pipeline.annotate_cells)         
-    )
-    return df_cells
+    return (df_cells     
+        .join(df_ph.set_index(cols), on=cols)
+        .pipe(annotate_cells)   
+        )
+
+def annotate_cells(df_cells):
+    def get_gene(sgRNA_name):
+        if sgRNA_name is np.nan:
+            return sgRNA_name
+        if sgRNA_name.startswith('LG'):
+            return 'LG'
+        pat = 'sg_(.*?)_'
+        return re.findall(pat, sgRNA_name)[0]
+
+    def get_targeting(sgRNA_name):
+        if sgRNA_name is np.nan:
+            return False
+        else:
+            return 'LG_sg' not in sgRNA_name
+
+    def get_stimulant(well):
+        return stimulant[well[0]]
+
+    def categorize_stimulant(s):
+        return pd.Categorical(s, categories=['TNFa', 'IL1b'], ordered=True)
+
+    def get_positive(df_cells):
+        TNFa_pos = positive_genes['TNFa']
+        IL1b_pos = positive_genes['IL1b']
+        gate_pos = or_join(['stimulant == "TNFa" & gene == @TNFa_pos',
+                            'stimulant == "IL1b" & gene == @IL1b_pos'])
+        return df_cells.eval(gate_pos)
+
+    return (df_cells
+        .assign(gate_NT=lambda x: x.eval(gate_NT))
+        .assign(gene=lambda x: x['sgRNA_name'].apply(get_gene))
+        .assign(targeting=lambda x: x['sgRNA_name'].apply(get_targeting))
+        .assign(stimulant=lambda x: 'IL-1b')
+        .assign(positive=get_positive)
+        )
 
 def filter_crap(df_raw):
     channels = 3

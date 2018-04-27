@@ -13,7 +13,7 @@ from firesnake3 import call_firesnake
 CYCLES = ['c{cycle}-SBS-{cycle}'.format(cycle=c) for c in range(1, 13)]
 CYCLES = CYCLES[:12]
 
-THRESHOLD_DO = 600
+THRESHOLD_DO = 2000
 INDEX_DO = None
 
 
@@ -25,7 +25,7 @@ TILES = RANGE((25, 25))
 
 # special pairs of WELLS and TILES
 import pandas as pd
-well_tile_list = list(map(tuple, pd.read_pickle('well_tile_list_process.pkl').as_matrix()))
+well_tile_list = list(map(tuple, pd.read_pickle('well_tile_list_process.pkl').as_matrix()))[:30]
 WELLS_, TILES_ = zip(*well_tile_list)
 WELLS_ = list(WELLS_)
 TILES_ = list(TILES_)
@@ -47,7 +47,7 @@ PHENOTYPE_TIF = 'process/10X_c0-DAPI-RELA-mNeon/10X_c0-DAPI-RELA-mNeon_{well}_Ti
 rule all:
     input:
     # can request individual files here
-        expand('process/10X_{well}_Tile-{tile}.barcodes.csv', zip, well=WELLS_, tile=TILES_),
+        expand('process/10X_{well}_Tile-{tile}.barcodes_2k.csv', zip, well=WELLS_, tile=TILES_),
         # expand('process/10X_{well}_Tile-{tile}.phenotype.pkl', zip, well=WELLS_, tile=TILES_)
         # 'process/10X_B1_Tile-10.barcodes.csv'
 
@@ -125,7 +125,7 @@ rule extract_barcodes:
         'process/10X_{well}_Tile-{tile}.maxed.tif',
         'process/10X_{well}_Tile-{tile}.cells.tif'
     output:
-        'process/10X_{well}_Tile-{tile}.barcodes.csv'
+        'process/10X_{well}_Tile-{tile}.barcodes_2k.csv'
     run:
         call_firesnake('extract_barcodes', output, 
             peaks=input[0], data_max=input[1], cells=input[2], 
