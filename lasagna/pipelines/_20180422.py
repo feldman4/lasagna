@@ -112,3 +112,47 @@ def grid_view2(df, **kwargs):
         i, j = int(row['y']), int(row['x']) # cell coordinates
         bounds.append((i, j, i+1, j+1))
     return grid_view(files, bounds, **kwargs)
+
+
+
+
+def apply_watermark(arr, label, trail=3, **kwargs):
+    """Apply label over trailing dimensions of array and append watermark of result.
+    If label is a function, it should return string or list of strings.
+    If label is a numpy.ndarray, its shape must match arr.shape[:-trail], with a single optional additional
+        trailing dimension. The trailing dimension will be used to form a list of str.
+    If label is a pandas.DataFrame, it will first be converted to a numpy.ndarray of type str via
+        lasagna.utils.to_nd_array.
+
+    Watermark is appended to channel dimension.
+
+    :param numpy.ndarray arr: image data of shape [..., channel, height, width].
+    :param label: function, numpy.ndarray, or pandas.DataFrame
+    :param int trail: number of trailing dimensions when applying label, >= 3.
+    :param kwargs: passed to lasagna.io.watermark
+    :return:
+    """
+
+    if isinstance(label, pd.DataFrame):
+        label = lasagna.utils.to_nd_array(label.astype(str))[0]
+    if isinstance(label, np.ndarray):
+        label = label.reshape([np.prod(arr.shape[:-trail]), -1])
+        it = iter([x for x in label])
+        label = lambda _: it.next()
+
+    assert (trail >= 3)
+    arr_ = arr.reshape(-1, *arr.shape[-trail:]).copy()
+    new_arr = []
+    for stack in arr_:
+        annotation_shape = list(stack.shape)
+        annotation_shape[-3] = 1
+        try:
+            annotation = lasagna.io.watermark(annotation_shape[-2:], label(stack), **kwargs)
+            annotation = np.resize(annotation, annotation_shape)
+        except ValueError:
+            annotation = np.zeros(annotation_shape)
+        new_arr += [np.concatenate([stack, annotation], axis=-3)]
+
+    new_shape = list(arr.shape)
+    new_shape[-3] += 1
+    return np.array(new_arr).reshape(new_shape)
