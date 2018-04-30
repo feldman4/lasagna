@@ -73,6 +73,8 @@ default_parts = \
     ,'BsmBI_rc': 'GAGACG'
     ,'BsaI' : 'GGTCTC'
     ,'BsaI_rc' : 'GAGACC'
+    ,'A': 'A'
+    ,'T': 'T'
     ,'C' : 'C'
     ,'G' : 'G'
     ,'sticky_U6': 'CACC'
@@ -114,7 +116,10 @@ default_layouts = \
           
           , 'gecko':
           ('dialout_5', 'BsmBI', 'N', 'sticky_U6', 'sgRNA', 'sticky_scaffold', 'N', 'BsmBI_rc', 'dialout_3_rc', 'padding')
-            
+          
+          , 'CROP-BsmBI':
+          ('dialout_5', 'BsmBI', 'G', 'sticky_U6', 'sgRNA', 'sticky_scaffold', 'C', 'BsmBI_rc', 'dialout_3_rc')
+
           , 'pL42-BbsI':
 	          ('dialout_5', 'BsmBI', 'C', 
 	          'sticky_U6', 'G', 'sgRNA', 

@@ -223,6 +223,19 @@ class Snake():
         return aligned_
 
     @staticmethod
+    def _align_DAPI_first(data, index_align=0, channel_offsets=None):
+        dapi = data[0][0]
+        data[0] = data[0][1:]
+        aligned = Snake._align(data, index_align=index_align, channel_offsets=channel_offsets)
+
+        shape = list(aligned.shape)
+        shape[1] += 1 # channels
+        aligned_ = np.zeros(shape, dtype=aligned.dtype)
+        aligned_[:, 1:] = aligned
+        aligned_[:, 0] = dapi
+        return aligned_
+
+    @staticmethod
     def _consensus_DO(data):
         """Use variance to estimate DO.
         """
@@ -394,6 +407,37 @@ class Snake():
         }
 
         return Snake._extract_phenotype(data_phenotype, nuclei, wildcards, features)       
+
+
+    @staticmethod
+    def _extract_phenotype_FR_2_color(data_phenotype, nuclei, data_sbs_1, wildcards):
+        def correlate_one_two(region, index):
+            dapi, ha = region.intensity_image_full[index]
+
+            filt = dapi > 0
+            if filt.sum() == 0:
+                # assert False
+                return np.nan
+
+            dapi = dapi[filt]
+            ha  = ha[filt]
+            corr = (dapi - dapi.mean()) * (ha - ha.mean()) / (dapi.std() * ha.std())
+
+            return corr.mean()
+
+        # DAPI, HA, myc
+        data_phenotype = np.array([data_sbs_1[0]] + list(data_phenotype[[1, 0]]))
+        features = {
+            'corr_dapi_ha' : functools.partial(correlate_one_two, index=[0, 1]),
+            'corr_dapi_myc': functools.partial(correlate_one_two, index=[0, 2]),
+            'dapi_median': lambda r: np.median(r.intensity_image_full[0]),
+            'dapi_max'   : lambda r: r.intensity_image_full[0].max(),
+            'ha_median'  : lambda r: np.median(r.intensity_image_full[1]),
+            'myc_median'  : lambda r: np.median(r.intensity_image_full[2]),
+            'cell'       : lambda r: r.label
+        }
+
+        return Snake._extract_phenotype(data_phenotype, nuclei, wildcards, features)     
 
     @staticmethod
     def _extract_phenotype_translocation_ring(data_phenotype, nuclei, wildcards, width=3):

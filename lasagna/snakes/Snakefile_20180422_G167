@@ -4,7 +4,7 @@ import json
 import snakemake
 import sys
 sys.path.append('E:/packages/lasagna/')
-from lasagna.snakes.firesnake3 import call_firesnake
+from lasagna.snakes.firesnake3 import call_firesnake, load_well_site_list
 # from firesnake3 import call_firesnake
 
 
@@ -13,17 +13,19 @@ from lasagna.snakes.firesnake3 import call_firesnake
 
 # UPDATE: set to number of cycles used
 CYCLES = ['c{cycle}-SBS-{cycle}'.format(cycle=c) for c in range(1, 13)]
-CYCLES = CYCLES[:1]
+CYCLES = CYCLES[:9]
+CYCLE_PHENOTYPE = 'c0-myc-405-HA-488'
 
 THRESHOLD_DO = 2000
 THRESHOLD_DAPI = 1200
 INDEX_DO = None
 
 # special pairs of WELLS and TILES
-
-WELLS = ['A1', 'A2', 'A3', 'B1', 'B2', 'B3']
-RANGE = lambda x: list(map(str, range(x[0] * x[1])))
-TILES = RANGE((25, 25))
+import pandas as pd
+WELLS, TILES = load_well_site_list('well_tile_list_process.pkl')
+# WELLS = ['A1', 'A2', 'A3', 'B1', 'B2', 'B3']
+# RANGE = lambda x: list(map(str, range(x[0] * x[1])))
+# TILES = RANGE((25, 25))
 
 
 DISPLAY_RANGES=((500, 20000), 
@@ -38,9 +40,8 @@ CHANNEL_OFFSETS = [(0, 0), (0, 0), (0, 0), (0, 0), (0, 0)]
 
 rule all:
     input:
-        expand('process/10X_{well}_Tile-{tile}.peaks.tif', well=WELLS, tile=TILES),
-        # expand('process/10X_{well}_Tile-{tile}.barcodes.csv', well=WELLS, tile=TILES),
-        # expand('process/10X_{well}_Tile-{tile}.phenotype.pkl', well=WELLS, tile=TILES)
+        expand('process/10X_{well}_Tile-{tile}.barcodes.csv', zip, well=WELLS, tile=TILES),
+        expand('process/10X_{well}_Tile-{tile}.phenotype.pkl', zip, well=WELLS, tile=TILES)
 
 
 rule segment_nuclei:
@@ -72,9 +73,9 @@ rule align:
     input:
         expand('process/10X_{cycle}/10X_{cycle}_{{well}}_Tile-{{tile}}.max.tif', cycle=CYCLES)
     output:
-        temp('process/10X_{well}_Tile-{tile}.aligned.tif')
+        'process/10X_{well}_Tile-{tile}.aligned.tif'
     run:
-        call_firesnake('align', output, data=input,
+        call_firesnake('align_DAPI_first', output, data=input,
             display_ranges=DISPLAY_RANGES, channel_offsets=CHANNEL_OFFSETS)
 
 rule transform_LoG:
@@ -126,12 +127,23 @@ rule extract_barcodes:
 
 rule extract_phenotype:
     input:
-        # phenotype already aligned to first cycle
-        # 'process/10X_{well}_Tile-{tile}.phenotype_aligned.tif',
-        'process/10X_c0-HA-488/10X_c0-HA-488_{well}_Tile-{tile}.max.tif',
-        'process/10X_{well}_Tile-{tile}.nuclei.tif'
+        'process/10X_{well}_Tile-{tile}.phenotype_aligned.tif',
+        'process/10X_{well}_Tile-{tile}.nuclei.tif',
+        'process/10X_{cycle}/10X_{cycle}_{{well}}_Tile-{{tile}}.max.tif'.format(cycle=CYCLES[0])
+
     output:
         'process/10X_{well}_Tile-{tile}.phenotype.pkl'
     run:
-        call_firesnake('extract_phenotype_FR', output, 
-            data_phenotype=input[0], nuclei=input[1], wildcards=dict(wildcards))
+        call_firesnake('extract_phenotype_FR_2_color', output, 
+            data_phenotype=input[0], nuclei=input[1], data_sbs_1=input[2], wildcards=dict(wildcards))
+
+rule align_phenotype:
+    input:
+        'process/10X_{cycle}/10X_{cycle}_{{well}}_Tile-{{tile}}.max.tif'.format(cycle=CYCLES[0]),
+        'process/10X_{cycle}/10X_{cycle}_{{well}}_Tile-{{tile}}.max.tif'.format(cycle=CYCLE_PHENOTYPE)
+
+    output:
+        'process/10X_{well}_Tile-{tile}.phenotype_aligned.tif'
+    run:
+        call_firesnake('align_phenotype', output, 
+            data_DO=input[0], data_phenotype=input[1], wildcards=dict(wildcards))
