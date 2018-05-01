@@ -137,8 +137,9 @@ def register_images(images, index=None, window=(500, 500), upsample=1.):
     return offsets
 
 
-
 def register_and_offset(images, registration_images=None, verbose=False):
+    """Wrapper around `register_images` and `offset`.
+    """
     if registration_images is None:
         registration_images = images
     offsets = register_images(registration_images)

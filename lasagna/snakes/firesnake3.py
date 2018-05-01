@@ -32,6 +32,7 @@ def call_firesnake(method, output, **info):
             '--input_json', json_name,
             '--output', str(output)]
     call(cmd)
+    os.remove(json_name)
 
 def find_python2():
     python2 = shutil.which('python2')
@@ -44,3 +45,10 @@ def find_python2():
 
     raise ValueError('python2.exe not found')
     
+def load_well_site_list(filename):
+    import pandas as pd
+    well_tile_list = map(tuple, pd.read_pickle(filename).as_matrix())
+    WELLS, TILES = zip(*well_tile_list)
+    WELLS = list(WELLS)
+    TILES= list(TILES)
+    return WELLS, TILES

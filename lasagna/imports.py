@@ -38,7 +38,7 @@ import lasagna.config as config
 
 from lasagna.designs.analyze import *
 from lasagna.design import reverse_complement as rc
-from lasagna.plates import microwells, plate_coordinate
+from lasagna.plates import microwells, plate_coordinate, add_global_xy
 from lasagna import in_situ
 
 
