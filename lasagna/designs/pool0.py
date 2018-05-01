@@ -10,8 +10,18 @@ import os
 from lasagna.designs.parts import *
 
 
-GFP_TM_SGRNAS = 'FR_GFP_TM_sgRNAs.tsv'
-LG_SGRNAS  = 'LG_sgRNAs.tsv'
+GFP_TM_SGRNAS = 'tables/FR_GFP_TM_sgRNAs.tsv'
+LG_SGRNAS  = 'tables/LG_sgRNAs.tsv'
+BRUNELLO_21 = 'tables/brunello_SuppTables/STable 21 Brunello.csv'
+MCKINLEY_1 = 'mitosis/2017 McKinley_2017_STable1.xls'
+CHEESEMAN_20170710 = 'tables/Cheeseman_sgRNAs_20170710.xlsx'
+WANG_1 = 'tables/Wang_2015_supplement/Wang_2015_STable1.csv'
+BENCHLING_SGRNAS = 'tables/benchling_sgRNAs.tsv'
+NONTARGETING_SGRNAS = 'tables/nontargeting_sgRNAs.tsv'
+ECRISPED = 'tables/ECRISPED.tsv'
+WANG_SGRNA_SCORES = 'tables/Wang_2015_supplement/Wang_sgRNAs_scores.txt'
+GO_ENTREZ = 'tables/go_entrez.tsv'
+
 
 def load_tables(path=''):
     brunello = load_brunello(path=path)
@@ -29,7 +39,8 @@ def load_tables(path=''):
     df_sgRNAs = (pd.concat(include).reset_index(drop=True)).drop_duplicates('sgRNA')
 
     # add # of GO terms for each gene ID
-    df_go = pd.read_csv(path + 'go_entrez.tsv', sep='\t').dropna()
+    f = os.path.join(path, GO_ENTREZ)
+    df_go = pd.read_csv(f, sep='\t').dropna()
     df_go = df_go.rename(columns={'NCBI gene ID': 'gene_id'})
     df_go['gene_id'] = df_go['gene_id'].astype(int)
 
@@ -62,7 +73,7 @@ def load_tables(path=''):
 
 
 def load_brunello(path=''):
-    f = os.path.join(path, 'brunello_SuppTables/STable 21 Brunello.csv')
+    f = os.path.join(path, BRUNELLO_21)
     brunello = pd.read_csv(f)
 
     columns = {'Target Gene ID': 'gene_id'
@@ -83,7 +94,7 @@ def load_mckinley(path=''):
     """from McKinley 2017, sgRNA sequences standardized
     """
     columns = {'Gene': 'gene_symbol', 'Guide sequence': 'sgRNA'}
-    df_mckinley = (pd.read_excel(path + 'mitosis/2017 McKinley_2017_STable1.xls')
+    df_mckinley = (pd.read_excel(os.path.join(path, MCKINLEY_1))
                      .rename(columns=columns))
     f = lambda x: x[4:].replace('g', '')
     # 5' G from old U6 rule
@@ -106,7 +117,8 @@ def load_cheese(path=''):
     # SGO1 not in brunello (why?)
     # KNL1 in brunello with symbol CASC5
     columns = {'Gene Target': 'gene_symbol'}
-    df_cheese = pd.read_excel(path + 'Cheeseman_sgRNAs_20170710.xlsx')
+    f = os.path.join(path, CHEESEMAN_20170710)
+    df_cheese = pd.read_excel(f)
     df_cheese = df_cheese.rename(columns=columns)
     return df_cheese
 
@@ -134,7 +146,7 @@ def load_cheese_sgRNAs(path=''):
 def load_wang(path=''):
     columns = {'sgRNA sequence':'sgRNA'
           ,'Symbol': 'gene_symbol'}
-    f = os.path.join(path, 'Wang_2015_supplement/Wang_2015_STable1.csv')
+    f = os.path.join(path, WANG_1)
     df_wang = (pd.read_csv(f)
                  .rename(columns=columns)[columns.values()])
 
@@ -144,14 +156,14 @@ def load_wang(path=''):
     df_wang = df_wang.join(enst_ncbi['gene_id'], on='gene_symbol')
     df_wang['source'] = 'Wang 2015'
 
-    f = '/Users/feldman/lasagna/libraries/Wang_2015_supplement/Wang_sgRNAs_scores.txt'
+    f = WANG_SGRNA_SCORES
     df_wang['CRISPOR_WangSVM'] = list(pd.read_csv(f, header=None)[0])
 
     return df_wang
 
 
 def load_enst_ncbi(path=''):
-    path = os.path.join(path, 'ENS_to_NCBI.tsv')
+    path = os.path.join(path, 'tables/ENS_to_NCBI.tsv')
     columns = {'NCBI gene ID': 'gene_id', 'Gene name': 'gene_symbol'}
     enst_ncbi = (pd.read_csv(path, sep='\t')
                    .rename(columns=columns))
@@ -167,7 +179,7 @@ def load_ecrisp(path=''):
                           .to_dict())
 
     columns = {'Nucleotide sequence': 'sgRNA'}
-    f = os.path.join(path, 'ECRISPED.tsv')
+    f = os.path.join(path, ECRISPED)
     df_ecrisp = (pd.read_csv(f, sep='\t')
                    .rename(columns=columns))
 
@@ -187,12 +199,11 @@ def load_ecrisp(path=''):
     columns = ['sgRNA', 'gene_id', 'gene_symbol', 'source']
     return df_ecrisp[columns]
 
-
 def load_benchling(path=''):
-    df_benchling = pd.read_csv(path + 'benchling_sgRNAs.tsv', sep='\t')
+    f = os.path.join(path, BENCHLING_SGRNAS)
+    df_benchling = pd.read_csv(f, sep='\t')
     df_benchling['source'] = 'zBenchling'
     return df_benchling
-
 
 def load_GFP_TM_sgRNAs(path=''):
     columns = {0: 'name', 1: 'sgRNA'}
@@ -218,7 +229,8 @@ def load_LG_TM_sgRNAs(path=''):
     return LG_TM.loc[filt, columns]
 
 def load_nontargeting_sgRNAs(path=''):
-    controls = pd.read_csv(path + 'nontargeting_sgRNAs.tsv', header=None)
+    f = os.path.join(path, NONTARGETING_SGRNAS)
+    controls = pd.read_csv(f, header=None)
     controls.columns = 'sgRNA', 
     controls['source'] = 'CRISPOR'
     controls['tag'] = 'nontargeting'
