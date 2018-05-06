@@ -208,7 +208,7 @@ def bin_join(xs, symbol):
 or_join  = functools.partial(bin_join, symbol='|')
 and_join = functools.partial(bin_join, symbol='&')
 
-def groupby_reduce_concat(gb, **kwargs):
+def groupby_reduce_concat(gb, *args, **kwargs):
     """
     df = (df_cells
           .groupby(['stimulant', 'gene'])['gate_NT']
@@ -222,8 +222,12 @@ def groupby_reduce_concat(gb, **kwargs):
                   'sum': lambda x: x.sum(),
                   'sum_int': lambda x: x.sum().astype(int)}
     
+    for arg in args:
+        if arg in reductions:
+            kwargs[arg] = arg
+
     arr = [reductions[f](gb).rename(name) for name, f in kwargs.items()]
-    return pd.concat(arr, axis=1)
+    return pd.concat(arr, axis=1).reset_index()
 
 
 # GLUE

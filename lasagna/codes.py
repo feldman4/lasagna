@@ -95,9 +95,10 @@ def build_khash2(xs, k):
 def sparse_dist(D, threshold, D2=None):
     """Entries less than or equal to threshold only.
     """
+    from tqdm import tqdm
     if D2 is None:
         D2 = defaultdict(int)
-    for xs in D.values():
+    for xs in tqdm(D.values()):
         for i, a in enumerate(xs):
             for b in xs[i+1:]:
                 d = distance(a,b)
