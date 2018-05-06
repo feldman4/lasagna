@@ -1,4 +1,6 @@
-from lasagna.imports import *
+# from lasagna.imports import *
+import numpy as np
+import pandas as pd
 
 # df_reads <=> fastq
 
@@ -23,6 +25,7 @@ GLOBAL_Y = 'global_y'
 CLUSTER = 'cluster'
 SUBPOOL = 'subpool'
 SGRNA_NAME = 'sgRNA_name'
+SGRNA_DESIGN = 'sgRNA_design'
 
 IMAGING_ORDER = 'GTAC'
 
@@ -302,10 +305,14 @@ def add_clusters(df_cells, neighbor_dist=50):
 def add_design(df_cells_all, df_design, 
     design_barcode_col='barcode', 
     cell_barcode_col='cell_barcode_0'):
+    
+    bc1 = df_cells_all[cell_barcode_col].dropna().iloc[0]
+    bc2 = df_design[design_barcode_col].iloc[0]
+    assert len(bc1) == len(bc2)
 
     s = (df_design.drop_duplicates(design_barcode_col)
         .set_index(design_barcode_col)
-        [[SUBPOOL, SGRNA_NAME]])
+        [[SUBPOOL, SGRNA_NAME, SGRNA_DESIGN]])
 
     cols = [WELL, TILE, CELL]
     df_cells = df_cells_all.join(s, on=cell_barcode_col)
