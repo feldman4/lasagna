@@ -6,24 +6,23 @@ import lasagna.designs.parts
 
 home = '/Users/feldman/lasagna/libraries/'
 
+ENSG_NCBI_UNIPROT_HGNC = 'tables/biomart/ENSG_NCBI_UniProt_HGNC.txt'
+
 def load_ncbi_ensg_uniprot_hgnc():
-    f = os.path.join(home, 'biomart/ENSG_NCBI_UniProt_HGNC.txt')
+    f = os.path.join(home, ENSG_NCBI_UNIPROT_HGNC)
     columns = {'NCBI gene ID': 'gene_id', 'Gene name': 'gene_symbol'
               ,'Gene stable ID': 'ENSG'}
     df_biomart = pd.read_csv(f).rename(columns=columns)
     return df_biomart
 
-
 def load_barcodes():
     f = os.path.join(home, '20180224_12bp_dist3_97406.csv')
     return pd.read_csv(f)
-
 
 def load_genome_wide_ids():
     f = os.path.join(home, 'pool3/19175_gene_ids.txt')
     gene_ids = list(pd.read_csv(f, header=None)[0])
     return gene_ids
-
 
 def filter_genome_wide_sgRNAs(df_sgRNAs, n):
     sources = ['Wang 2015', 'brunello', 'CRISPOR', 'ECRISP', 'ensembl', 'benchling']
@@ -38,7 +37,6 @@ def filter_genome_wide_sgRNAs(df_sgRNAs, n):
                  .sort_values(['source', 'CRISPOR_WangSVM'], ascending=[True, False])
                 )
 
-
 def filter_typeIIs_sgRNAs(df_sgRNAs):
     def f(x):
         x = 'CACCG' + x + 'GTTT'
@@ -46,16 +44,12 @@ def filter_typeIIs_sgRNAs(df_sgRNAs):
     filt = df_sgRNAs['sgRNA'].apply(f) == 0
     return df_sgRNAs[filt]
 
-
-
 def filter_typeIIs_barcodes(df_barcodes):
     def f(x):
         x = 'TTCC' + x + 'ACTG'
         return lasagna.designs.pool0.count_typeIIS_sites(x)
     filt = df_barcodes['barcode'].apply(f) == 0
     return df_barcodes[filt]
-
-
 
 def annotate_sgRNA_designs(df_sgRNAs):
     gene_ids = load_gene_ids()
@@ -69,7 +63,6 @@ def annotate_sgRNA_designs(df_sgRNAs):
         arr += [df.drop_duplicates('sgRNA')]
 
     return pd.concat(arr)
-
 
 def split_genome_wide_design(df_sgRNAs):
     it = zip(df_sgRNAs['sgRNA_design'], df_sgRNAs['gene_id'])
@@ -100,7 +93,6 @@ def name_sgRNAs(df_sgRNAs):
 
     return arr
 
-
 def load_gene_ids():
     f = os.path.join(home, 'pool3/Lasagna-Nougat.xlsx')
     
@@ -114,7 +106,6 @@ def load_gene_ids():
 
 def fill_gene_ids(df_sgRNAs): 
     return df_sgRNAs['gene_id'].fillna(0).astype(int)
-
 
 def load_extra_CRISPOR():
     df_biomart = load_ncbi_ensg_uniprot_hgnc()
@@ -139,13 +130,11 @@ def load_extra_ensembl():
     f = os.path.join(home, 'pool3/extra_sgRNAs_ensembl.csv')
     return pd.read_csv(f)
 
-
 def load_extra_nontargeting():
     files = ('pool3/extra_nontargeting_Wang2015.csv','pool3/extra_nontargeting_GeCKO.csv')
     return (pd.concat([pd.read_csv(os.path.join(home, f)) for f in files])
               .assign(sgRNA_design=lambda x: x['source'])
               .pipe(filter_typeIIs_sgRNAs))
-
 
 def parse_biomart_fasta(s, ncols):
     entries = [x for x in s.split('>') if x]
@@ -182,7 +171,6 @@ def load_exons():
 
     return df_exons
 
-
 def get_coding_sequences(df_exons):
 
     def get_coordinates(x):
@@ -211,7 +199,6 @@ def exon_coding_coordinates(exon_region_start, exon_region_end,
 #     print start, end, exon_region_end - exon_region_start
     return start, end 
 
-
 def exons_to_sgRNAs(df_exons):
     d = os.getcwd()
     os.chdir('/Users/feldman/packages/crisporWebsite-master/')
@@ -238,7 +225,6 @@ def find_sgRNAs(seq):
     sgRNAs += map(rc, re.findall(pat, rc(seq)))
     return sgRNAs
     
-
 def process_exons():
     s = (load_ncbi_ensg_uniprot_hgnc().drop_duplicates('ENSG')
         .set_index('ENSG')[['gene_id', 'gene_symbol']])
@@ -256,7 +242,6 @@ def process_exons():
     )
     
     return df_exons
-
 
 def export_nontargeting():
     f = 'pool3/extra_nontargeting_Wang2015.csv'
@@ -294,7 +279,6 @@ def load_extra_ECRISP():
             )
     return df
 
-
 def load_benchling_sgRNAs():
     
     f = 'pool3/Lasagna-Nougat.xlsx'
@@ -303,7 +287,6 @@ def load_benchling_sgRNAs():
               .pipe(filter_typeIIs_sgRNAs)
               [['gene_symbol', 'gene_id', 'sgRNA']]
               .assign(source='benchling'))
-
 
 def load_layout():
     f = os.path.join(home, 'pool3/Lasagna Oligos - pools.csv')
@@ -319,7 +302,6 @@ def load_layout():
     for c in columns_int:               
         df_layout[c] = df_layout[c].astype(int)
     return df_layout
-
 
 def get_JSB_13_barcodes():
     f = os.path.join(home, 'pool3/JSB_13.csv')

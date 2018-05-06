@@ -1,17 +1,17 @@
 from lasagna.imports import *
 
 gate_cells = and_join(['3000 < dapi_nuclear_max < 12000',
-                       '60 < area_nuclear < 140', 
-                       '2000 < gfp_cell_median < 8000',
-                       'duplicated == False'])
+    '60 < area_nuclear < 140', 
+    '2000 < gfp_cell_median < 8000',
+    'duplicated == False'])
 
 gate_NT = 'dapi_gfp_nuclear_corr < -0.5'
 
 stimulant = {'A': 'TNFa', 'B': 'IL1b'}
-positive_genes = {'IL1b': ['MAP3K7', 'NFKBIA', 'IKBKG', 
-                     'IRAK1', 'MYD88', 'IRAK4', 'TRAF6'],
-            'TNFa': ['MAP3K7', 'NFKBIA', 'IKBKG', 'TRADD', 
-                     'TNFRSF1A', 'TRAF2', 'IKBKB', 'CHUK', 'RIPK1']}
+positive_genes = {'IL1b': ['MAP3K7', 'NFKBIA', 'IKBKG',
+                    'IRAK1', 'MYD88', 'IRAK4', 'TRAF6'],
+                'TNFa': ['MAP3K7', 'NFKBIA', 'IKBKG', 'TRADD', 
+                    'TNFRSF1A', 'TRAF2', 'IKBKB', 'CHUK', 'RIPK1']}
 
 positive_gene_list = ['MAP3K7', 'NFKBIA', 'IKBKG', 'TRADD', 'TNFRSF1A', 
                       'IRAK1', 'MYD88', 'IRAK4', 'TRAF2', 'TRAF6', 'IKBKB', 
@@ -79,20 +79,20 @@ def annotate_cells(df_cells, ):
     def categorize_stimulant(s):
         return pd.Categorical(s, categories=['TNFa', 'IL1b'], ordered=True)
 
-    def get_positive(df_cells):
-        TNFa_pos = positive_genes['TNFa']
-        IL1b_pos = positive_genes['IL1b']
-        gate_pos = or_join(['stimulant == "TNFa" & gene == @TNFa_pos',
-                            'stimulant == "IL1b" & gene == @IL1b_pos'])
-        return df_cells.eval(gate_pos)
-
     return (df_cells
         .assign(gate_NT=lambda x: x.eval(gate_NT))
         .assign(gene=lambda x: x['sgRNA_name'].apply(get_gene))
         .assign(targeting=lambda x: x['sgRNA_name'].apply(get_targeting))
         .assign(stimulant=lambda x: x['well'].apply(get_stimulant).pipe(categorize_stimulant))
-        .assign(positive=get_positive)
+        .assign(positive=get_positives)
         )
+
+def get_positives(df_cells):
+    TNFa_pos = positive_genes['TNFa']
+    IL1b_pos = positive_genes['IL1b']
+    gate_pos = or_join(['stimulant == "TNFa" & gene == @TNFa_pos',
+                        'stimulant == "IL1b" & gene == @IL1b_pos'])
+    return df_cells.eval(gate_pos)
 
 def annotate_hits(df_cells):
     def classify(positive, gene):
@@ -100,8 +100,10 @@ def annotate_hits(df_cells):
           return 'positive'
       if gene == 'LG':
           return 'nontargeting'
+      if pd.isnull(gene) or pd.isnull(positive):
+          return None
       else:
-          return 'negative'
+        return 'negative'
     return (df_cells
         .assign(sgRNA_class=lambda x: 
               [classify(p,g) for p,g in zip(x['positive'], x['gene'])]))
@@ -116,23 +118,20 @@ def annotate_clusters(df_cells):
     cols = ['cluster_size', 'cluster_NT']
     return (df_cells.drop(cols, axis=1, errors='ignore').join(features, on='cluster'))
 
-
 def get_edge_dist(x, y, center):
     x = center - np.abs(center - x)
     y = center - np.abs(center - y)
     return np.min(np.vstack((x, y)), axis=0)
 
-
-def dump_examples(df_cells, df_ph):
+def dump_examples(df_cells, df_ph, num_cells=500):
     # selection criteria
-    tile_min_cell_count = 1000
+    tile_min_cell_count = 500
     wells = ['B2']
     stimulants = ['IL1b']
-    min_edge_dist = 100
+    min_edge_dist = 50
     sgRNA_classes = ['positive', 'nontargeting']
     
     # output formatting
-    num_cells = 500
     padding = 25
     file_template = 'process/10X_c0-RELA-mNeon/10X_c0-RELA-mNeon_A1_Tile-103.aligned_phenotype.tif'
     description = parse(file_template)
@@ -194,7 +193,8 @@ def dump_examples(df_cells, df_ph):
               )
         # only cells with phenotype data passing edge criterion
         wtc = sorted(set(wtc) & set(df_ph_wtc))
-        wtc = pd.Series(wtc).sample(num_cells, replace=False, random_state=0).pipe(list)
+        wtc = pd.Series(wtc).sample(min(num_cells, len(wtc)), replace=False, 
+          random_state=0).pipe(list)
 
         # retrieve x,y coordinates
         xy = (df_ph
@@ -223,6 +223,31 @@ def dump_examples(df_cells, df_ph):
         print 'wrote %d examples to %s' % (len(data), file_data)
         # save(file_cells, cells[:, None, :, :])
     
+def apply_NN_model(model):
+
+  files = glob('process/10X_c0-RELA-mNeon/*stack-16.tif')
+  arr = []
+  for f in tqdm(files):
+      data = read(f)
+      well, tile = parse(f)['well'], parse(f)['tile']
+      cells = df_ph.query('tile == @tile & well == @well')['cell'].pipe(list)
+      lasagna.io.read_stack._reset()
+      
+      X = lasagna.learn.pad_zero(data)
+      y = model.predict(X/15000.)[:, 0]
+      df = pd.DataFrame({'NN_prob': y, 'cell': cells}).assign(well=well, tile=tile)
+      arr += [df]
+      
+  return pd.concat(df)
+
+def hit_table(df_cells, col='gate_NT'):
+    return (df_cells.query(gate_cells)
+      .groupby(['stimulant', 'gene', 'cell_barcode_0'])[col]
+      .pipe(groupby_reduce_concat, 
+            fraction='mean', 
+            cell_count='size')
+      .rename(columns={'fraction': col + '_mean'})
+      .reset_index())
 
 def rescale_20X_to_10X(stack_20X, dapi_10X, scale=0.5025):
 
@@ -327,13 +352,13 @@ def plot_cluster_heatmaps(df_cells, x_range=(None,5), y_range=(1, 5)):
         ax = plt.gca()
         (data.pivot_table(index='cluster_NT', columns='cluster_size', 
                         values='cluster', aggfunc=len)
-         # ensure heatmap covers full range
-         .reindex(range(0, y_range[1] + 1), axis=0)
-         .reindex(range(0, x_range[1] + 1), axis=1)
-         .iloc[slice(*y_range), slice(*x_range)]
-         .pipe(lambda x: x / x.sum().sum())
-         .pipe(lambda x: x * 100)
-         .pipe(sns.heatmap, annot=True, ax=ax)
+             # ensure heatmap covers full range
+            .reindex(range(0, y_range[1] + 1), axis=0)
+            .reindex(range(0, x_range[1] + 1), axis=1)
+            .iloc[slice(*y_range), slice(*x_range)]
+            .pipe(lambda x: x / x.sum().sum())
+            .pipe(lambda x: x * 100)
+            .pipe(sns.heatmap, annot=True, ax=ax)
         )
         ax.invert_yaxis()
 
@@ -354,12 +379,31 @@ def plot_NT_positive_histogram(df_cells):
     import seaborn as sns
     import matplotlib.pyplot as plt
     return (df_cells
-       .pipe(filter_clusters)
-       .query('gate_NT')
-       .pipe(sns.FacetGrid, size=5, hue='sgRNA_class')
-       .map(plt.hist, 'cluster_NT', bins=np.arange(0.5, 8), 
-            histtype='step', lw=2, normed=True)
-       .add_legend()
-       .set_xlabels('# pos. cells in cluster')
-       .set_ylabels('fraction of pos. cells')
-       )
+        .pipe(filter_clusters)
+        .query('gate_NT')
+        .pipe(sns.FacetGrid, size=5, hue='sgRNA_class')
+        .map(plt.hist, 'cluster_NT', bins=np.arange(0.5, 8), 
+             histtype='step', lw=2, normed=True)
+        .add_legend()
+        .set_xlabels('# pos. cells in cluster')
+        .set_ylabels('fraction of pos. cells')
+        )
+
+
+def plot_hit_swarm(df_hits, col, sort_genes=False):
+    import seaborn as sns
+    if sort_genes:
+        df_hits = (df_hits
+            .assign(key=lambda x: x.groupby(['stimulant', 'gene'])
+                 [col].transform('mean').pipe(list))
+            .sort_values('key', ascending=False)
+        )
+
+    fig, ax = plt.subplots(figsize=(30, 5))
+    sns.swarmplot(data=df_hits, ax=ax,
+                  x='gene', y=col, 
+                  hue='stimulant', dodge=True)
+    plt.xticks(rotation=90);
+    fig.tight_layout()
+
+    return fig

@@ -216,11 +216,15 @@ def groupby_reduce_concat(gb, *args, **kwargs):
                 fraction_gate_NT='mean', 
                 cell_count='size'))
     """
+    for arg in args:
+    	kwargs[arg] = arg
     reductions = {'mean': lambda x: x.mean(),
                   'size': lambda x: x.size(),
                   'count': lambda x: x.size(),
                   'sum': lambda x: x.sum(),
-                  'sum_int': lambda x: x.sum().astype(int)}
+                  'sum_int': lambda x: x.sum().astype(int),
+                  'first': lambda x: x.nth(0),
+                  'second': lambda x: x.nth(1)}
     
     for arg in args:
         if arg in reductions:

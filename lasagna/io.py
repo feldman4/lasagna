@@ -240,7 +240,8 @@ def grid_view(files, bounds, padding=40, with_mask=False):
 
     arr = []
     for filename, bounds_ in zip(files, bounds):
-        I = read_stack(filename, memmap=False, copy=False) # some memory issue right now
+        # some memory issue right now
+        I = read_stack(filename, memmap=False, copy=False) 
         I_cell = lasagna.utils.subimage(I, bounds_, pad=padding)
         arr.append(I_cell.copy())
 
@@ -433,7 +434,7 @@ def show_IJ(data, title='image', imp=None, check_cache=False, **kwargs):
         new_imp.updateAndDraw()
     return new_imp
 
-
+@lasagna.utils.Memoized
 def read_stack(filename, memmap=False, copy=True):
     """Read a .tif file into a numpy array, with optional memory mapping.
     """
@@ -553,7 +554,7 @@ def name(description, **more_description):
     """Name a file from a dictionary of filename parts. Can override dictionary with keyword arguments.
     """
     d = dict(description)
-    
+
     for k, v in more_description.items():
         if v is None and k in d:
             d.pop(k)
