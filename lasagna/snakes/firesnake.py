@@ -223,9 +223,11 @@ class Snake():
         return aligned_
 
     @staticmethod
-    def _align_DAPI_first(data, index_align=0, channel_offsets=None):
+    def _align_DAPI_first(data, index_align=0, channels=4, channel_offsets=None):
+        """Aligns trailing channels, copies in DAPI from first image stack.
+        """
         dapi = data[0][0]
-        data[0] = data[0][1:]
+        data = [x[-channels:] for x in data]
         aligned = Snake._align(data, index_align=index_align, channel_offsets=channel_offsets)
 
         shape = list(aligned.shape)
