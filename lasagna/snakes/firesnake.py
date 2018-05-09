@@ -205,12 +205,37 @@ class Snake():
         indices.pop(index_align)
         indices_fwd = [index_align] + indices
         indices_rev = np.argsort(indices_fwd)
+        print data[indices_fwd].shape
         aligned = lasagna.process.register_and_offset(data[indices_fwd], registration_images=data[indices_fwd,0])
         aligned = aligned[indices_rev]
         if channel_offsets:
             aligned = fix_channel_offsets(aligned, channel_offsets)
 
         return aligned
+
+    @staticmethod
+    def _align_one_stack(data, index_align=0, channel_offsets=None, reverse=False):
+        """Align data using first channel. If data is a list of stacks with different 
+        IJ dimensions, the data will be piled first. Optional channel offset.
+        Images are aligned to the image at `index_align`.
+
+        """
+
+        # shapes might be different if stitched with different configs
+        # keep shape consistent with DO
+
+        data = data[0]
+        data = data[::-1]
+        indices = range(len(data))
+        indices.pop(index_align)
+        indices_fwd = [index_align] + indices
+        indices_rev = np.argsort(indices_fwd)
+        aligned = lasagna.process.register_and_offset(data[indices_fwd], registration_images=data[indices_fwd,0])
+        aligned = aligned[indices_rev]
+        if channel_offsets:
+            aligned = fix_channel_offsets(aligned, channel_offsets)
+
+        return aligned[::-1]
 
     @staticmethod
     def _align_no_DAPI(data, index_align=0, channel_offsets=None):
@@ -279,6 +304,21 @@ class Snake():
             cells = nuclei
 
         return cells
+
+    @staticmethod
+    def _segment_cells_bsub(data, nuclei, threshold=200):
+        """Segment cells from aligned data. To use less than full cycles for 
+        segmentation, filter the input files.
+
+        !!! matches cell labels to nuclei labels !!!
+        """
+        def bsub(x, diameter=20):
+            from scipy.ndimage.filters import minimum_filter
+            return x - minimum_filter(x, size=diameter)
+        data[1] = bsub(data[1])
+
+        return Snake._segment_cells(data, nuclei, threshold=threshold)
+
 
     @staticmethod
     def _transform_LoG(data, bsub=False):
@@ -354,7 +394,7 @@ class Snake():
             return pd.DataFrame()
 
         get_cycle = lambda x: int(re.findall('c(\d+)-', x)[0])
-        df_positions = pd.DataFrame(positions, columns=['position_i', 'position_j'])
+        df_positions = pd.DataFrame(positions, columns=['i', 'j'])
         df = (df.stack(['cycle', 'channel'])
            .reset_index()
            .rename(columns={0:'intensity', 'level_0': 'blob'})
@@ -524,6 +564,64 @@ class Snake():
             df[k] = v
         
         return df
+
+
+    @staticmethod
+    def _extract_minimal_phenotype(data_phenotype, nuclei, wildcards):
+        from lasagna.pipelines._20170914_endo import feature_table_stack
+        from lasagna.process import feature_table, default_object_features
+
+        features = default_object_features.copy()
+        features['cell'] = features.pop('label')
+        df = feature_table(nuclei, nuclei, features)
+
+        for k,v in wildcards.items():
+            df[k] = v
+        
+        return df
+
+
+    @staticmethod
+    def _extract_phenotype_live_translocation(data_phenotype, nuclei, cells, wildcards):
+        
+        extract = functools.partial(Snake._extract_phenotype_translocation, 
+            nuclei=nuclei, cells=cells, wildcards=wildcards)
+
+
+        arr = []
+        for frame, d in enumerate(data_phenotype):
+            arr.append(extract(d).assign(frame=frame))
+        
+        return pd.concat(arr)
+
+
+    @staticmethod
+    def _check_cy3_quality(data, wildcards, dapi_threshold=1500, cy3_threshold=5000):
+        from lasagna.process import feature_table
+
+        features = {'area': lambda r: r.area, 'intensity': lambda r: r.mean_intensity}
+        dapi, cy3 = data[:2]
+
+        labeled_dapi = skimage.measure.label(dapi > dapi_threshold)
+        labeled_cy3  = skimage.measure.label(cy3 > cy3_threshold)
+
+        df_dapi = feature_table(dapi, labeled_dapi, features).assign(channel='dapi')
+        df_cy3  = feature_table(dapi, labeled_cy3,  features).assign(channel='cy3')
+        df = pd.concat([df_dapi, df_cy3])
+
+        for k,v in wildcards.items():
+            df[k] = v
+
+        return df
+
+
+
+    def count_nuclei(f):
+        dapi = read(f)[0]
+        lasagna.io._get_stack._reset()
+        labeled = skimage.measure.label(dapi > 1500)
+        return sum(40 < r.area < 2000 for r in skimage.measure.regionprops(labeled))
+
 
 ###
 

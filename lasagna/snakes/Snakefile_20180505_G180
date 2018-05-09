@@ -2,7 +2,8 @@ from glob import glob
 import json
 
 import snakemake
-from firesnake3 import call_firesnake, load_well_tile_list
+# from lasagna.snakes.firesnake3 import call_firesnake
+from firesnake3 import call_firesnake
 
 
 # if true, will run when the data is complete, doing what it can
@@ -10,21 +11,22 @@ from firesnake3 import call_firesnake, load_well_tile_list
 
 # UPDATE: set to number of cycles used
 CYCLES = ['c{cycle}-SBS-{cycle}'.format(cycle=c) for c in range(1, 13)]
-CYCLES = CYCLES[:12]
+CYCLES = CYCLES[:7]
 
 THRESHOLD_DO = 2000
 INDEX_DO = None
 
 
 # UPDATE: more sites will take longer for the DAG to build (especially if ignore_missing is true)
-WELLS = ['A1', 'A2', 'A3', 'B1', 'B2', 'B3']
+WELLS = ['A1', 'A2', 'A3', 'A4']
+
 
 RANGE = lambda x: list(map(str, range(x[0] * x[1])))
-TILES = RANGE((25, 25))
+TILES_SBS = RANGE((7, 7))
+TILES = RANGE((6, 6))
 
-# special pairs of WELLS and TILES
-import pandas as pd
-WELLS_, TILES_ = load_well_tile_list('well_tile_list_process.pkl')
+missing = list(map(str, [0, 6, 12, 18, 24, 30]))
+TILES = [t for t in TILES if t not in missing]
 
 DISPLAY_RANGES=((500, 10000), 
                 (500, 5000), 
@@ -36,23 +38,27 @@ DISPLAY_RANGES=((500, 10000),
 CHANNEL_OFFSETS = [(0, 0), (0, 0), (0, 0), (0, 0), (0, 0)]
 RING_WIDTH = 3
 MEDIAN_WIDTH = 7
-THRESHOLD_DAPI = 2200
+THRESHOLD_DAPI = 1000
+THRESHOLD_DAPI_LIVE = 2600 
 
-PHENOTYPE_TIF = 'process/10X_c0-DAPI-RELA-mNeon/10X_c0-DAPI-RELA-mNeon_{well}_Tile-{tile}.phenotype_aligned.tif'
+PHENOTYPE_TIF = 'process/10X_{well}_Tile-{tile}.live_final.tif'
+PHENOTYPE_LIVE_TIF = 'process/10X_{well}_Tile-{tile}.live_aligned.tif'
+CYCLE_LIVE = 'c0-Hoechst-mNeon'
 
 
 rule all:
     input:
     # can request individual files here
-        expand('process/10X_{well}_Tile-{tile}.cy3_quality.csv', well=WELLS, tile=TILES),
-        # expand('process/10X_{well}_Tile-{tile}.phenotype.pkl', zip, well=WELLS_, tile=TILES_)
-        # 'process/10X_B1_Tile-10.barcodes.csv'
+        expand('process/10X_{well}_Tile-{tile}.aligned.tif', well=WELLS, tile=TILES),
+        expand('process/10X_{well}_Tile-{tile}.live_aligned.tif', well=WELLS, tile=TILES),
+        # expand('process/10X_{well}_Tile-{tile}.phenotype_live.pkl', well=WELLS, tile=TILES)
+        # expand('process/10X_{well}_Tile-{tile}.SBS_table.pkl', well=WELLS, tile=TILES)
 
 rule segment_nuclei:
     input:
-        'process/10X_{cycle}_full/10X_{cycle}_{{well}}_Tile-{{tile}}.max.tif'.format(cycle=CYCLES[0]),
+        'process/10X_{well}_Tile-{tile}.c1_SBS.tif',
         # discarded input, to change run order
-        'process/10X_{well}_Tile-{tile}.aligned.tif'
+        'process/10X_{well}_Tile-{tile}.aligned_SBS.tif'
     output:
         'process/10X_{well}_Tile-{tile}.nuclei.tif'
     run:
@@ -64,12 +70,36 @@ rule segment_cells:
     not the best if something else is available.
     """
     input:
-        expand('process/10X_{cycle}/10X_{cycle}_{{well}}_Tile-{{tile}}.max.tif', cycle=CYCLES[0]),
+        'process/10X_{well}_Tile-{tile}.c1_SBS.tif',
         'process/10X_{well}_Tile-{tile}.nuclei.tif'
     output:
         'process/10X_{well}_Tile-{tile}.cells.tif'
     run:
         call_firesnake('segment_cells', output, 
+            data=input[0], nuclei=input[1], threshold=4*200)
+
+
+rule segment_nuclei_phenotype:
+    priority: -1
+    input:
+        PHENOTYPE_TIF
+    output:
+        'process/10X_{well}_Tile-{tile}.nuclei_final.tif'
+    run:
+        call_firesnake('segment_nuclei', output, data=input[0], 
+            threshold=THRESHOLD_DAPI_LIVE, area_min=0.25*150, area_max=0.25*800)
+
+rule segment_cells_phenotype:
+    """segment_cells works best when fed data with the most cytoplasmic autofluorescence. SBS data is OK but
+    not the best if something else is available.
+    """
+    input:
+        PHENOTYPE_TIF,
+        'process/10X_{well}_Tile-{tile}.nuclei_final.tif'
+    output:
+        'process/10X_{well}_Tile-{tile}.cells_final.tif'
+    run:
+        call_firesnake('segment_cells_bsub', output, 
             data=input[0], nuclei=input[1], threshold=4*200)
 
 rule align:
@@ -79,12 +109,21 @@ rule align:
     output:
         'process/10X_{well}_Tile-{tile}.aligned.tif'
     run:
-        call_firesnake('align_no_DAPI', output, data=input,
-                display_ranges=DISPLAY_RANGES, channel_offsets=CHANNEL_OFFSETS)
+        call_firesnake('align_DAPI_first', output, data=input,
+                display_ranges=DISPLAY_RANGES)
+
+rule align_live:
+    priority: -1
+    input:
+        'process/10X_{cycle}/10X_{cycle}_{{well}}_Tile-{{tile}}.live.tif'.format(cycle=CYCLE_LIVE)
+    output:
+        'process/10X_{well}_Tile-{tile}.live_aligned.tif'
+    run:
+        call_firesnake('align_one_stack', output, data=input)
 
 rule transform_LoG:
     input:
-        'process/10X_{well}_Tile-{tile}.aligned.tif'
+        'process/10X_{well}_Tile-{tile}.aligned_SBS.tif'
     output:
         'process/10X_{well}_Tile-{tile}.log.tif'
     run:
@@ -95,7 +134,7 @@ rule consensus_DO:
     input:
         'process/10X_{well}_Tile-{tile}.log.tif'
     output:
-        'process/10X_{well}_Tile-{tile}.consensus_DO.tif'
+        temp('process/10X_{well}_Tile-{tile}.consensus_DO.tif')
     run:
         call_firesnake('consensus_DO', output, data=input[0])
 
@@ -122,7 +161,7 @@ rule extract_barcodes:
         'process/10X_{well}_Tile-{tile}.maxed.tif',
         'process/10X_{well}_Tile-{tile}.cells.tif'
     output:
-        'process/10X_{well}_Tile-{tile}.barcodes_2k.csv'
+        'process/10X_{well}_Tile-{tile}.barcodes.csv'
     run:
         call_firesnake('extract_barcodes', output, 
             peaks=input[0], data_max=input[1], cells=input[2], 
@@ -132,39 +171,32 @@ rule extract_barcodes:
 rule extract_phenotype:
     input:
         PHENOTYPE_TIF,
-        'process/10X_{well}_Tile-{tile}.nuclei.tif',
-        'process/10X_{well}_Tile-{tile}.cells.tif'
+        'process/10X_{well}_Tile-{tile}.nuclei_final.tif',
+        'process/10X_{well}_Tile-{tile}.cells_final.tif'
     output:
-        'process/10X_{well}_Tile-{tile}.phenotype.pkl'
+        'process/10X_{well}_Tile-{tile}.phenotype_final.pkl'
     run:
         call_firesnake('extract_phenotype_translocation', output, 
             data_phenotype=input[0], nuclei=input[1], cells=input[2], wildcards=dict(wildcards))
 
-rule extract_phenotype_median:
+
+rule extract_phenotype_live_translocation:
     input:
-        PHENOTYPE_TIF,
-        'process/10X_{well}_Tile-{tile}.nuclei.tif',
-        'process/10X_{well}_Tile-{tile}.cells.tif'
+        PHENOTYPE_LIVE_TIF,
+        'process/10X_{well}_Tile-{tile}.nuclei_final.tif',
+        'process/10X_{well}_Tile-{tile}.cells_final.tif'
     output:
-        'process/10X_{well}_Tile-{tile}.phenotype_median.pkl'
+        'process/10X_{well}_Tile-{tile}.phenotype_live.pkl'
     run:
-        call_firesnake('extract_phenotype_translocation', output, 
+        call_firesnake('extract_phenotype_live_translocation', output, 
             data_phenotype=input[0], nuclei=input[1], cells=input[2], wildcards=dict(wildcards))
 
-rule extract_phenotype_ring:
+rule extract_SBS_table:
     input:
         PHENOTYPE_TIF,
         'process/10X_{well}_Tile-{tile}.nuclei.tif'
     output:
-        'process/10X_{{well}}_Tile-{{tile}}.phenotype_ring_{width}x{width}.pkl'.format(width=RING_WIDTH)
+        'process/10X_{well}_Tile-{tile}.SBS_table.pkl'
     run:
-        call_firesnake('extract_phenotype_translocation_ring', output, 
-            data_phenotype=input[0], nuclei=input[1], width=RING_WIDTH, wildcards=dict(wildcards))
- 
-rule check_cy3_quality: 
-    input:
-        'process/10X_c1-SBS-1_full/10X_c1-SBS-1_{well}_Tile-{tile}.max.tif'
-    output:
-        'process/10X_{well}_Tile-{tile}.cy3_quality.csv'
-    run:
-        call_firesnake('check_cy3_quality', output, data=input[0], wildcards=dict(wildcards))
+        call_firesnake('extract_minimal_phenotype', output, 
+            data_phenotype=input[0], nuclei=input[1], wildcards=dict(wildcards))
