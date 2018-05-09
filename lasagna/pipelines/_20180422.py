@@ -105,11 +105,8 @@ def grid_view2(df, **kwargs):
     files = []
     bounds = []
     for _, row in df.iterrows():
-        files.append(name(row, tag='phenotype_aligned', mag='10X', 
-                          cycle='c0-DAPI-RELA-mNeon',
-                          ext='tif', subdir='process/10X_c0-DAPI-RELA-mNeon/')
-                    )
-        i, j = int(row['y']), int(row['x']) # cell coordinates
+        files.append(row['file'])
+        i, j = int(row['i_cell']), int(row['j_cell'])
         bounds.append((i, j, i+1, j+1))
     return grid_view(files, bounds, **kwargs)
 
