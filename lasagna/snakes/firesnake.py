@@ -615,14 +615,6 @@ class Snake():
         return df
 
 
-
-    def count_nuclei(f):
-        dapi = read(f)[0]
-        lasagna.io._get_stack._reset()
-        labeled = skimage.measure.label(dapi > 1500)
-        return sum(40 < r.area < 2000 for r in skimage.measure.regionprops(labeled))
-
-
 ###
 
 def fix_channel_offsets(data, channel_offsets):
