@@ -58,7 +58,7 @@ def add_phenotype_cols(df_ph):
     return (df_ph
         .assign(gcm=lambda x: x.eval('gfp_cell_median - gfp_nuclear_median')))
 
-def annotate_cells(df_cells, ):
+def annotate_cells(df_cells):
     def get_gene(sgRNA_name):
         if sgRNA_name is np.nan:
             return sgRNA_name
@@ -80,7 +80,7 @@ def annotate_cells(df_cells, ):
         return pd.Categorical(s, categories=['TNFa', 'IL1b'], ordered=True)
 
     return (df_cells
-        .assign(gate_NT=lambda x: x.eval(gate_NT))
+        # .assign(gate_NT=lambda x: x.eval(gate_NT))
         .assign(gene=lambda x: x['sgRNA_name'].apply(get_gene))
         .assign(targeting=lambda x: x['sgRNA_name'].apply(get_targeting))
         .assign(stimulant=lambda x: x['well'].apply(get_stimulant).pipe(categorize_stimulant))
