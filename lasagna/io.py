@@ -145,6 +145,8 @@ def save_stack(name, data, luts=None, display_ranges=None,
     if luts is None:
         luts = DEFAULT_LUTS + (GRAY,) * nchannels
 
+    if display_ranges is None:
+        display_ranges = [None] * data.shape[-3]
     for i, dr in enumerate(display_ranges):
         if dr is None:
             x = data[..., i, :, :]
