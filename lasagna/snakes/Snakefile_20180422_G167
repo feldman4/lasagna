@@ -4,7 +4,7 @@ import json
 import snakemake
 import sys
 sys.path.append('E:/packages/lasagna/')
-from lasagna.snakes.firesnake3 import call_firesnake, load_well_site_list
+from lasagna.snakes.firesnake3 import call_firesnake, load_well_tile_list
 # from firesnake3 import call_firesnake
 
 
@@ -22,10 +22,10 @@ INDEX_DO = None
 
 # special pairs of WELLS and TILES
 import pandas as pd
-WELLS, TILES = load_well_site_list('well_tile_list_process.pkl')
-# WELLS = ['A1', 'A2', 'A3', 'B1', 'B2', 'B3']
-# RANGE = lambda x: list(map(str, range(x[0] * x[1])))
-# TILES = RANGE((25, 25))
+WELLS_, TILES_ = load_well_tile_list('well_tile_list_process.pkl')
+WELLS = ['A1', 'A2', 'A3', 'B1', 'B2', 'B3']
+RANGE = lambda x: list(map(str, range(x[0] * x[1])))
+TILES = RANGE((25, 25))
 
 
 DISPLAY_RANGES=((500, 20000), 
@@ -40,8 +40,9 @@ CHANNEL_OFFSETS = [(0, 0), (0, 0), (0, 0), (0, 0), (0, 0)]
 
 rule all:
     input:
-        expand('process/10X_{well}_Tile-{tile}.barcodes.csv', zip, well=WELLS, tile=TILES),
-        expand('process/10X_{well}_Tile-{tile}.phenotype.pkl', zip, well=WELLS, tile=TILES)
+        # expand('process/10X_{well}_Tile-{tile}.barcodes.csv', zip, well=WELLS, tile=TILES),
+        # expand('process/10X_{well}_Tile-{tile}.phenotype.pkl', zip, well=WELLS, tile=TILES)
+        expand('process/10X_{well}_Tile-{tile}.cy3_quality.csv', well=WELLS, tile=TILES)
 
 
 rule segment_nuclei:
@@ -147,3 +148,12 @@ rule align_phenotype:
     run:
         call_firesnake('align_phenotype', output, 
             data_DO=input[0], data_phenotype=input[1], wildcards=dict(wildcards))
+
+
+rule check_cy3_quality: 
+    input:
+        'process/10X_{cycle}/10X_{cycle}_{{well}}_Tile-{{tile}}.max.tif'.format(cycle=CYCLES[0])
+    output:
+        'process/10X_{well}_Tile-{tile}.cy3_quality.csv'
+    run:
+        call_firesnake('check_cy3_quality', output, data=input[0], wildcards=dict(wildcards))

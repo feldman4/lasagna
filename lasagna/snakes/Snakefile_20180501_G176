@@ -48,7 +48,7 @@ PHENOTYPE_TIF = 'process/10X_c0-DAPI-RELA-mNeon/10X_c0-DAPI-RELA-mNeon_{well}_Ti
 rule all:
     input:
     # can request individual files here
-        expand('process/10X_{well}_Tile-{tile}.log.tif', zip, well=WELLS_, tile=TILES_),
+        # expand('process/10X_{well}_Tile-{tile}.log.tif', zip, well=WELLS_, tile=TILES_),
         expand('process/10X_{well}_Tile-{tile}.cy3_quality.csv', zip, well=WELLS_, tile=TILES_)
         # expand('process/10X_{well}_Tile-{tile}.phenotype.pkl', zip, well=WELLS_, tile=TILES_)
 
