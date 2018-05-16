@@ -80,8 +80,6 @@ def load_arg(x):
         try:
             return f(x)
         except (ValueError, TypeError) as e:
-            # print(x)
-            # print(e)
             pass
     else:
         return x
@@ -205,13 +203,22 @@ class Snake():
         indices.pop(index_align)
         indices_fwd = [index_align] + indices
         indices_rev = np.argsort(indices_fwd)
-        print data[indices_fwd].shape
         aligned = lasagna.process.register_and_offset(data[indices_fwd], registration_images=data[indices_fwd,0])
         aligned = aligned[indices_rev]
         if channel_offsets:
             aligned = fix_channel_offsets(aligned, channel_offsets)
 
         return aligned
+
+    @staticmethod
+    def _align_log_SBS_stack(data):
+        from lasagna.process import Align
+        data = np.array([x[-4:] for x in data])
+        aligned = np.array(map(Align.align_within_cycle, data))
+        aligned = Align.align_between_cycles(aligned)
+        loged = lasagna.bayer.log_ndi(aligned)
+        return loged
+
 
     @staticmethod
     def _align_one_stack(data, index_align=0, channel_offsets=None, reverse=False):
@@ -278,7 +285,12 @@ class Snake():
         """Find nuclei from DAPI. Find cell foreground from aligned but unfiltered 
         data. Expects data to have shape C x I x J.
         """
-        nuclei = lasagna.process.find_nuclei(data[0], 
+        dapi = data[0]
+        if dapi.dtype in (np.float32, np.float64):
+            dapi[dapi < 0] = 0
+            dapi[dapi > 1] = 1
+
+        nuclei = lasagna.process.find_nuclei(dapi, 
                                 threshold=lambda x: threshold, **kwargs)
      
         return nuclei.astype(np.uint16)
@@ -375,17 +387,18 @@ class Snake():
         if index_DO is None:
             index_DO = Ellipsis
 
-        data_max = data_max[:, 1:]
+        data_max = data_max[:, -4:]
 
         blob_mask = (peaks[index_DO] > threshold_DO) & (cells > 0)
         values = data_max[:, :, blob_mask].transpose([2, 0, 1])
         labels = cells[blob_mask]
         positions = np.array(np.where(blob_mask)).T
 
-        if data_max.shape[1] == 3:
-            bases = list('GTA')
-        else:
-            bases = list('GTAC')
+        # if data_max.shape[1] == 3:
+        #     bases = list('GTA')
+        # else:
+        #     bases = list('GTAC')
+        bases = list('GTAC')
         index = ('cycle', cycles), ('channel', bases)
         try:
             df = lasagna.utils.ndarray_to_dataframe(values, index)
@@ -415,6 +428,12 @@ class Snake():
         _, offset = lasagna.process.register_images([data_DO[0], data_phenotype[0]])
         aligned = lasagna.utils.offset(data_phenotype, offset)
         return aligned
+
+    @staticmethod
+    def _align_phenotype_2159(data_DO, data_phenotype):
+        from lasagna.process import Align
+        arr = np.array([data_DO[0]] + list(data_phenotype))
+        return Align.align_within_cycle(arr)[1:]
 
     @staticmethod
     def _segment_perimeter(data_nuclei, width=5):
@@ -533,6 +552,7 @@ class Snake():
             'dapi_gfp_cell_corr' : correlate_dapi_gfp,
             'gfp_cell_median' : lambda r: np.median(masked(r, 1)),
             'gfp_cell_mean' : lambda r: masked(r, 1).mean(),
+            'gfp_cell_min': lambda r: np.nanmin(masked(r, 1)),
             'gfp_cell_int'    : lambda r: masked(r, 1).sum(),
             'area_cell'       : lambda r: r.area,
             'cell'            : lambda r: r.label
@@ -599,15 +619,25 @@ class Snake():
     def _check_cy3_quality(data, wildcards, dapi_threshold=1500, cy3_threshold=5000):
         from lasagna.process import feature_table
 
-        features = {'area': lambda r: r.area, 'intensity': lambda r: r.mean_intensity}
-        dapi, cy3 = data[:2]
+        labeled_dapi = skimage.measure.label(data[0] > dapi_threshold)
+        labeled_cy3  = skimage.measure.label(data[1] > cy3_threshold)
 
-        labeled_dapi = skimage.measure.label(dapi > dapi_threshold)
-        labeled_cy3  = skimage.measure.label(cy3 > cy3_threshold)
+        features = {'area': lambda r: r.area, 'intensity': lambda r: r.mean_intensity}  
+        df_dapi = feature_table(data[0], labeled_dapi, features).assign(channel='DAPI')
+        df_cy3  = feature_table(data[1], labeled_cy3,  features).assign(channel='Cy3')
 
-        df_dapi = feature_table(dapi, labeled_dapi, features).assign(channel='dapi')
-        df_cy3  = feature_table(dapi, labeled_cy3,  features).assign(channel='cy3')
-        df = pd.concat([df_dapi, df_cy3])
+        ds = 32
+        arr = []
+        channels = 'DAPI', 'Cy3', 'A594', 'Cy5', 'Cy7'
+        for channel, frame in zip(channels, data):
+            counts = np.bincount(frame.flatten()/ds, minlength=2**16/ds)
+            (pd.DataFrame({
+            'pixel_count': counts,
+            'pixel_intensity': ds * np.arange(len(counts))})
+            .assign(channel=channel)
+            .pipe(arr.append))
+
+        df = pd.concat([df_dapi, df_cy3] + arr)
 
         for k,v in wildcards.items():
             df[k] = v

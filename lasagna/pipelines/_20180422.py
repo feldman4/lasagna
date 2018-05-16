@@ -44,7 +44,7 @@ def add_phenotype(df_cells, df_ph):
 
 def annotate_cells(df_cells):
     def get_gene(sgRNA_name):
-        if sgRNA_name is np.nan:
+        if np.isnan(sgRNA_name):
             return sgRNA_name
         if sgRNA_name.startswith('LG'):
             return 'LG'
@@ -102,6 +102,7 @@ def read_csvs(files):
     return pd.concat(map(read_csv, files))
     
 def grid_view2(df, **kwargs):
+    df = df.rename(columns={'i_ph': 'i_cell', 'j_ph': 'j_cell'})
     files = []
     bounds = []
     for _, row in df.iterrows():

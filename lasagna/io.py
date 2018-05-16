@@ -145,9 +145,14 @@ def save_stack(name, data, luts=None, display_ranges=None,
     if luts is None:
         luts = DEFAULT_LUTS + (GRAY,) * nchannels
 
-    if display_ranges is None:
-        display_ranges = tuple([(x.min(), x.max())
-                                for x in np.rollaxis(data, -3)])
+    for i, dr in enumerate(display_ranges):
+        if dr is None:
+            x = data[..., i, :, :]
+            display_ranges[i] = x.min(), x.max()
+
+    # if display_ranges is None:
+    #     display_ranges = tuple([(x.min(), x.max())
+    #                             for x in np.rollaxis(data, -3)])
 
     try:
         luts = luts[:nchannels]

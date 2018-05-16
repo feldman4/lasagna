@@ -60,7 +60,7 @@ def add_phenotype_cols(df_ph):
 
 def annotate_cells(df_cells):
     def get_gene(sgRNA_name):
-        if sgRNA_name is np.nan:
+        if np.isnan(sgRNA_name):
             return sgRNA_name
         if sgRNA_name.startswith('LG'):
             return 'LG'

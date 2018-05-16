@@ -31,10 +31,11 @@ default_object_features = {
     'i':        lambda region: region.centroid[0],
     'j':        lambda region: region.centroid[1],
     'bounds':   lambda region: region.bbox,
-    'contour':  lambda region: lasagna.io.binary_contours(region.image, fix=True, labeled=False)[0],
+    # 'contour':  lambda region: lasagna.io.binary_contours(region.image, fix=True, labeled=False)[0],
     'label':    lambda region: region.label,
-    'mask':     lambda region: lasagna.utils.Mask(region.image),
-    'hash':     lambda region: hex(random.getrandbits(128)) }
+    # 'mask':     lambda region: lasagna.utils.Mask(region.image),
+    # 'hash':     lambda region: hex(random.getrandbits(128)) 
+    }
 
 
 # FEATURES
@@ -454,3 +455,63 @@ def log_ndi(data, *args, **kwargs):
     return np.array(arr).reshape(data.shape)
 
 
+
+
+class Align():
+    @staticmethod
+    def normalize_by_percentile(data_, q_norm=70):
+        shape = data_.shape
+        shape = shape[:-2] + (-1,)
+        p = np.percentile(data_.reshape(shape), q_norm, axis=1)[..., None, None]
+        normed = data_ / p
+        return normed
+    
+    @staticmethod
+    def calculate_offsets(data_, target_ix, upsample_factor):
+        from skimage.feature import register_translation
+
+        target = data_[target_ix]
+        offsets = []
+        for i, src in enumerate(data_):
+            if i == target_ix:
+                offsets += [(0, 0)]
+            else:
+                offset, _, _ = register_translation(src, target, 
+                                                    upsample_factor=upsample_factor)
+                offsets += [offset]
+        return offsets
+
+    @staticmethod
+    def apply_offsets(data_, offsets):
+        from skimage.transform import SimilarityTransform, warp
+
+        warped = []
+        for frame, offset in zip(data_, offsets):
+            if offset[0] == 0 and offset[1] == 0:
+                warped += [frame]
+            else:
+                # skimage inconsistent (i,j) <=> (x,y) convention
+                st = SimilarityTransform(translation=offset[::-1])
+                warped += [warp(frame, st)]
+
+        return np.array(warped)
+
+    @staticmethod
+    def align_within_cycle(data_, target_ix=0, upsample_factor=4):
+        normed = Align.normalize_by_percentile(data_)
+        offsets = Align.calculate_offsets(normed, target_ix, upsample_factor=4)
+        # print offsets
+        return Align.apply_offsets(normed, offsets)
+
+    @staticmethod
+    def align_between_cycles(data, target_ix=0, upsample_factor=4):
+        # offsets from target channel
+        offsets = Align.calculate_offsets(data[:, target_ix], 0, 
+                                    upsample_factor=upsample_factor)
+
+        # apply to all channels
+        warped = []
+        for data_ in data.transpose([1, 0, 2, 3]):
+            warped += [Align.apply_offsets(data_, offsets)]
+
+        return np.array(warped).transpose([1, 0, 2, 3])

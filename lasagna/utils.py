@@ -230,7 +230,13 @@ def groupby_reduce_concat(gb, *args, **kwargs):
         if arg in reductions:
             kwargs[arg] = arg
 
-    arr = [reductions[f](gb).rename(name) for name, f in kwargs.items()]
+    arr = []
+    for name, f in kwargs.items():
+        if callable(f):
+            arr += [f(gb).rename(name)]
+        else:
+            arr += [reductions[f](gb).rename(name)]
+
     return pd.concat(arr, axis=1).reset_index()
 
 
