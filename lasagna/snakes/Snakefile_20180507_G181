@@ -13,7 +13,7 @@ from firesnake3 import call_firesnake, load_well_tile_list
 CYCLES = ['c{cycle}-SBS-{cycle}'.format(cycle=c) for c in range(1, 13)]
 CYCLES = CYCLES[:10]
 
-THRESHOLD_DO = 2000
+THRESHOLD_DO = 1000
 INDEX_DO = None
 
 
@@ -35,7 +35,9 @@ rule all:
     input:
     # can request individual files here
         expand('process/10X_{well}_Tile-{tile}.barcodes.csv', zip, well=WELLS_, tile=TILES_),
-        expand('process/10X_{well}_Tile-{tile}.SBS_cell_info.csv', zip, well=WELLS_, tile=TILES_)
+        # expand('process/10X_{well}_Tile-{tile}.SBS_cell_info.csv', zip, well=WELLS_, tile=TILES_)
+        # 'process/10X_A1_Tile-209.consensus_DO.tif'
+        # 'process/10X_A1_Tile-209.barcodes.csv'
 
 rule segment_nuclei:
     input:
@@ -83,7 +85,7 @@ rule consensus_DO:
     input:
         'process/10X_{well}_Tile-{tile}.log.tif'
     output:
-        temp('process/10X_{well}_Tile-{tile}.consensus_DO.tif')
+        'process/10X_{well}_Tile-{tile}.consensus_DO.tif'
     run:
         call_firesnake('consensus_DO', output, data=input[0])
 

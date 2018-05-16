@@ -44,18 +44,19 @@ def add_phenotype(df_cells, df_ph):
 
 def annotate_cells(df_cells):
     def get_gene(sgRNA_name):
-        if np.isnan(sgRNA_name):
-            return sgRNA_name
-        if sgRNA_name.startswith('LG'):
-            return 'LG'
-        pat = 'sg_(.*?)_'
-        return re.findall(pat, sgRNA_name)[0]
+        try:
+          if sgRNA_name.startswith('LG'):
+              return 'LG'
+          pat = 'sg_(.*?)_'
+          return re.findall(pat, sgRNA_name)[0]
+        except AttributeError:
+          return None
 
     def get_targeting(sgRNA_name):
-        if sgRNA_name is np.nan:
-            return False
-        else:
+        try:
             return 'LG_sg' not in sgRNA_name
+        except TypeError:
+            return False
 
     def get_stimulant(well):
         return stimulant[well[0]]

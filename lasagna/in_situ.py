@@ -278,12 +278,14 @@ def add_clusters(df_cells, neighbor_dist=50):
     from scipy.spatial.kdtree import KDTree
     import networkx as nx
 
-    xy = df_cells[[GLOBAL_X, GLOBAL_Y]]
+    x = df_cells[GLOBAL_X] + df_cells['j_SBS']
+    y = df_cells[GLOBAL_Y] + df_cells['i_SBS']
     barcodes = df_cells[BARCODE_0]
     barcodes = np.array(barcodes)
 
-    kdt = KDTree(xy)
-    print('searching for clusters among %d cells' % len(xy))
+    kdt = KDTree(zip(x, y))
+    num_cells = len(df_cells)
+    print('searching for clusters among %d cells' % num_cells)
     pairs = kdt.query_pairs(neighbor_dist)
     pairs = np.array(list(pairs))
 
@@ -295,7 +297,7 @@ def add_clusters(df_cells, neighbor_dist=50):
 
     clusters = list(nx.connected_components(G))
 
-    cluster_index = np.zeros(len(xy), dtype=int) - 1
+    cluster_index = np.zeros(num_cells, dtype=int) - 1
     for i, c in enumerate(clusters):
         cluster_index[list(c)] = i
 
@@ -335,8 +337,8 @@ def join_by_cell_location(df_cells, df_ph, max_distance=4):
     cols_ph = [c for c in df_ph.columns if c not in df_cells.columns]
     return (df_cells
                 .assign(cell_ph=cell_ph, distance=distance)
-                # .query('distance < @max_distance')
+                .query('distance < @max_distance')
                 .join(df_ph.set_index(cols_right)[cols_ph], on=cols_left)
-                .drop(['cell_ph'], axis=1)
+                # .drop(['cell_ph'], axis=1)
                )
     

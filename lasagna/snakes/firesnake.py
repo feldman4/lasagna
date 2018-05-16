@@ -274,9 +274,9 @@ class Snake():
         """Use variance to estimate DO.
         """
         if data.ndim == 4:
-            consensus = np.std(data[:, 1:], axis=(0, 1))
+            consensus = np.std(data[:, -4:], axis=(0, 1))
         elif data.ndim == 3:
-            consensus = np.std(data[1:], axis=0)
+            consensus = np.std(data[-4:], axis=0)
 
         return consensus
     
@@ -394,10 +394,6 @@ class Snake():
         labels = cells[blob_mask]
         positions = np.array(np.where(blob_mask)).T
 
-        # if data_max.shape[1] == 3:
-        #     bases = list('GTA')
-        # else:
-        #     bases = list('GTAC')
         bases = list('GTAC')
         index = ('cycle', cycles), ('channel', bases)
         try:
