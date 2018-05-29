@@ -2,61 +2,44 @@ import json
 import random
 import os
 from collections import defaultdict
+from itertools import product
 
 from skimage import transform
 import skimage
-from skimage.feature import register_translation
 import numpy as np
 import pandas as pd
 import scipy.stats
-from skimage.filters import gaussian, threshold_adaptive
-from skimage.morphology import disk, watershed, opening
-from skimage.util import img_as_uint
 import skimage.measure
-from skimage.feature import peak_local_max
 from scipy import ndimage
+import skfmm
 
 import lasagna.io
 import lasagna.utils
 
-DOWNSAMPLE = 2
-
-default_intensity_features = {'mean': lambda region: region.intensity_image[region.image].mean(),
-                    'median': lambda region: np.median(region.intensity_image[region.image]),
-                    'max': lambda region: region.intensity_image[region.image].max(),
-                    'min': lambda region: region.intensity_image[region.image].min() }
-
-default_object_features = {
-    'area':     lambda region: region.area,
-    'i':        lambda region: region.centroid[0],
-    'j':        lambda region: region.centroid[1],
-    'bounds':   lambda region: region.bbox,
-    # 'contour':  lambda region: lasagna.io.binary_contours(region.image, fix=True, labeled=False)[0],
-    'label':    lambda region: region.label,
-    # 'mask':     lambda region: lasagna.utils.Mask(region.image),
-    # 'hash':     lambda region: hex(random.getrandbits(128)) 
-    }
-
 
 # FEATURES
-def feature_table(data, mask, features, global_features=None):
-    """Apply functions in features to regions in data specified by
-    integer mask.
+def feature_table(data, labels, features, global_features=None):
+    """Apply functions in feature dictionary to regions in data 
+    specified by integer labels. If provided, the global feature
+    dictionary is applied to the full input data and labels. 
+
+    Results are combined in a dataframe with one row per label and
+    one column per feature.
     """
-    regions = regionprops(mask, intensity_image=data)
-    results = {feature: [] for feature in features}
+    regions = regionprops_stack(labels, intensity_image=data)
+    results = defaultdict(list)
     for region in regions:
         for feature, func in features.items():
-            results[feature] += [func(region)]
+            results[feature].append(func(region))
     if global_features:
         for feature, func in global_features.items():
-            results[feature] = func(data, mask)
+            results[feature] = func(data, labels)
     return pd.DataFrame(results)
 
 
-def build_feature_table(stack, mask, features, index):
-    """Iterate over leading dimensions of stack. Label resulting 
-    table by index = (index_name, index_values).
+def build_feature_table(stack, labels, features, index):
+    """Iterate over leading dimensions of stack, applying `feature_table`. 
+    Results are labeled by index and concatenated.
 
         >>> stack.shape 
         (3, 4, 511, 626)
@@ -64,17 +47,16 @@ def build_feature_table(stack, mask, features, index):
         index = (('round', range(1,4)), 
                  ('channel', ('DAPI', 'Cy3', 'A594', 'Cy5')))
     
-        build_feature_table(stack, mask, features, index) 
+        build_feature_table(stack, labels, features, index) 
 
     """
-    from itertools import product
     index_vals = list(product(*[vals for _,vals in index]))
     index_names = [x[0] for x in index]
     
     s = stack.shape
     results = []
     for frame, vals in zip(stack.reshape(-1, s[-2], s[-1]), index_vals):
-        df = feature_table(frame, mask, features)
+        df = feature_table(frame, labels, features)
         for name, val in zip(index_names, vals):
             df[name] = val
         results += [df]
@@ -83,14 +65,9 @@ def build_feature_table(stack, mask, features, index):
 
 
 def regionprops(*args, **kwargs):
-    """Supplement skimage.measure.regionprops with additional field containing full intensity image in
-    bounding box (useful for filtering).
-    :param args:
-    :param kwargs:
-    :return:
+    """Supplement skimage.measure.regionprops with additional field containing 
+    full intensity image in bounding box, which retains leading dimensions.
     """
-    import skimage.measure
-
     regions = skimage.measure.regionprops(*args, **kwargs)
     if 'intensity_image' in kwargs:
         intensity_image = kwargs['intensity_image']
@@ -130,7 +107,8 @@ def register_images(images, index=None, window=(500, 500), upsample=1.):
     offsets[0][-2:] += pad_width
     for image in [x[index] for x in images[1:]]:
         padded, pad_width = pad(image)
-        shift, error, _ = register_translation(image0, padded, upsample_factor=upsample)
+        shift, error, _ = skimage.features.register_translation(
+                        image0, padded, upsample_factor=upsample)
 
         offsets += [origin.copy()]
         offsets[-1][-2:] = shift + pad_width  # automatically cast to uint64
@@ -148,7 +126,6 @@ def register_and_offset(images, registration_images=None, verbose=False):
         print np.array(offsets)
     aligned = [lasagna.utils.offset(d, o) for d,o in zip(images, offsets)]
     return np.array(aligned)
-
 
 
 def stitch_grid(arr, overlap, upsample=1):
@@ -280,6 +257,118 @@ def align_scaled(x, y, scale, **kwargs):
     return np.r_['0,4', x_win, y].transpose([0,3,1,2])
 
 
+def find_cells(nuclei, mask, small_holes=100, remove_boundary_cells=True):
+    """Expand labeled nuclei to cells, constrained to where mask is >0.  
+    """
+
+    # voronoi
+    phi = (nuclei>0) - 0.5
+    speed = mask + 0.1
+    time = skfmm.travel_time(phi, speed)
+    time[nuclei>0] = 0
+
+    cells = skimage.morphology.watershed(time, nuclei, mask=mask)
+
+    # remove cells touching the boundary
+    if remove_boundary_cells:
+        cut = np.concatenate([cells[0,:], cells[-1,:], 
+                              cells[:,0], cells[:,-1]])
+        cells.flat[np.in1d(cells, np.unique(cut))] = 0
+
+    # assign small holes to neighboring cell with most contact
+    holes = skimage.measure.label(cells==0)
+    regions = skimage.measure.regionprops(holes,
+                intensity_image=skimage.morphology.dilation(cells))
+
+    return cells.astype(np.uint16)
+
+
+def find_peaks(data, n=5):
+    """Finds local maxima. At a maximum, the value is max - min in a 
+    neighborhood of width `n`. Elsewhere it is zero.
+    """
+    from scipy.ndimage import filters
+    neighborhood_size = (1,)*(data.ndim-2) + (n,n)
+    data_max = filters.maximum_filter(data, neighborhood_size)
+    data_min = filters.minimum_filter(data, neighborhood_size)
+    peaks = data_max - data_min
+    peaks[data != data_max] = 0
+    
+    # remove peaks close to edge
+    mask = np.ones(peaks.shape, dtype=bool)
+    mask[...,n:-n, n:-n] = False
+    peaks[mask] = 0
+    
+    return peaks
+
+
+def log_ndi(data, *args, **kwargs):
+    """Apply laplacian of gaussian to each image in a stack of shape
+    (..., I, J). 
+    Extra arguments are passed to scipy.ndimage.filters.gaussian_laplace.
+    """
+    f = lasagna.utils.applyIJ(scipy.ndimage.filters.gaussian_laplace)
+    return f(data, *args, **kwargs)
+
+
+class Align():
+    """Alignment redux, used by snakemake.
+    """
+    @staticmethod
+    def normalize_by_percentile(data_, q_norm=70):
+        shape = data_.shape
+        shape = shape[:-2] + (-1,)
+        p = np.percentile(data_.reshape(shape), q_norm, axis=1)[..., None, None]
+        normed = data_ / p
+        return normed
+    
+    @staticmethod
+    def calculate_offsets(data_, target_ix, upsample_factor):
+        target = data_[target_ix]
+        offsets = []
+        for i, src in enumerate(data_):
+            if i == target_ix:
+                offsets += [(0, 0)]
+            else:
+                offset, _, _ = skimage.feature.register_translation(
+                                src, target, upsample_factor=upsample_factor)
+                offsets += [offset]
+        return offsets
+
+    @staticmethod
+    def apply_offsets(data_, offsets):
+        warped = []
+        for frame, offset in zip(data_, offsets):
+            if offset[0] == 0 and offset[1] == 0:
+                warped += [frame]
+            else:
+                # skimage inconsistent (i,j) <=> (x,y) convention
+                st = skimage.transform.SimilarityTransform(translation=offset[::-1])
+                warped += [skimage.transform.warp(frame, st)]
+
+        return np.array(warped)
+
+    @staticmethod
+    def align_within_cycle(data_, target_ix=0, upsample_factor=4):
+        normed = Align.normalize_by_percentile(data_)
+        offsets = Align.calculate_offsets(normed, target_ix, upsample_factor=4)
+        # print offsets
+        return Align.apply_offsets(normed, offsets)
+
+    @staticmethod
+    def align_between_cycles(data, target_ix=0, upsample_factor=4):
+        # offsets from target channel
+        offsets = Align.calculate_offsets(data[:, target_ix], 0, 
+                                    upsample_factor=upsample_factor)
+
+        # apply to all channels
+        warped = []
+        for data_ in data.transpose([1, 0, 2, 3]):
+            warped += [Align.apply_offsets(data_, offsets)]
+
+        return np.array(warped).transpose([1, 0, 2, 3])
+
+
 # SEGMENT
 def find_nuclei(dapi, radius=15, area_min=50, area_max=500, um_per_px=1., 
                 score=lambda r: r.mean_intensity,
@@ -290,7 +379,7 @@ def find_nuclei(dapi, radius=15, area_min=50, area_max=500, um_per_px=1.,
     area = area_min, area_max
     # smooth = 1.35 # gaussian smoothing in watershed
 
-    mask = _binarize(dapi, radius, area[0])
+    mask = binarize(dapi, radius, area[0])
     labeled = skimage.measure.label(mask)
     labeled = filter_by_region(labeled, score, threshold, intensity=dapi) > 0
 
@@ -311,14 +400,15 @@ def find_nuclei(dapi, radius=15, area_min=50, area_max=500, um_per_px=1.,
     return result
 
 
-def _binarize(dapi, radius, min_size):
+def binarize(dapi, radius, min_size):
     """Apply local mean threshold to find cell outlines. Filter out 
     background shapes. Otsu threshold on list of region mean intensities will remove a few
     dark cells. Could use shape to improve the filtering.
     """
     dapi = skimage.img_as_ubyte(dapi)
     # slower than optimized disk in imagej, scipy.ndimage.uniform_filter with square is fast but crappy
-    meanered = skimage.filters.rank.mean(dapi, selem=disk(radius))
+    selem = skimage.morphology.disk(radius)
+    meanered = skimage.filters.rank.mean(dapi, selem=selem)
     mask = dapi > meanered
     mask = skimage.morphology.remove_small_objects(mask, min_size=min_size)
 
@@ -349,169 +439,16 @@ def filter_by_region(labeled, score, threshold, intensity=None):
     return labeled
 
 
-def fill_holes(img):
-    labels = skimage.measure.label(img)
-    background_label = np.bincount(labels.flatten()).argmax()
-    return labels != background_label
-
 
 def apply_watershed(img, smooth=4):
     distance = ndimage.distance_transform_edt(img)
     if smooth > 0:
-        distance = gaussian(distance, sigma=smooth)
-    local_maxi = peak_local_max(distance, indices=False, 
-                                footprint=np.ones((3, 3)), 
-                                exclude_border=False)
-    markers = ndimage.label(local_maxi)[0]
-    return watershed(-distance, markers, mask=img).astype(np.uint16)
+        distance = skimage.filters.gaussian(distance, sigma=smooth)
+    local_max = skimage.feature.peak_local_max(
+                    distance, indices=False, footprint=np.ones((3, 3)), 
+                    exclude_border=False)
 
+    markers = ndimage.label(local_max)[0]
+    result = skimage.morphology.watershed(-distance, markers, mask=img)
+    return result.astype(np.uint16)
 
-def find_cells(nuclei, mask, small_holes=100, remove_boundary_cells=True):
-    """Expand labeled nuclei to cells, constrained to where mask is >0. 
-    Mask is divvied up by  
-    """
-    import skfmm
-
-    # voronoi
-    phi = (nuclei>0) - 0.5
-    speed = mask + 0.1
-    time = skfmm.travel_time(phi, speed)
-    time[nuclei>0] = 0
-
-    cells = skimage.morphology.watershed(time, nuclei, mask=mask)
-
-    # remove cells touching the boundary
-    if remove_boundary_cells:
-        cut = np.concatenate([cells[0,:], cells[-1,:], 
-                              cells[:,0], cells[:,-1]])
-        cells.flat[np.in1d(cells, np.unique(cut))] = 0
-
-    # assign small holes to neighboring cell with most contact
-    holes = skimage.measure.label(cells==0)
-    regions = skimage.measure.regionprops(holes,
-                intensity_image=skimage.morphology.dilation(cells))
-
-    # for reg in regions:
-    #     if reg.area < small_holes:
-    #         vals = reg.intensity_image[reg.intensity_image>0]
-    #         cells[holes == reg.label] = scipy.stats.mode(vals)[0][0]
-
-    return cells.astype(np.uint16)
-
-
-def find_peaks(aligned, n=5):
-    """At peak, max value in neighborhood and max-min
-    """
-    from scipy.ndimage import filters
-    neighborhood_size = (1,)*(aligned.ndim-2) + (n,n)
-    data_max = filters.maximum_filter(aligned, neighborhood_size)
-    data_min = filters.minimum_filter(aligned, neighborhood_size)
-    peaks = data_max - data_min
-    peaks[aligned!=data_max] = 0
-    
-    # remove peaks close to edge
-    mask = np.ones(peaks.shape, dtype=bool)
-    mask[...,n:-n, n:-n] = False
-    peaks[mask] = 0
-    
-    return peaks
-
-
-def peak_to_region(peak, data, threshold=2000, n=5):
-    selem = np.ones((n,n))
-    peak = peak.copy()
-    peak[peak<threshold] = 0
-    
-    labeled = skimage.measure.label(peak)
-    regions = regionprops(labeled, intensity_image=data)
-    # hack for rare peak w/ more than 1 pixel
-    for r in regions:
-        if r.area > 1:
-            labeled[labeled==r.label] = np.array([r.label] + [0]*(r.area-1))
-
-    # dilate labels so higher intensity regions win
-    fwd = [r.max_intensity for r in regions]
-    fwd = np.argsort(np.argsort(fwd)) + 1
-    rev = np.argsort(fwd)
-
-    labeled[labeled>0] = fwd
-
-    labeled = skimage.morphology.dilation(labeled, selem)
-    labeled[labeled>0] = rev[labeled[labeled>0] - 1]
-
-    return labeled
-
-
-def log_ndi(data, *args, **kwargs):
-    """Apply laplacian of gaussian to each image in a stack of shape
-    (..., I, J). 
-    Extra arguments are passed to scipy.ndimage.filters.gaussian_laplace.
-    """
-    from scipy.ndimage.filters import gaussian_laplace
-    h, w = data.shape[-2:]
-    arr = []
-    for frame in data.reshape((-1, h, w)):
-        arr += [gaussian_laplace(frame, *args, **kwargs)]
-    return np.array(arr).reshape(data.shape)
-
-
-
-
-class Align():
-    @staticmethod
-    def normalize_by_percentile(data_, q_norm=70):
-        shape = data_.shape
-        shape = shape[:-2] + (-1,)
-        p = np.percentile(data_.reshape(shape), q_norm, axis=1)[..., None, None]
-        normed = data_ / p
-        return normed
-    
-    @staticmethod
-    def calculate_offsets(data_, target_ix, upsample_factor):
-        from skimage.feature import register_translation
-
-        target = data_[target_ix]
-        offsets = []
-        for i, src in enumerate(data_):
-            if i == target_ix:
-                offsets += [(0, 0)]
-            else:
-                offset, _, _ = register_translation(src, target, 
-                                                    upsample_factor=upsample_factor)
-                offsets += [offset]
-        return offsets
-
-    @staticmethod
-    def apply_offsets(data_, offsets):
-        from skimage.transform import SimilarityTransform, warp
-
-        warped = []
-        for frame, offset in zip(data_, offsets):
-            if offset[0] == 0 and offset[1] == 0:
-                warped += [frame]
-            else:
-                # skimage inconsistent (i,j) <=> (x,y) convention
-                st = SimilarityTransform(translation=offset[::-1])
-                warped += [warp(frame, st)]
-
-        return np.array(warped)
-
-    @staticmethod
-    def align_within_cycle(data_, target_ix=0, upsample_factor=4):
-        normed = Align.normalize_by_percentile(data_)
-        offsets = Align.calculate_offsets(normed, target_ix, upsample_factor=4)
-        # print offsets
-        return Align.apply_offsets(normed, offsets)
-
-    @staticmethod
-    def align_between_cycles(data, target_ix=0, upsample_factor=4):
-        # offsets from target channel
-        offsets = Align.calculate_offsets(data[:, target_ix], 0, 
-                                    upsample_factor=upsample_factor)
-
-        # apply to all channels
-        warped = []
-        for data_ in data.transpose([1, 0, 2, 3]):
-            warped += [Align.apply_offsets(data_, offsets)]
-
-        return np.array(warped).transpose([1, 0, 2, 3])

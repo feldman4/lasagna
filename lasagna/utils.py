@@ -484,9 +484,10 @@ def int_mode(x):
     return np.argmax(bc)
  
 @decorator
-def applyXY(f, arr, *args, **kwargs):   
+def applyIJ(f, arr, *args, **kwargs):   
     """Apply a function that expects 2D input to the trailing two
-    dimensions of an array.
+    dimensions of an array. The function must output an array whose shape
+    depends only on the input shape. 
     """
     h, w = arr.shape[-2:]
     reshaped = arr.reshape((-1, h, w))
@@ -494,7 +495,9 @@ def applyXY(f, arr, *args, **kwargs):
     arr_ = []
     for frame in reshaped:
         arr_ += [f(frame, *args, **kwargs)]
-    return np.array(arr_).reshape(arr.shape)
+
+    output_shape = arr.shape[:-2] + arr_[0].shape
+    return np.array(arr_).reshape(output_shape)
 
 
 def ndarray_to_dataframe(values, index):
@@ -790,5 +793,46 @@ def pad(array, pad_width, mode=None, **kwargs):
 
 def argmax_nd(a):
     return np.unravel_index(a.argmax(), a.shape)
+
+
+def binary_contours(img, fix=True, labeled=False):
+    """Find contours of binary image, or labeled if flag set. For labeled regions,
+    returns contour of largest area only.
+    :param img:
+    :return: list of nx2 arrays of [x, y] points along contour of each image.
+    """
+
+    def fixed_contour(contour):
+	    """Fix contour generated from binary mask to exactly match outline.
+	    """
+	    # adjusts corner points based on CCW contour
+	    def f(x0, y0, x1, y1):
+	        d = (x1 - x0, y1 - y0)
+	        if not(x0 % 1):
+	            x0 += d[0]
+	        else:
+	            y0 += d[1]
+	        return x0, y0
+
+	    x, y = contour.T
+	    xy = []
+	    for k in range(len(x) - 1):
+	        xy += [f(x[k], y[k], x[k + 1], y[k + 1])]
+
+	    return np.array(xy)
+
+    if labeled:
+        regions = skimage.measure.regionprops(img)
+        contours = [sorted(skimage.measure.find_contours(np.pad(r.image, 1, mode='constant'), 0.5, 'high'),
+                key=lambda x: len(x))[-1] for r in regions]
+        contours = [contour + [r.bbox[:2]] for contour,r in zip(contours, regions)]
+    else:
+        # pad binary image to get outer contours
+        contours = skimage.measure.find_contours(np.pad(img, 1, mode='constant'),
+                                                 level=0.5)
+        contours = [contour - 1 for contour in contours]
+    if fix:
+        return [fixed_contour(c) for c in contours]
+    return contours
 
 
