@@ -156,3 +156,22 @@ def apply_watermark(arr, label, trail=3, **kwargs):
     new_shape = list(arr.shape)
     new_shape[-3] += 1
     return np.array(new_arr).reshape(new_shape)
+
+
+def label_gene_classes(genes):
+    labels = 'both', 'TNFa', 'IL1b', 'negative'
+    arr = []
+    for gene in genes:
+        A = gene in positive_genes['TNFa']
+        B = gene in positive_genes['IL1b']
+        if A & B:
+            label = labels[0]
+        elif A:
+            label = labels[1]
+        elif B:
+            label = labels[2]
+        else:
+            label = labels[3]
+        arr += [label]
+
+    return pd.Categorical(arr, categories=labels, ordered=True)
