@@ -146,8 +146,15 @@ def save_stack(name, data, luts=None, display_ranges=None,
         luts = DEFAULT_LUTS + (GRAY,) * nchannels
 
     if display_ranges is None:
-        display_ranges = tuple([(x.min(), x.max())
-                                for x in np.rollaxis(data, -3)])
+        display_ranges = [None] * data.shape[-3]
+    for i, dr in enumerate(display_ranges):
+        if dr is None:
+            x = data[..., i, :, :]
+            display_ranges[i] = x.min(), x.max()
+
+    # if display_ranges is None:
+    #     display_ranges = tuple([(x.min(), x.max())
+    #                             for x in np.rollaxis(data, -3)])
 
     try:
         luts = luts[:nchannels]
@@ -516,9 +523,18 @@ file_pattern = [
         r'(?:_Tile-(?P<tile>([0-9]+)))?',
         r'(?:\.(?P<tag>.*))*\.(?P<ext>tif|pkl|csv|fastq)']
 
+folder_pattern = [
+        r'(?P<mag>[0-9]+X).',
+        r'(?:(?P<cycle>[^_\.]*).*?)\/',
+        r'(?P<well>[A-H][0-9]+)',
+        r'(?:[_-]Site[_-](?P<site>([0-9]+)))?',
+        r'\/?']
+
 file_pattern_abs = ''.join(file_pattern)
 file_pattern_rel = ''.join(file_pattern[2:])
         
+folder_pattern_abs = ''.join(file_pattern[:2] + folder_pattern)
+folder_pattern_rel = ''.join(folder_pattern)
 
 # FILEPATHS
 
@@ -527,17 +543,18 @@ def parse_filename(filename):
     """
     filename = os.path.normpath(filename)
     filename = filename.replace('\\', '/')
-    if os.path.isabs(filename):
-        pattern = file_pattern_abs
-    else:
-        pattern = file_pattern_rel
 
-    match = re.match(pattern, filename)
-    try:
-        result = {k:v for k,v in match.groupdict().items() if v is not None}
-        return result
-    except AttributeError:
-        raise ValueError('failed to parse filename: %s' % filename)
+    patterns = file_pattern_abs, file_pattern_rel, folder_pattern_abs, folder_pattern_rel
+
+    for pattern in patterns:
+        match = re.match(pattern, filename)
+        try:
+            result = {k:v for k,v in match.groupdict().items() if v is not None}
+            return result
+        except AttributeError:
+            continue
+    
+    raise ValueError('failed to parse filename: %s' % filename)
 
 
 def name(description, **more_description):

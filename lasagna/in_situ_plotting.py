@@ -120,7 +120,6 @@ def plot_combined_clustermap(df_reads, df_ph, n_clusters=5):
 
     return cg, cluster_series
 
-
 def plot_mean_quality_per_tile(df_reads, ax=None):
     """compatible with sns.FacetGrid
     """

@@ -1,4 +1,6 @@
-from lasagna.imports import *
+# from lasagna.imports import *
+import numpy as np
+import pandas as pd
 
 # df_reads <=> fastq
 
@@ -23,6 +25,7 @@ GLOBAL_Y = 'global_y'
 CLUSTER = 'cluster'
 SUBPOOL = 'subpool'
 SGRNA_NAME = 'sgRNA_name'
+SGRNA_DESIGN = 'sgRNA_design'
 
 IMAGING_ORDER = 'GTAC'
 
@@ -275,12 +278,14 @@ def add_clusters(df_cells, neighbor_dist=50):
     from scipy.spatial.kdtree import KDTree
     import networkx as nx
 
-    xy = df_cells[[GLOBAL_X, GLOBAL_Y]]
+    x = df_cells[GLOBAL_X] + df_cells['j_SBS']
+    y = df_cells[GLOBAL_Y] + df_cells['i_SBS']
     barcodes = df_cells[BARCODE_0]
     barcodes = np.array(barcodes)
 
-    kdt = KDTree(xy)
-    print('searching for clusters among %d cells' % len(xy))
+    kdt = KDTree(zip(x, y))
+    num_cells = len(df_cells)
+    print('searching for clusters among %d cells' % num_cells)
     pairs = kdt.query_pairs(neighbor_dist)
     pairs = np.array(list(pairs))
 
@@ -292,7 +297,7 @@ def add_clusters(df_cells, neighbor_dist=50):
 
     clusters = list(nx.connected_components(G))
 
-    cluster_index = np.zeros(len(xy), dtype=int) - 1
+    cluster_index = np.zeros(num_cells, dtype=int) - 1
     for i, c in enumerate(clusters):
         cluster_index[list(c)] = i
 
@@ -302,11 +307,38 @@ def add_clusters(df_cells, neighbor_dist=50):
 def add_design(df_cells_all, df_design, 
     design_barcode_col='barcode', 
     cell_barcode_col='cell_barcode_0'):
+    
+    bc1 = df_cells_all[cell_barcode_col].dropna().iloc[0]
+    bc2 = df_design[design_barcode_col].iloc[0]
+    assert len(bc1) == len(bc2)
 
     s = (df_design.drop_duplicates(design_barcode_col)
         .set_index(design_barcode_col)
-        [[SUBPOOL, SGRNA_NAME]])
+        [[SUBPOOL, SGRNA_NAME, SGRNA_DESIGN]])
 
     cols = [WELL, TILE, CELL]
     df_cells = df_cells_all.join(s, on=cell_barcode_col)
     return df_cells
+
+def join_by_cell_location(df_cells, df_ph, max_distance=4):
+    from scipy.spatial.kdtree import KDTree
+    # df_cells = df_cells.sort_values(['well', 'tile', 'cell'])
+    # df_ph = df_ph.sort_values(['well', 'tile', 'cell'])
+    i_tree = df_ph['i_ph'] + df_ph['global_y']
+    j_tree = df_ph['j_ph'] + df_ph['global_x']
+    i_query = df_cells['i_SBS'] + df_cells['global_y']
+    j_query = df_cells['j_SBS'] + df_cells['global_x']
+    
+    kdt = KDTree(zip(i_tree, j_tree))
+    distance, index = kdt.query(zip(i_query, j_query))
+    cell_ph = df_ph.iloc[index]['cell'].pipe(list)
+    cols_left = ['well', 'tile', 'cell_ph']
+    cols_right = ['well', 'tile', 'cell']
+    cols_ph = [c for c in df_ph.columns if c not in df_cells.columns]
+    return (df_cells
+                .assign(cell_ph=cell_ph, distance=distance)
+                .query('distance < @max_distance')
+                .join(df_ph.set_index(cols_right)[cols_ph], on=cols_left)
+                # .drop(['cell_ph'], axis=1)
+               )
+    

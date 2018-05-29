@@ -226,8 +226,18 @@ def groupby_reduce_concat(gb, *args, **kwargs):
                   'first': lambda x: x.nth(0),
                   'second': lambda x: x.nth(1)}
     
-    arr = [reductions[f](gb).rename(name) for name, f in kwargs.items()]
-    return pd.concat(arr, axis=1)
+    for arg in args:
+        if arg in reductions:
+            kwargs[arg] = arg
+
+    arr = []
+    for name, f in kwargs.items():
+        if callable(f):
+            arr += [f(gb).rename(name)]
+        else:
+            arr += [reductions[f](gb).rename(name)]
+
+    return pd.concat(arr, axis=1).reset_index()
 
 
 # GLUE

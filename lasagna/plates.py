@@ -110,6 +110,8 @@ def plate_coordinate(well, site, well_spacing, grid_spacing, grid_shape):
     site = int(site)
     if well_spacing == '96w':
         well_spacing = 9000
+    if well_spacing == '24w':
+        well_spacing = 19300
     if well_spacing == '6w':
         well_spacing = 39120
         
@@ -133,13 +135,9 @@ def plate_coordinate(well, site, well_spacing, grid_spacing, grid_shape):
     return i, j
 
 
-def add_global_xy(df, well_spacing, grid_shape, grid_spacing='10X'):
+def add_global_xy(df, well_spacing, grid_shape, grid_spacing='10X', factor=1.):
     """df.pipe(add_global_xy, '6w', (25,25))
     """
-    if well_spacing == '96':
-        well_spacing = 9000
-    elif well_spacing == '6':
-        well_spacing = 39120
     
     df = df.copy()
     wt = zip(df['well'], df['tile'])
@@ -147,11 +145,11 @@ def add_global_xy(df, well_spacing, grid_shape, grid_spacing='10X'):
     y, x = zip(*[d[k] for k in wt])
 
     if 'x' in df:
-        df['global_x'] = x + df['x']
-        df['global_y'] = y + df['y']
+        df['global_x'] = x + df['x'] * factor
+        df['global_y'] = y + df['y'] * factor
     elif 'position_i' in df:
-        df['global_x'] = x + df['position_j']
-        df['global_y'] = y + df['position_i']
+        df['global_x'] = x + df['position_j'] * factor
+        df['global_y'] = y + df['position_i'] * factor
     else:
         df['global_x'] = x
         df['global_y'] = y

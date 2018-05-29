@@ -4,7 +4,7 @@ import json
 import os
 import shutil
 
-WIN_PYTHON2 = ['C:\ProgramData\Miniconda2\python.exe', 'C:\ProgramData\Anaconda2\python.exe']
+WIN_PYTHON2 = [r'C:\ProgramData\Miniconda2\python.exe', r'C:\ProgramData\Anaconda2\python.exe']
 FIRESNAKE2 = __file__.replace('firesnake3', 'firesnake')
 
 def stitch_input(wildcards):
@@ -45,7 +45,7 @@ def find_python2():
 
     raise ValueError('python2.exe not found')
     
-def load_well_site_list(filename):
+def load_well_tile_list(filename):
     import pandas as pd
     well_tile_list = map(tuple, pd.read_pickle(filename).as_matrix())
     WELLS, TILES = zip(*well_tile_list)

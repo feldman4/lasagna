@@ -44,18 +44,19 @@ def add_phenotype(df_cells, df_ph):
 
 def annotate_cells(df_cells):
     def get_gene(sgRNA_name):
-        if sgRNA_name is np.nan:
-            return sgRNA_name
-        if sgRNA_name.startswith('LG'):
-            return 'LG'
-        pat = 'sg_(.*?)_'
-        return re.findall(pat, sgRNA_name)[0]
+        try:
+          if sgRNA_name.startswith('LG'):
+              return 'LG'
+          pat = 'sg_(.*?)_'
+          return re.findall(pat, sgRNA_name)[0]
+        except AttributeError:
+          return None
 
     def get_targeting(sgRNA_name):
-        if sgRNA_name is np.nan:
-            return False
-        else:
+        try:
             return 'LG_sg' not in sgRNA_name
+        except TypeError:
+            return False
 
     def get_stimulant(well):
         return stimulant[well[0]]
@@ -102,14 +103,12 @@ def read_csvs(files):
     return pd.concat(map(read_csv, files))
     
 def grid_view2(df, **kwargs):
+    df = df.rename(columns={'i_ph': 'i_cell', 'j_ph': 'j_cell'})
     files = []
     bounds = []
     for _, row in df.iterrows():
-        files.append(name(row, tag='phenotype_aligned', mag='10X', 
-                          cycle='c0-DAPI-RELA-mNeon',
-                          ext='tif', subdir='process/10X_c0-DAPI-RELA-mNeon/')
-                    )
-        i, j = int(row['y']), int(row['x']) # cell coordinates
+        files.append(row['file'])
+        i, j = int(row['i_cell']), int(row['j_cell'])
         bounds.append((i, j, i+1, j+1))
     return grid_view(files, bounds, **kwargs)
 
