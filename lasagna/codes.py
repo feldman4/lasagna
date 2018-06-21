@@ -1,6 +1,6 @@
 import numpy as np
 from itertools import product
-from collections import defaultdict, OrderedDict
+from collections import defaultdict, OrderedDict, Counter
 from Levenshtein import distance, editops
 from lasagna.designs.pool0 import GC_penalty, homopolymer_penalty, contiguous
 from scipy.sparse import coo_matrix
