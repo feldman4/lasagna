@@ -1,13 +1,17 @@
+import time
+import os
 import functools
 import regex as re
-import numpy as np
-import pandas as pd
 
 from functools import wraps
 from inspect import getargspec, isfunction
 from itertools import izip, ifilter, starmap, product
 from collections import OrderedDict, Counter
 from decorator import decorator 
+
+import numpy as np
+import pandas as pd
+
 
 
 # PYTHON
@@ -79,6 +83,18 @@ def call(arg, stdin='', shell=True):
     p.stdin.close()
     return p.stdout.read()
 
+
+def timestamp(filename=None, clock=False):
+    import time
+    time_format = '%Y%m%d-%H%M%S' if clock else '%Y%m%d'
+    stamp = time.strftime(time_format)
+    if filename:
+        directory = os.path.dirname(filename)
+        name = os.path.basename(filename)
+        return os.path.join(directory, '{0}_{1}'.format(stamp, name))
+    else:
+        return stamp
+    
 
 # PANDAS
 def standardize(x):
@@ -240,6 +256,23 @@ def groupby_reduce_concat(gb, *args, **kwargs):
 
     return pd.concat(arr, axis=1).reset_index()
 
+def groupby_histogram(df, index, column, bins, cumulative=False):
+    """Substitute for df.groupby(index)[column].histogram(bins),
+    only supports one column label.
+    """
+    maybe_cumsum = lambda x: x.cumsum(axis=1) if cumulative else x
+    column_bin = column + '_bin'
+    column_count = column + ('_csum' if cumulative else '_count')
+    return (df
+        .assign(**{column_bin: bins[np.digitize(df[column], bins) - 1]})
+        .pivot_table(index=index, columns=column_bin, values=df.columns[0], 
+                     aggfunc='count')
+        .reindex(labels=list(bins), axis=1)
+        .fillna(0)
+        .pipe(maybe_cumsum)
+        .stack().rename(column_count)
+        .astype(int).reset_index()
+           )
 
 # GLUE
 def show_grid(z, force_fit=False):
@@ -313,7 +346,6 @@ def linear_assignment(df):
     return df_out
 
 
-
 def cells_to_barcodes(ind_vars_table, cloning=None):
     """
     :param cloning: dict of DataFrames based on Lasagna Cloning sheets
@@ -326,10 +358,6 @@ def cells_to_barcodes(ind_vars_table, cloning=None):
     barcodes = barcodes.fillna('')
     # split comma-separated list of barcodes
     ind_vars_table['barcodes'] = [tuple(x.split(', ')) for x in barcodes]
-
-
-
-
 
 
 def sample(line=tuple(), plane=tuple(), scale='um_per_px'):
@@ -485,9 +513,10 @@ def int_mode(x):
     return np.argmax(bc)
  
 @decorator
-def applyXY(f, arr, *args, **kwargs):   
+def applyIJ(f, arr, *args, **kwargs):   
     """Apply a function that expects 2D input to the trailing two
-    dimensions of an array.
+    dimensions of an array. The function must output an array whose shape
+    depends only on the input shape. 
     """
     h, w = arr.shape[-2:]
     reshaped = arr.reshape((-1, h, w))
@@ -495,7 +524,9 @@ def applyXY(f, arr, *args, **kwargs):
     arr_ = []
     for frame in reshaped:
         arr_ += [f(frame, *args, **kwargs)]
-    return np.array(arr_).reshape(arr.shape)
+
+    output_shape = arr.shape[:-2] + arr_[0].shape
+    return np.array(arr_).reshape(output_shape)
 
 
 def ndarray_to_dataframe(values, index):
@@ -791,5 +822,46 @@ def pad(array, pad_width, mode=None, **kwargs):
 
 def argmax_nd(a):
     return np.unravel_index(a.argmax(), a.shape)
+
+
+def binary_contours(img, fix=True, labeled=False):
+    """Find contours of binary image, or labeled if flag set. For labeled regions,
+    returns contour of largest area only.
+    :param img:
+    :return: list of nx2 arrays of [x, y] points along contour of each image.
+    """
+
+    def fixed_contour(contour):
+	    """Fix contour generated from binary mask to exactly match outline.
+	    """
+	    # adjusts corner points based on CCW contour
+	    def f(x0, y0, x1, y1):
+	        d = (x1 - x0, y1 - y0)
+	        if not(x0 % 1):
+	            x0 += d[0]
+	        else:
+	            y0 += d[1]
+	        return x0, y0
+
+	    x, y = contour.T
+	    xy = []
+	    for k in range(len(x) - 1):
+	        xy += [f(x[k], y[k], x[k + 1], y[k + 1])]
+
+	    return np.array(xy)
+
+    if labeled:
+        regions = skimage.measure.regionprops(img)
+        contours = [sorted(skimage.measure.find_contours(np.pad(r.image, 1, mode='constant'), 0.5, 'high'),
+                key=lambda x: len(x))[-1] for r in regions]
+        contours = [contour + [r.bbox[:2]] for contour,r in zip(contours, regions)]
+    else:
+        # pad binary image to get outer contours
+        contours = skimage.measure.find_contours(np.pad(img, 1, mode='constant'),
+                                                 level=0.5)
+        contours = [contour - 1 for contour in contours]
+    if fix:
+        return [fixed_contour(c) for c in contours]
+    return contours
 
 
