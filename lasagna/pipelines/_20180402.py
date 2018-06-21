@@ -8,14 +8,14 @@ gate_cells = and_join(['3000 < dapi_nuclear_max < 12000',
 gate_NT = 'dapi_gfp_nuclear_corr < -0.5'
 
 stimulant = {'A': 'TNFa', 'B': 'IL1b'}
-positive_genes = {'IL1b': ['MAP3K7', 'NFKBIA', 'IKBKG',
+positive_genes = {'IL1b': ['IL1R1', 'MAP3K7', 'NFKBIA', 'IKBKG',
                     'IRAK1', 'MYD88', 'IRAK4', 'TRAF6'],
-                'TNFa': ['MAP3K7', 'NFKBIA', 'IKBKG', 'TRADD', 
-                    'TNFRSF1A', 'TRAF2', 'IKBKB', 'CHUK', 'RIPK1']}
+                'TNFa': ['TNFRSF1A', 'MAP3K7', 'NFKBIA', 'IKBKG', 'TRADD', 
+                    'TRAF2', 'IKBKB', 'CHUK', 'RIPK1']}
 
 positive_gene_list = ['MAP3K7', 'NFKBIA', 'IKBKG', 'TRADD', 'TNFRSF1A', 
                       'IRAK1', 'MYD88', 'IRAK4', 'TRAF2', 'TRAF6', 'IKBKB', 
-                      'CHUK', 'RIPK1', 'CRKL',]
+                      'CHUK', 'RIPK1', 'CRKL', 'IL1R1']
 
 tilemap_features = ['gfp_cell_median', 'gfp_nuclear_median', 
                     'dapi_gfp_cell_corr', 'dapi_gfp_nuclear_corr']

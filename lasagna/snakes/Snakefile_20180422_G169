@@ -44,9 +44,10 @@ PHENOTYPE_TIF = 'process/10X_c0-DAPI-RELA-mNeon/10X_c0-DAPI-RELA-mNeon_{well}_Ti
 rule all:
     input:
     # can request individual files here
-        expand('process/10X_{well}_Tile-{tile}.cy3_quality.csv', well=WELLS, tile=TILES),
-        # expand('process/10X_{well}_Tile-{tile}.phenotype.pkl', zip, well=WELLS_, tile=TILES_)
+        # expand('process/10X_{well}_Tile-{tile}.cy3_quality.csv', well=WELLS, tile=TILES),
+        expand('process/10X_{well}_Tile-{tile}.barcodes.csv', zip, well=WELLS_, tile=TILES_)
         # 'process/10X_B1_Tile-10.barcodes.csv'
+
 
 rule segment_nuclei:
     input:
@@ -77,18 +78,9 @@ rule align:
     input:
         expand('process/10X_{cycle}/10X_{cycle}_{{well}}_Tile-{{tile}}.max.tif', cycle=CYCLES)
     output:
-        'process/10X_{well}_Tile-{tile}.aligned.tif'
-    run:
-        call_firesnake('align_no_DAPI', output, data=input,
-                display_ranges=DISPLAY_RANGES, channel_offsets=CHANNEL_OFFSETS)
-
-rule transform_LoG:
-    input:
-        'process/10X_{well}_Tile-{tile}.aligned.tif'
-    output:
         'process/10X_{well}_Tile-{tile}.log.tif'
     run:
-        call_firesnake('transform_LoG', output, data=input[0], 
+        call_firesnake('align_log_SBS_stack', output, data=input,
             display_ranges=DISPLAY_RANGES)
 
 rule consensus_DO:
@@ -122,11 +114,12 @@ rule extract_barcodes:
         'process/10X_{well}_Tile-{tile}.maxed.tif',
         'process/10X_{well}_Tile-{tile}.cells.tif'
     output:
-        'process/10X_{well}_Tile-{tile}.barcodes_2k.csv'
+        'process/10X_{well}_Tile-{tile}.barcodes.csv'
     run:
         call_firesnake('extract_barcodes', output, 
             peaks=input[0], data_max=input[1], cells=input[2], 
             cycles=CYCLES, threshold_DO=THRESHOLD_DO, index_DO=INDEX_DO,
+            channels=3,
             wildcards=dict(wildcards)) 
 
 rule extract_phenotype:

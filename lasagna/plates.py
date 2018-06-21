@@ -147,9 +147,9 @@ def add_global_xy(df, well_spacing, grid_shape, grid_spacing='10X', factor=1.):
     if 'x' in df:
         df['global_x'] = x + df['x'] * factor
         df['global_y'] = y + df['y'] * factor
-    elif 'position_i' in df:
-        df['global_x'] = x + df['position_j'] * factor
-        df['global_y'] = y + df['position_i'] * factor
+    elif 'i' in df:
+        df['global_x'] = x + df['j'] * factor
+        df['global_y'] = y + df['i'] * factor
     else:
         df['global_x'] = x
         df['global_y'] = y

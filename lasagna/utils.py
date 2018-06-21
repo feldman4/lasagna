@@ -219,6 +219,7 @@ def groupby_reduce_concat(gb, *args, **kwargs):
     for arg in args:
     	kwargs[arg] = arg
     reductions = {'mean': lambda x: x.mean(),
+                  'sem': lambda x: x.sem(),
                   'size': lambda x: x.size(),
                   'count': lambda x: x.size(),
                   'sum': lambda x: x.sum(),

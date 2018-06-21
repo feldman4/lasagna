@@ -103,7 +103,8 @@ def combine_annotated(data_ph, data_sbs, labels_reads, labels_cells, labels_phen
 
     return arr
 
-def annotate_cells(df_cells):
+def annotate_cells(df_cells, use_nuclei_phenotype=False):
+    from skimage.morphology import dilation
     assert len(df_cells.drop_duplicates(['well', 'tile'])) == 1
     df_cells = df_cells.assign(cluster=lambda x: x['cluster'].pipe(index_singleton_clusters))
 
@@ -115,21 +116,23 @@ def annotate_cells(df_cells):
         
     data_ph   = read(name(description, tag='phenotype_aligned'))
     data_sbs  = read(name(description, tag='log'))
-    nuclei    = read(name(description, tag='nuclei'))
-    nuclei_ph = read(name(description, tag='nuclei_phenotype'))
     cells     = read(name(description, tag='cells'))
-    
-    nuclei_labels = df_cells.set_index('cell_ph')['cell'].to_dict()
+    if use_nuclei_phenotype:
+        nuclei_labels = df_cells.set_index('cell_ph')['cell'].to_dict()
+        nuclei_ph = read(name(description, tag='nuclei_phenotype'))
+        nuclei = relabel_array(nuclei_ph, nuclei_labels)
+    else:
+        nuclei    = read(name(description, tag='nuclei'))
+
     cluster_labels = (df_cells
                       .set_index('cell')
                       .query('cluster > -0.5')
                       .eval('cluster + 1').to_dict())
-    
-    nuclei_ph = relabel_array(nuclei_ph, nuclei_labels)
+
     cells = relabel_array(cells, cluster_labels)
     nuclei_mask = outline_mask(nuclei).astype(float)
     nuclei_mask = nuclei.astype(float) / 10000
-    labels_cells = outline_mask(cells)
+    labels_cells = outline_mask(cells, direction='inner')
     labels_cells[labels_cells == 0] += nuclei_mask[labels_cells == 0]
     
     gb_cluster = df_cells.groupby(['sgRNA_name', 'cluster'])
@@ -145,7 +148,7 @@ def annotate_cells(df_cells):
     
     # gene labels go on top
     mask = np.zeros(labels_cells.shape, dtype=bool)
-    mask[:h, :w] = labeled[:h, :w] > 0
+    mask[:h, :w] = dilation(labeled > 0, selem=np.ones((3,3)))[:h, :w]
     labels_cells[mask] = 0
     labels_cells[:h, :w] = labels_cells[:h, :w] + labeled[:h, :w]
     
@@ -173,6 +176,10 @@ def annotate_reads(df_reads, shape=(1024, 1024)):
     return labels_reads
 
 def annotate_phenotype(df_cells, value):
+    assert len(df_cells.drop_duplicates(['well', 'tile'])) == 1
+
+    well = df_cells['well'].iloc[0]
+    tile = df_cells['tile'].iloc[0]
     description = {'subdir': 'process', 'well': well, 'tile': tile,
          'mag': '10X', 'ext': 'tif'}
 
@@ -187,6 +194,7 @@ def annotate_phenotype(df_cells, value):
 def save_annotated(*args, **kwargs):
     index = kwargs.pop('index', None) # default
     dr_ph = (0, 15), (0, 2.5)
+    dr_ph = None, None
     dr_sbs = (50, 10000), (50, 10000), (50, 7000), (50, 7000)
     dr_labels = (1, 255), None,  None
     luts_ph = GRAY, GREEN

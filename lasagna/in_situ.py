@@ -1,6 +1,7 @@
 # from lasagna.imports import *
 import numpy as np
 import pandas as pd
+import functools
 
 # df_reads <=> fastq
 
@@ -342,3 +343,30 @@ def join_by_cell_location(df_cells, df_ph, max_distance=4):
                 # .drop(['cell_ph'], axis=1)
                )
     
+def summarize_sg_stats(df_cells, thresholds=None, value='dapi_gfp_nuclear_corr'):
+    """A bit slow.
+    """
+    def describe_range(series, thresholds, index_name='threshold'):
+        s = pd.Series({t: (series < t).sum() for t in thresholds})
+        s.index.name = index_name
+        s.name = 'count'
+        return s
+
+    df_cells = df_cells.dropna(subset=[value])
+    if thresholds is None:
+        thresholds = np.linspace(-1, 1, 21)
+    cols = ['stimulant', 'gene', 'sgRNA_name', 'cell_barcode_0']
+    f = functools.partial(describe_range, thresholds=thresholds)
+    total = df_cells.groupby(cols).size().rename('total')
+    df_sg_stats = (df_cells
+         .groupby(cols)
+         [value].apply(f)
+         .reset_index()
+         .rename(columns={value: 'count'})
+         .join(total, on=cols)
+         .assign(ratio=lambda x: x.eval('count / total'))
+         .assign(threshold_100=lambda x: (x['threshold'] * 100).astype(int))
+        )
+    
+    return df_sg_stats
+

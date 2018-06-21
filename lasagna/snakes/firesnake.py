@@ -219,7 +219,6 @@ class Snake():
         loged = lasagna.bayer.log_ndi(aligned)
         return loged
 
-
     @staticmethod
     def _align_one_stack(data, index_align=0, channel_offsets=None, reverse=False):
         """Align data using first channel. If data is a list of stacks with different 
@@ -296,6 +295,27 @@ class Snake():
         return nuclei.astype(np.uint16)
 
     @staticmethod
+    def _segment_nuclei_bsub(data, width=50, threshold=200, **kwargs):
+        """Segment cells from aligned data. To use less than full cycles for 
+        segmentation, filter the input files.
+
+        !!! matches cell labels to nuclei labels !!!
+        """
+        
+        from scipy.ndimage.filters import minimum_filter
+        data[0] = data[0] - minimum_filter(data[1], size=width)
+
+        return Snake._segment_nuclei(data, threshold=threshold, **kwargs)
+    
+    @staticmethod
+    def _segment_nuclei_stack(data, dapi_index, **kwargs):
+        arr = []
+        for frame in data[:, [dapi_index]]:
+            arr += [Snake._segment_nuclei(frame, **kwargs)]
+
+        return np.array(arr) 
+
+    @staticmethod
     def _segment_cells(data, nuclei, threshold=750):
         """Segment cells from aligned data. To use less than full cycles for 
         segmentation, filter the input files.
@@ -330,7 +350,6 @@ class Snake():
         data[1] = bsub(data[1])
 
         return Snake._segment_cells(data, nuclei, threshold=threshold)
-
 
     @staticmethod
     def _transform_LoG(data, bsub=False):
@@ -378,8 +397,8 @@ class Snake():
 
     @staticmethod
     def _extract_barcodes(peaks, data_max, cells, 
-        threshold_DO, cycles, wildcards, index_DO=None):
-        """
+        threshold_DO, cycles, wildcards, channels=4, index_DO=None):
+        """Assumes sequencing covers 'GTAC'[:channels].
         """
 
         if data_max.ndim == 3:
@@ -387,14 +406,14 @@ class Snake():
         if index_DO is None:
             index_DO = Ellipsis
 
-        data_max = data_max[:, -4:]
+        data_max = data_max[:, -channels:]
 
         blob_mask = (peaks[index_DO] > threshold_DO) & (cells > 0)
         values = data_max[:, :, blob_mask].transpose([2, 0, 1])
         labels = cells[blob_mask]
         positions = np.array(np.where(blob_mask)).T
 
-        bases = list('GTAC')
+        bases = list('GTAC')[:channels]
         index = ('cycle', cycles), ('channel', bases)
         try:
             df = lasagna.utils.ndarray_to_dataframe(values, index)
@@ -464,7 +483,6 @@ class Snake():
         }
 
         return Snake._extract_phenotype(data_phenotype, nuclei, wildcards, features)       
-
 
     @staticmethod
     def _extract_phenotype_FR_2_color(data_phenotype, nuclei, data_sbs_1, wildcards):
@@ -581,7 +599,6 @@ class Snake():
         
         return df
 
-
     @staticmethod
     def _extract_minimal_phenotype(data_phenotype, nuclei, wildcards):
         from lasagna.pipelines._20170914_endo import feature_table_stack
@@ -596,7 +613,6 @@ class Snake():
         
         return df
 
-
     @staticmethod
     def _extract_phenotype_live_translocation(data_phenotype, nuclei, cells, wildcards):
         
@@ -609,7 +625,6 @@ class Snake():
             arr.append(extract(d).assign(frame=frame))
         
         return pd.concat(arr)
-
 
     @staticmethod
     def _check_cy3_quality(data, wildcards, dapi_threshold=1500, cy3_threshold=5000):
