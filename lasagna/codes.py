@@ -236,4 +236,4 @@ def maxy_clique2(cm, start=None):
         last_added = w[0]
         unused[last_added] = 0
         arr.append(last_added)
-        # assert cm[arr, :][:, arr].sum() == 0
+        # assert cm[arr, :][:, arr].sum() == 0    return selected
