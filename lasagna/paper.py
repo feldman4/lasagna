@@ -1442,6 +1442,68 @@ def plot_insitu_barcode_scaling():
 
     return fig
 
+class ValidationFigure():
+    @staticmethod
+    def plot_gene(df_pos, df_neg, gene, bins, figsize=(3, 2.5)):
+
+        hist_kwargs = dict(bins=bins, cumulative=True, 
+                           density=True, histtype='step', lw=2)
+
+        fig, axs = plt.subplots(nrows=2, ncols=2, figsize=figsize)
+
+        colors = {'TNFa': STIMULANT_COLORS[1], 'IL1b': STIMULANT_COLORS[0], 'negative': STRONG_GRAY}
+        stimulants = 'IL1b', 'TNFa'
+        for stimulant, ax in zip(stimulants, axs[1, :]):
+            positive = (df_pos.query('stimulant == @stimulant')
+                       ['dapi_gfp_nuclear_corr'])
+
+            negative = (df_neg.query('stimulant == @stimulant')
+                        ['dapi_gfp_nuclear_corr'])
+
+            ax.hist(positive, color=colors[stimulant], **hist_kwargs)
+            ax.hist(negative, color=colors['negative'], **hist_kwargs)
+            ax.spines['top'].set_visible(False)
+            ax.spines['right'].set_visible(False)
+            ax.set_yticks([])
+
+        axs[0, 0].set_title(stimulants[0], fontsize=14)
+        axs[0, 1].set_title(stimulants[1], fontsize=14)
+
+        fig.subplots_adjust(hspace=0.7, wspace=0.25)
+        return fig, axs
+    
+    @staticmethod
+    def add_snapshots(axs, gene):
+        snapshots = glob('paper/snapshots/*{0}*.tif'.format(gene))
+        for stimulant, ax in zip(['IL1b', 'TNFa'], axs[0, :]):
+            dapi, mNeon = lasagna.io.read_stack([f for f in snapshots if stimulant in f][0])
+            n = 75
+            vmin, vmax = 700, 7000
+            rgb = np.zeros((n, n, 3), dtype=float)
+            rgb[:, :, 1] =((mNeon[:n, :n].astype(float) - vmin) / (vmax - vmin))
+            ax.imshow(rgb)
+            ax.axis('off')
+
+            box = ax.get_position()
+            s = 0.3
+            ax.set_position([box.x0 - box.width * s, box.y0 - box.height * s, 
+                             box.width * (1 + 2*s) , box.height * (1 + 2*s)])
+
+        for ax in axs[1]:
+            y_offset = 0.07
+            box = ax.get_position()
+            ax.set_position([box.x0, box.y0 + y_offset, box.width, box.height])
+
+    @staticmethod
+    def plot_validation(df_ph, gene):
+        df_pos = df_ph.query('gene == @gene')
+        df_neg = df_ph.query('gene == "NTC"')
+        bins = np.linspace(-1, 1.04, 21)
+        fig, axs = ValidationFigure.plot_gene(df_pos, df_neg, gene, bins=bins)
+        ValidationFigure.add_snapshots(axs, gene)
+        return fig
+
+
 def compose_figure_in_situ(x='17.4cm', y='11cm'):
     from svgutils.compose import Figure, Panel, SVG, Text, Image, Line
 
