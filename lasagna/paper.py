@@ -1562,10 +1562,12 @@ class ValidationFigure():
             panels += [Panel(axis, title)]
 
         return Figure('17.4cm', '40cm', *panels)
+
+    @staticmethod
     def plot_hist(data, color, label, bins, df_NTC, vertical=True):
         """Supplemental
         """
-        hist_kwargs = dict(bins=bins, cumulative=True, density=True, histtype='step', lw=2)
+        hist_kwargs = dict(bins=bins, cumulative=True, normed=True, histtype='step', lw=2)
         ax = plt.gca()
         negative = df_NTC.query('stimulant == @label')['dapi_gfp_nuclear_corr']
         _, _, (p_,) = ax.hist(negative, color='gray', **hist_kwargs)
@@ -1591,6 +1593,9 @@ class ValidationFigure():
                 p.xy[:, 0]  = move_right(p.xy[:, 0])
                 p_.xy[:, 0] = move_right(p_.xy[:, 0])
 
+        ax.set_xticks([-1, 0, 1])
+        ax.set_xlabel('translocation score')
+
     @staticmethod
     def fix_ax(ax, x0, x1):
         """Supplemental
@@ -1602,7 +1607,6 @@ class ValidationFigure():
         ax.set_title(ax.get_title().replace('gene = ', ''))
         ax.spines['left'].set_visible(False)
         ax.set_yticks([])
-
 
     @staticmethod
     def save_group_distributions(df_ph):
@@ -1633,7 +1637,7 @@ class ValidationFigure():
 
     @staticmethod
     def load_df_manual():
-        f = 'libraries/validation_manual_calls.csv'
+        f = 'libraries/4k_hits.tsv'
         df_manual = (pd.read_csv(f, sep='\t')
          .assign(display=lambda x: x['display_group'].str.extract('(.*)_\\d')))
         return df_manual
