@@ -1460,8 +1460,9 @@ class ValidationFigure():
             negative = (df_neg.query('stimulant == @stimulant')
                         ['dapi_gfp_nuclear_corr'])
 
-            ax.hist(positive, color=colors[stimulant], **hist_kwargs)
             ax.hist(negative, color=colors['negative'], **hist_kwargs)
+            ax.hist(positive, color=colors[stimulant], **hist_kwargs)
+            
             ax.spines['top'].set_visible(False)
             ax.spines['right'].set_visible(False)
             ax.set_yticks([])
@@ -1561,6 +1562,81 @@ class ValidationFigure():
             panels += [Panel(axis, title)]
 
         return Figure('17.4cm', '40cm', *panels)
+    def plot_hist(data, color, label, bins, df_NTC, vertical=True):
+        """Supplemental
+        """
+        hist_kwargs = dict(bins=bins, cumulative=True, density=True, histtype='step', lw=2)
+        ax = plt.gca()
+        negative = df_NTC.query('stimulant == @label')['dapi_gfp_nuclear_corr']
+        _, _, (p_,) = ax.hist(negative, color='gray', **hist_kwargs)
+        _, _, (p,)  = ax.hist(data['dapi_gfp_nuclear_corr'],  color=color, label=label, **hist_kwargs)
+        move_up = lambda y: y * 0.4 + 0.5
+        move_down = lambda y: y * 0.4
+        move_left = lambda x: x * 0.4
+        move_right = lambda x: x * 0.4 + 0.5
+        if label == 'IL1b':
+            if vertical:
+                p.xy[:, 1]  = move_up(p.xy[:, 1])
+                p_.xy[:, 1] = move_up(p_.xy[:, 1])
+            else:
+                p.xy[:, 0]  = move_left(p.xy[:, 0])
+                p_.xy[:, 0] = move_left(p_.xy[:, 0])  
+                p.xy[:, 1]  = move_down(p.xy[:, 1])
+                p_.xy[:, 1] = move_down(p_.xy[:, 1])  
+        else:
+            if vertical:
+                p.xy[:, 1]  = move_down(p.xy[:, 1])
+                p_.xy[:, 1] = move_down(p_.xy[:, 1])
+            else:
+                p.xy[:, 0]  = move_right(p.xy[:, 0])
+                p_.xy[:, 0] = move_right(p_.xy[:, 0])
+
+    @staticmethod
+    def fix_ax(ax, x0, x1):
+        """Supplemental
+        """
+        ax.set_xlim([x0, x1 - 0.04])
+        ax.plot([x0, x1], [0.5, 0.5], color='black', lw=1)
+        ax.plot([x0, x0], [0.5, 0.95], color='black', lw=1)
+        ax.plot([x0, x0], [0, 0.45], color='black', lw=1)
+        ax.set_title(ax.get_title().replace('gene = ', ''))
+        ax.spines['left'].set_visible(False)
+        ax.set_yticks([])
+
+
+    @staticmethod
+    def save_group_distributions(df_ph):
+        """Supplemental
+        """
+        df_manual = ValidationFigure.load_df_manual()
+        gene_groups = (df_manual.groupby('manual_call'))
+
+        for label, group in gene_groups:
+            genes = group['gene'].tolist()
+            
+            fg = (df_ph
+             .query('gene == @genes')
+             .sort_values('gene')
+             .pipe(sns.FacetGrid, hue='stimulant', col='gene', col_wrap=6, aspect=0.6,
+                  palette=lasagna.paper.STIMULANT_COLORS)
+             .map_dataframe(ValidationFigure.plot_hist, bins=np.linspace(-1, 1.04, 21), 
+                            df_NTC=df_ph.query('gene == "NTC"'),
+                            vertical=True)
+            )
+
+            for ax in fg.axes.flat[:]:
+                ValidationFigure.fix_ax(ax=ax, x0=-1, x1=1.04)
+            
+            f = 'paper/{label}_distributions.svg'
+            fg.fig.tight_layout()
+            fg.savefig(f.format(label=label))
+
+    @staticmethod
+    def load_df_manual():
+        f = 'libraries/validation_manual_calls.csv'
+        df_manual = (pd.read_csv(f, sep='\t')
+         .assign(display=lambda x: x['display_group'].str.extract('(.*)_\\d')))
+        return df_manual
 
 
 def compose_figure_in_situ(x='17.4cm', y='11cm'):
@@ -1609,11 +1685,6 @@ def compose_figure_in_situ(x='17.4cm', y='11cm'):
             SVG('paper/in_situ_figure/base_quality_per_cycle.svg').scale(0.5).move(5, -5),
             Text(letter_case('C'), 0, 10, size=12, weight='bold'),
             )
-
-    # panel_D = Panel(
-    #         SVG('paper/in_situ_figure/read_quality_hist.svg').scale(0.5).move(5, 0),
-    #         Text(letter_case('D'), 0, 10, size=12, weight='bold'),
-    #     )
 
     panel_D = Panel(
             SVG('paper/in_situ_figure/mapping_rate.svg').scale(0.5).move(10, -5),
