@@ -93,7 +93,7 @@ def build_khash2(xs, k):
     return sorted(set(arr))
 
 def sparse_dist(D, threshold, D2=None):
-    """Entries less than or equal to threshold only.
+    """Entries less than threshold only.
     """
     from tqdm import tqdm
     if D2 is None:
@@ -139,7 +139,7 @@ def array_to_str(arr):
     return [''.join(x) for x in arr]
 
 
-def sparse_view(xs, D2):
+def sparse_view(xs, D2, symmetric=True):
     """string barcodes
     """
 
@@ -152,6 +152,10 @@ def sparse_view(xs, D2):
 
     n = len(xs)
     cm = coo_matrix((data, (i, j)), shape=(n, n))
+
+    if symmetric:
+    	cm = (cm + cm.T).tocsr()
+    	
     return cm
 
 
@@ -236,4 +240,77 @@ def maxy_clique2(cm, start=None):
         last_added = w[0]
         unused[last_added] = 0
         arr.append(last_added)
-        # assert cm[arr, :][:, arr].sum() == 0    return selected
+        # assert cm[arr, :][:, arr].sum() == 0
+
+
+
+def maxy_clique_groups(cm, group_ids, m):
+    """Take up to `m`.
+    """
+
+    # counts => group_id
+    d1 = defaultdict(set)
+    for id_, counts in Counter(group_ids).items():
+        d1[counts] |= {id_}
+
+    # group_id => indices
+    d2 = defaultdict(list)
+    for i, id_ in enumerate(group_ids):
+        d2[id_] += [i]
+    # .pop() takes from the end of the list
+    d2 = {k: v[::-1] for k,v in d2.items()}
+
+    # group_id => # selected
+    d3 = Counter()
+
+    selected = []
+    available = np.array(range(len(group_ids)))
+
+    while d1:
+        if (len(selected) % 100) == 0:
+            print len(selected)
+    #     assert cm[selected, :][:, selected].sum() == 0
+
+        # pick a group_id from the lowest bin
+        count = min(d1.keys())
+        id_ = d1[count].pop()
+
+        # remove bin if empty
+        if len(d1[count]) == 0:
+            d1.pop(count)
+
+        if d3[id_] == m:
+            # group_id is destroyed
+            continue
+
+        # discard indices until we find a new one
+        index = None
+        while d2[id_]:
+            index = d2[id_].pop()
+            # approach 1: check for conflict every time
+            # cm[index, selected].sum() == 0
+            # approach 2: keep an array of available indices
+            if index in available:
+                break
+        else:
+            index = None
+
+        # keep index
+        if index:
+    #         assert index != 45
+            selected.append(index)
+            d3[id_] += 1
+            available = available[available != index]
+            # get rid of incompatible barcodes
+            remove = cm[index, available].indices
+            mask = np.ones(len(available), dtype=bool)
+            mask[remove] = False
+            available = available[mask]
+
+
+        # move group_id to another bin
+        n = len(d2[id_])
+        if n > 0:
+            d1[n] |= {id_}
+
+    return selected
