@@ -8,27 +8,17 @@ gate_cells = and_join(['3000 < dapi_nuclear_max < 12000',
 
 gate_NT = 'dapi_gfp_nuclear_corr < -0.5'
 
-<<<<<<< HEAD
-stimulant = {'A': 'TNFa', 'B': 'IL1b'}
-positive_genes = {'IL1b': ['IL1R1', 'MAP3K7', 'NFKBIA', 'IKBKG',
-=======
 stimulant = {'A': 'TNFa', 'B': 'IL1b', 
 	'A1': 'TNFa', 'A2': 'TNFa', 'A3': 'TNFa',
 	'B1': 'IL1b', 'B2': 'IL1b', 'B3': 'IL1b'}
 positive_genes = {'IL1b': ['MAP3K7', 'NFKBIA', 'IKBKG',
->>>>>>> 32f23b81ae83429dc6c162a6de703311a68302e8
                     'IRAK1', 'MYD88', 'IRAK4', 'TRAF6'],
                 'TNFa': ['TNFRSF1A', 'MAP3K7', 'NFKBIA', 'IKBKG', 'TRADD', 
                     'TRAF2', 'IKBKB', 'CHUK', 'RIPK1']}
 
 positive_gene_list = ['MAP3K7', 'NFKBIA', 'IKBKG', 'TRADD', 'TNFRSF1A', 
-<<<<<<< HEAD
-                      'IRAK1', 'MYD88', 'IRAK4', 'TRAF2', 'TRAF6', 'IKBKB', 
-                      'CHUK', 'RIPK1', 'CRKL', 'IL1R1']
-=======
                     'IRAK1', 'MYD88', 'IRAK4', 'TRAF2', 'TRAF6', 'IKBKB', 
                     'CHUK', 'RIPK1']
->>>>>>> 32f23b81ae83429dc6c162a6de703311a68302e8
 
 tilemap_features = ['gfp_cell_median', 'gfp_nuclear_median', 
                     'dapi_gfp_cell_corr', 'dapi_gfp_nuclear_corr']
