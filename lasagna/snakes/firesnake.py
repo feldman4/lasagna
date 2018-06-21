@@ -14,10 +14,9 @@ if sys.version_info.major == 2:
     import pandas as pd
     import skimage
     import lasagna.bayer
+    import lasagna.features
     import lasagna.process
     import lasagna.io
-    read = lasagna.io.read_stack
-    save = lasagna.io.save_stack 
 
 def load_csv(f):
     with open(f, 'r') as fh:
@@ -31,7 +30,7 @@ def load_pkl(f):
 
 
 def load_tif(f):
-    return read(f)
+    return lasagna.io.read_stack(f)
 
 
 def save_csv(f, df):
@@ -47,7 +46,7 @@ def save_tif(f, data_, **kwargs):
     # make sure `data` doesn't come from the Snake method since it's an
     # argument name for the save function, too
     kwargs['data'] = data_
-    save(f, **kwargs)
+    lasagna.io.save_stack(f, **kwargs)
 
 
 def restrict_kwargs(kwargs, f):
@@ -455,11 +454,11 @@ class Snake():
         """Expand mask to generate perimeter (e.g., area around nuclei).
         """
         from lasagna.pipelines._20180302 import get_nuclear_perimeter
-
         return get_nuclear_perimeter(data_nuclei, width=width)
 
     @staticmethod
     def _extract_phenotype_FR(data_phenotype, nuclei, wildcards):
+<<<<<<< HEAD
         def correlate_dapi_ha(region):
             dapi, ha = region.intensity_image_full
 
@@ -483,36 +482,19 @@ class Snake():
         }
 
         return Snake._extract_phenotype(data_phenotype, nuclei, wildcards, features)       
+=======
+    	"""Features for frameshift reporter phenotyped in DAPI, HA channels.
+    	"""
+    	from lasagna.features import features_frameshift
+        return Snake._extract_features(data_phenotype, nuclei, wildcards, features_frameshift)       
+>>>>>>> 32f23b81ae83429dc6c162a6de703311a68302e8
 
     @staticmethod
-    def _extract_phenotype_FR_2_color(data_phenotype, nuclei, data_sbs_1, wildcards):
-        def correlate_one_two(region, index):
-            dapi, ha = region.intensity_image_full[index]
-
-            filt = dapi > 0
-            if filt.sum() == 0:
-                # assert False
-                return np.nan
-
-            dapi = dapi[filt]
-            ha  = ha[filt]
-            corr = (dapi - dapi.mean()) * (ha - ha.mean()) / (dapi.std() * ha.std())
-
-            return corr.mean()
-
-        # DAPI, HA, myc
-        data_phenotype = np.array([data_sbs_1[0]] + list(data_phenotype[[1, 0]]))
-        features = {
-            'corr_dapi_ha' : functools.partial(correlate_one_two, index=[0, 1]),
-            'corr_dapi_myc': functools.partial(correlate_one_two, index=[0, 2]),
-            'dapi_median': lambda r: np.median(r.intensity_image_full[0]),
-            'dapi_max'   : lambda r: r.intensity_image_full[0].max(),
-            'ha_median'  : lambda r: np.median(r.intensity_image_full[1]),
-            'myc_median'  : lambda r: np.median(r.intensity_image_full[2]),
-            'cell'       : lambda r: r.label
-        }
-
-        return Snake._extract_phenotype(data_phenotype, nuclei, wildcards, features)     
+    def _extract_phenotype_FR_myc(data_phenotype, nuclei, data_sbs_1, wildcards):
+    	"""Features for frameshift reporter phenotyped in DAPI, HA, myc channels.
+    	"""
+    	from lasagna.features import features_frameshift_myc
+        return Snake._extract_features(data_phenotype, nuclei, wildcards, features)     
 
     @staticmethod
     def _extract_phenotype_translocation_ring(data_phenotype, nuclei, wildcards, width=3):
@@ -528,71 +510,32 @@ class Snake():
 
     @staticmethod
     def _extract_phenotype_translocation(data_phenotype, nuclei, cells, wildcards):
-        from lasagna.pipelines._20170914_endo import feature_table_stack
-        from lasagna.process import feature_table, default_object_features
+    	import lasagna.features
 
-        def correlate_dapi_gfp(region):
-            dapi, gfp = region.intensity_image_full
+        features_n = lasagna.features.translocation_cell
+        features_c = lasagna.features.translocation_nuclear
 
-            filt = dapi > 0
-            if filt.sum() == 0:
-                # assert False
-                return np.nan
+        features_n.update(lasagna.features.cell_features)
+        features_c['cell'] = features_n['cell']
 
-            dapi = dapi[filt]
-            gfp  = gfp[filt]
-            corr = (dapi - dapi.mean()) * (gfp - gfp.mean()) / (dapi.std() * gfp.std())
-
-            return corr.mean()
-
+        df_n =  Snake._extract_features(data_phenotype, nuclei, wildcards, features_n)
+        df_c =  Snake._extract_features(data_phenotype, cells, wildcards, features_c) 
         
-        def masked(region, index):
-            return region.intensity_image_full[index][region.filled_image]
-
-        features_nuclear = {
-            'dapi_gfp_nuclear_corr' : correlate_dapi_gfp,
-            'dapi_nuclear_median': lambda r: np.median(masked(r, 0)),
-            'gfp_nuclear_median' : lambda r: np.median(masked(r, 1)),
-            'gfp_nuclear_mean' : lambda r: masked(r, 1).mean(),
-            'dapi_nuclear_int'   : lambda r: masked(r, 0).sum(),
-            'gfp_nuclear_int'    : lambda r: masked(r, 1).sum(),
-            'dapi_nuclear_max'   : lambda r: masked(r, 0).max(),
-            'gfp_nuclear_max'    : lambda r: masked(r, 1).max(),
-            'area_nuclear'       : lambda r: r.area,
-            'cell'               : lambda r: r.label
-        }
-
-        features_cell = {
-            'dapi_gfp_cell_corr' : correlate_dapi_gfp,
-            'gfp_cell_median' : lambda r: np.median(masked(r, 1)),
-            'gfp_cell_mean' : lambda r: masked(r, 1).mean(),
-            'gfp_cell_min': lambda r: np.nanmin(masked(r, 1)),
-            'gfp_cell_int'    : lambda r: masked(r, 1).sum(),
-            'area_cell'       : lambda r: r.area,
-            'cell'            : lambda r: r.label
-        }
-
-        df_n =  Snake._extract_phenotype(data_phenotype, nuclei, wildcards, features_nuclear)
-
-        df_c =  Snake._extract_phenotype(data_phenotype, cells, wildcards, features_cell) 
-        df_c = df_c[features_cell.keys()]
-        
+        # inner join discards nuclei without corresponding cells
         df = (pd.concat([df_n.set_index('cell'), df_c.set_index('cell')], axis=1, join='inner')
                 .reset_index())
         
         return df
 
     @staticmethod
-    def _extract_phenotype(data_phenotype, nuclei, wildcards, features):
-        from lasagna.pipelines._20170914_endo import feature_table_stack
-        from lasagna.process import feature_table, default_object_features
+    def _extract_features(data, nuclei, wildcards, features):
+    	"""Extracts features in dictionary and combines with generic region
+    	features.
+    	"""
+        from lasagna.process import feature_table
+        from lasagna.features import region_features
 
-        df = feature_table_stack(data_phenotype, nuclei, features)
-
-        features = default_object_features.copy()
-        features['cell'] = features.pop('label')
-        df2 = feature_table(nuclei, nuclei, features)
-        df = df.join(df2.set_index('cell'), on='cell')
+        df = feature_table(data_phenotype, nuclei, features)
 
         for k,v in wildcards.items():
             df[k] = v
