@@ -2,6 +2,7 @@
 import numpy as np
 import pandas as pd
 from lasagna.schema import *
+from natsort import natsorted
 
 IMAGING_ORDER = 'GTAC'
 

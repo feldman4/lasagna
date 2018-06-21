@@ -20,6 +20,8 @@ positive_gene_list = ['MAP3K7', 'NFKBIA', 'IKBKG', 'TRADD', 'TNFRSF1A',
 tilemap_features = ['gfp_cell_median', 'gfp_nuclear_median', 
                     'dapi_gfp_cell_corr', 'dapi_gfp_nuclear_corr']
 
+gene_classes = 'IL1b', 'TNFa', 'both', 'negative'
+
 
 def do_median_call_3(df_raw, cycles, constant_C=1):
     n = len(df_raw)
@@ -158,19 +160,18 @@ def apply_watermark(arr, label, trail=3, **kwargs):
 
 
 def label_gene_classes(genes):
-    labels = 'both', 'TNFa', 'IL1b', 'negative'
     arr = []
     for gene in genes:
-        A = gene in positive_genes['TNFa']
-        B = gene in positive_genes['IL1b']
+        A = gene in positive_genes['IL1b']
+        B = gene in positive_genes['TNFa']
         if A & B:
-            label = labels[0]
+            label = gene_classes[2]
         elif A:
-            label = labels[1]
+            label = gene_classes[0]
         elif B:
-            label = labels[2]
+            label = gene_classes[1]
         else:
-            label = labels[3]
+            label = gene_classes[3]
         arr += [label]
 
-    return pd.Categorical(arr, categories=labels, ordered=True)
+    return pd.Categorical(arr, categories=gene_classes, ordered=True)

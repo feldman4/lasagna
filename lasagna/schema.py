@@ -21,6 +21,8 @@ SGRNA_DESIGN = 'sgRNA_design'
 DATASET = 'dataset'
 GENE_SYMBOL = 'gene_symbol'
 
+STIMULANT = 'stimulant'
+GENE_CLASS = 'gene_class'
 
 standard_columns = {
 	'gene': GENE_SYMBOL

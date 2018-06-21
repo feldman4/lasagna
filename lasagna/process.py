@@ -5,6 +5,7 @@ from collections import defaultdict
 from itertools import product
 
 from skimage import transform
+import skimage.feature
 import skimage
 import numpy as np
 import pandas as pd
@@ -339,12 +340,9 @@ class Align():
     def apply_offsets(data_, offsets):
         warped = []
         for frame, offset in zip(data_, offsets):
-            if offset[0] == 0 and offset[1] == 0:
-                warped += [frame]
-            else:
-                # skimage inconsistent (i,j) <=> (x,y) convention
-                st = skimage.transform.SimilarityTransform(translation=offset[::-1])
-                warped += [skimage.transform.warp(frame, st)]
+            # skimage inconsistent (i,j) <=> (x,y) convention
+            st = skimage.transform.SimilarityTransform(translation=offset[::-1])
+            warped += [skimage.transform.warp(frame, st)]
 
         return np.array(warped)
 

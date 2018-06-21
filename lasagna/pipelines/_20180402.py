@@ -1,4 +1,5 @@
 from lasagna.imports import *
+from lasagna.schema import *
 
 gate_cells = and_join(['3000 < dapi_nuclear_max < 12000',
     '60 < area_nuclear < 140', 
@@ -7,15 +8,17 @@ gate_cells = and_join(['3000 < dapi_nuclear_max < 12000',
 
 gate_NT = 'dapi_gfp_nuclear_corr < -0.5'
 
-stimulant = {'A': 'TNFa', 'B': 'IL1b'}
+stimulant = {'A': 'TNFa', 'B': 'IL1b', 
+	'A1': 'TNFa', 'A2': 'TNFa', 'A3': 'TNFa',
+	'B1': 'IL1b', 'B2': 'IL1b', 'B3': 'IL1b'}
 positive_genes = {'IL1b': ['MAP3K7', 'NFKBIA', 'IKBKG',
                     'IRAK1', 'MYD88', 'IRAK4', 'TRAF6'],
                 'TNFa': ['MAP3K7', 'NFKBIA', 'IKBKG', 'TRADD', 
                     'TNFRSF1A', 'TRAF2', 'IKBKB', 'CHUK', 'RIPK1']}
 
 positive_gene_list = ['MAP3K7', 'NFKBIA', 'IKBKG', 'TRADD', 'TNFRSF1A', 
-                      'IRAK1', 'MYD88', 'IRAK4', 'TRAF2', 'TRAF6', 'IKBKB', 
-                      'CHUK', 'RIPK1', 'CRKL',]
+                    'IRAK1', 'MYD88', 'IRAK4', 'TRAF2', 'TRAF6', 'IKBKB', 
+                    'CHUK', 'RIPK1']
 
 tilemap_features = ['gfp_cell_median', 'gfp_nuclear_median', 
                     'dapi_gfp_cell_corr', 'dapi_gfp_nuclear_corr']
@@ -59,7 +62,7 @@ def add_phenotype_cols(df_ph):
         .assign(gcm=lambda x: x.eval('gfp_cell_median - gfp_nuclear_median')))
 
 def annotate_cells(df_cells):
-    def get_gene(sgRNA_name):
+    def get_gene_symbol(sgRNA_name):
         try:
           if sgRNA_name.startswith('LG'):
               return 'LG'
@@ -82,9 +85,9 @@ def annotate_cells(df_cells):
 
     return (df_cells
         # .assign(gate_NT=lambda x: x.eval(gate_NT))
-        .assign(gene=lambda x: x['sgRNA_name'].apply(get_gene))
-        .assign(targeting=lambda x: x['sgRNA_name'].apply(get_targeting))
-        .assign(stimulant=lambda x: x['well'].apply(get_stimulant).pipe(categorize_stimulant))
+        .assign(gene_symbol=lambda x: x[SGRNA_NAME].apply(get_gene_symbol))
+        .assign(targeting=lambda x: x[SGRNA_NAME].apply(get_targeting))
+        .assign(stimulant=lambda x: x[WELL].apply(get_stimulant).pipe(categorize_stimulant))
         .assign(positive=get_positives)
         )
 
@@ -338,7 +341,6 @@ def plot_NT_fraction_vs_count(df_cells, min_count=30):
     )
     return fg
 
-
 def filter_clusters(df_cells):
     return (df_cells
             .dropna(subset=['gene'])
@@ -375,7 +377,6 @@ def plot_cluster_heatmaps(df_cells, x_range=(None,5), y_range=(1, 5)):
     
     return fg
     
-    
 def plot_NT_positive_histogram(df_cells):
     import seaborn as sns
     import matplotlib.pyplot as plt
@@ -389,7 +390,6 @@ def plot_NT_positive_histogram(df_cells):
         .set_xlabels('# pos. cells in cluster')
         .set_ylabels('fraction of pos. cells')
         )
-
 
 def plot_hit_swarm(df_hits, col, sort_genes=False):
     import seaborn as sns
@@ -408,3 +408,4 @@ def plot_hit_swarm(df_hits, col, sort_genes=False):
     fig.tight_layout()
 
     return fig
+

@@ -1,13 +1,17 @@
+import time
+import os
 import functools
 import regex as re
-import numpy as np
-import pandas as pd
 
 from functools import wraps
 from inspect import getargspec, isfunction
 from itertools import izip, ifilter, starmap, product
 from collections import OrderedDict, Counter
 from decorator import decorator 
+
+import numpy as np
+import pandas as pd
+
 
 
 # PYTHON
@@ -79,6 +83,18 @@ def call(arg, stdin='', shell=True):
     p.stdin.close()
     return p.stdout.read()
 
+
+def timestamp(filename=None, clock=False):
+    import time
+    time_format = '%Y%m%d-%H%M%S' if clock else '%Y%m%d'
+    stamp = time.strftime(time_format)
+    if filename:
+        directory = os.path.dirname(filename)
+        name = os.path.basename(filename)
+        return os.path.join(directory, '{0}_{1}'.format(stamp, name))
+    else:
+        return stamp
+    
 
 # PANDAS
 def standardize(x):
@@ -239,6 +255,23 @@ def groupby_reduce_concat(gb, *args, **kwargs):
 
     return pd.concat(arr, axis=1).reset_index()
 
+def groupby_histogram(df, index, column, bins, cumulative=False):
+    """Substitute for df.groupby(index)[column].histogram(bins),
+    only supports one column label.
+    """
+    maybe_cumsum = lambda x: x.cumsum(axis=1) if cumulative else x
+    column_bin = column + '_bin'
+    column_count = column + ('_csum' if cumulative else '_count')
+    return (df
+        .assign(**{column_bin: bins[np.digitize(df[column], bins) - 1]})
+        .pivot_table(index=index, columns=column_bin, values=df.columns[0], 
+                     aggfunc='count')
+        .reindex(labels=list(bins), axis=1)
+        .fillna(0)
+        .pipe(maybe_cumsum)
+        .stack().rename(column_count)
+        .astype(int).reset_index()
+           )
 
 # GLUE
 def show_grid(z, force_fit=False):
@@ -312,7 +345,6 @@ def linear_assignment(df):
     return df_out
 
 
-
 def cells_to_barcodes(ind_vars_table, cloning=None):
     """
     :param cloning: dict of DataFrames based on Lasagna Cloning sheets
@@ -325,10 +357,6 @@ def cells_to_barcodes(ind_vars_table, cloning=None):
     barcodes = barcodes.fillna('')
     # split comma-separated list of barcodes
     ind_vars_table['barcodes'] = [tuple(x.split(', ')) for x in barcodes]
-
-
-
-
 
 
 def sample(line=tuple(), plane=tuple(), scale='um_per_px'):
