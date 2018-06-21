@@ -13,7 +13,7 @@ import matplotlib.patheffects
 import matplotlib.pyplot as plt
 import seaborn as sns
 import imageio
-
+from svgutils.compose import Figure, Panel, SVG, Text
 
 from lasagna.schema import *
 import lasagna.utils
@@ -66,6 +66,7 @@ NFKB_phenotype_rename = {'dapi_gfp_nuclear_corr':
 
 GENE_CLASS_COLORS = GREEN, ORANGE, RED, GRAY
 STIMULANT_COLORS = GREEN, ORANGE
+STIMULANTS = u'IL-1\u03b2', u'TNF\u03b1'
 
 FR_design_order = 'FR_LG', 'FR_GFP_TM'
 
@@ -1452,8 +1453,7 @@ class ValidationFigure():
         fig, axs = plt.subplots(nrows=2, ncols=2, figsize=figsize)
 
         colors = {'TNFa': STIMULANT_COLORS[1], 'IL1b': STIMULANT_COLORS[0], 'negative': STRONG_GRAY}
-        stimulants = 'IL1b', 'TNFa'
-        for stimulant, ax in zip(stimulants, axs[1, :]):
+        for stimulant, ax in zip(STIMULANTS, axs[1, :]):
             positive = (df_pos.query('stimulant == @stimulant')
                        ['dapi_gfp_nuclear_corr'])
 
@@ -1502,6 +1502,65 @@ class ValidationFigure():
         fig, axs = ValidationFigure.plot_gene(df_pos, df_neg, gene, bins=bins)
         ValidationFigure.add_snapshots(axs, gene)
         return fig
+
+    @staticmethod
+    def create_validation_panel():
+        df_manual = (pd.read_csv('libraries/4k_hits.tsv', sep='\t')
+            .assign(display=lambda x: x['display_group'].str.extract('(.*)_\d')))
+
+        files = glob('paper/validation_figure/svgs/validation*svg')
+
+        gb = (df_manual
+         .sort_values('display_group')
+         .groupby('display')['gene'])
+        panels = []
+        width, height = 100, 110
+        offsets = {'IL-1b': (0, 0), 
+                   'TNFa': (width*3, 0), 
+                   'both': (0, height)}
+        colors = {'IL-1b': GREEN,
+                  'TNFa': ORANGE,
+                  'both': RED}
+
+        subpanels = []
+        for label, genes in gb:
+            if label == 'TNFa':
+                x0, y0 = 100, 100
+            for i, gene in enumerate(genes):
+                f_svg = [f for f in files if gene in f][0]
+
+                x_offset = 60 - 3*len(gene)
+                title = Text(gene, x_offset, 10, size=10, weight='light',
+                            color=colors[label])
+                elements = [SVG(f_svg).scale(0.5).move(0, 10), title]
+                if label == 'both':
+                    elements += [Text('translocation score', 20, 110) ]
+
+                x, y = offsets[label]
+                x += width * i
+                subpanels += [Panel(*elements).move(x, y)]
+        
+        return Panel(*subpanels)
+
+    @staticmethod   
+    def compose_supplemental_validation():
+        files = glob('paper/validation_figure/svgs/*dist*svg')
+        panels = []
+        pat = 'svgs/(.*?)_distributions.svg'
+        label_to_file = {re.findall(pat, f)[0]: f for f in files}
+
+        height = 130
+        labels = ['IL1b', 'TNFa', 'both', None, 'partial', 'essential_partial', 'NTC', 'negative']
+        for i, label in enumerate(labels):
+            if label is None:
+                continue
+            y_offset = height * i + 25
+            title = Text(label, 10, y_offset + 10, size=12)
+
+            axis = SVG(label_to_file[label]).scale(0.5).move(0, y_offset + 15)
+            panels += [Panel(axis, title)]
+
+        return Figure('17.4cm', '40cm', *panels)
 
 
 def compose_figure_in_situ(x='17.4cm', y='11cm'):
@@ -1644,7 +1703,7 @@ def compose_figure_NFKB(x='17.4cm', y='6.5cm'):
     return Figure(x, y, panel_A, panel_B, panel_C, panel_D, panel_E)
 
 def compose_figure_NFKB_2(x='17.4cm', y='6.5cm'):
-    from svgutils.compose import Figure, Panel, SVG, Text
+    
 
     panel_A = Panel(
             SVG('paper/NFKB_figure/workflow_slide.svg').scale(0.31).move(-35, 15),
@@ -1691,6 +1750,9 @@ def compose_figure_validation(x='17.4cm', y='8cm'):
             Text(letter_case('A'), 0, 10, size=12, weight='bold'),
         ).move(20, 0)
 
+    panel_A = Panel(ValidationFigure.create_validation_panel().scale(0.85),
+            Text(letter_case('A'), 0, 10, size=12, weight='bold'))
+
     panel_B = Panel(
             SVG('paper/NFKB_figure/IL1b_pathway_graph.svg').scale(0.5).move(15, 0),
             SVG('paper/NFKB_figure/pathway_node_legend.svg').scale(0.45).move(-100, 120),
@@ -1708,8 +1770,8 @@ def compose_figure_validation(x='17.4cm', y='8cm'):
     )
 
     # layout = Figure(x, y, panel_A_vertical, panel_B.move(10, 0), panel_C.move(5, 0)).tile(3, 1)
-    layout = Figure(x, '12cm', panel_A_horizontal.move(15, 0), Panel(), 
-        panel_B.move(30, 0), panel_C.move(-30, 0)).tile(2, 2)
+    layout = Figure(x, '12cm', panel_A, Panel(), 
+        panel_B, panel_C.move(-80, 0)).tile(2, 2)
 
     return layout
 
