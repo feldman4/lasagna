@@ -458,36 +458,10 @@ class Snake():
 
     @staticmethod
     def _extract_phenotype_FR(data_phenotype, nuclei, wildcards):
-<<<<<<< HEAD
-        def correlate_dapi_ha(region):
-            dapi, ha = region.intensity_image_full
-
-            filt = dapi > 0
-            if filt.sum() == 0:
-                # assert False
-                return np.nan
-
-            dapi = dapi[filt]
-            ha  = ha[filt]
-            corr = (dapi - dapi.mean()) * (ha - ha.mean()) / (dapi.std() * ha.std())
-
-            return corr.mean()
-
-        features = {
-            'corr'       : correlate_dapi_ha,
-            'dapi_median': lambda r: np.median(r.intensity_image_full[0]),
-            'dapi_max'   : lambda r: r.intensity_image_full[0].max(),
-            'ha_median'  : lambda r: np.median(r.intensity_image_full[1]),
-            'cell'       : lambda r: r.label
-        }
-
-        return Snake._extract_phenotype(data_phenotype, nuclei, wildcards, features)       
-=======
     	"""Features for frameshift reporter phenotyped in DAPI, HA channels.
     	"""
     	from lasagna.features import features_frameshift
         return Snake._extract_features(data_phenotype, nuclei, wildcards, features_frameshift)       
->>>>>>> 32f23b81ae83429dc6c162a6de703311a68302e8
 
     @staticmethod
     def _extract_phenotype_FR_myc(data_phenotype, nuclei, data_sbs_1, wildcards):
