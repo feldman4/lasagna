@@ -458,9 +458,9 @@ class Snake():
 
     @staticmethod
     def _extract_phenotype_FR(data_phenotype, nuclei, wildcards):
-        """Features for frameshift reporter phenotyped in DAPI, HA channels.
-        """
-        from lasagna.features import features_frameshift
+    	"""Features for frameshift reporter phenotyped in DAPI, HA channels.
+    	"""
+    	from lasagna.features import features_frameshift
         return Snake._extract_features(data_phenotype, nuclei, wildcards, features_frameshift)       
 
     @staticmethod
