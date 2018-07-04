@@ -18,7 +18,8 @@ def clean_up_raw(df_raw):
     """Categorize, sort. Pre-processing for `dataframe_to_values`.
     """
     # exclude_subset = ['well', 'tile', 'cell', 'intensity', 'blob'] # causes issues with later joins, maybe a pandas bug
-    df_raw = categorize(df_raw, subset=[CYCLE])
+    import lasagna.utils
+    df_raw = lasagna.utils.categorize(df_raw, subset=[CYCLE])
     order = natsorted(df_raw[CYCLE].cat.categories)
     df_raw[CYCLE] = (df_raw[CYCLE]
                    .cat.as_ordered()

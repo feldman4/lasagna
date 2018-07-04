@@ -63,11 +63,17 @@ translocation = {
     'gfp_max'    : lambda r: masked(r, 1).max(),
     }
 
+viewRNA = {
+	'cy3_mean': lambda r: masked(r, 1).mean(),
+	'cy5_mean': lambda r: masked(r, 2).mean(),
+}
+
 all_features = [
     intensity, 
     geometry,
     translocation,
-    frameshift
+    frameshift,
+    viewRNA
     ]
 
 def validate_features():
@@ -101,3 +107,8 @@ features_frameshift_myc = make_feature_dict((
     'ha_median', 
     'cell'))
 
+features_viewRNA = make_feature_dict((
+	'dapi_median', 'dapi_max', 
+	'cy3_mean', 'cy5_mean', 
+	'cell', 'area'
+	))
