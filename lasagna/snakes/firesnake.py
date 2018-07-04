@@ -42,7 +42,7 @@ def save_pkl(f, df):
 
 
 def save_tif(f, data_, **kwargs):
-    kwargs = restrict_kwargs(kwargs, save)
+    kwargs = restrict_kwargs(kwargs, lasagna.io.save_stack)
     # make sure `data` doesn't come from the Snake method since it's an
     # argument name for the save function, too
     kwargs['data'] = data_
