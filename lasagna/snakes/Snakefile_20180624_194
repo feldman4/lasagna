@@ -35,7 +35,7 @@ rule all:
     input:
     # can request individual files here
         expand('process/10X_{well}_Tile-{tile}.barcodes.csv', zip, well=WELLS_, tile=TILES_),
-	    expand('process/10X_{well}_Tile-{tile}.phenotype.csv', zip, well=WELLS_, tile=TILES_)
+	    expand('process/10X_{well}_Tile-{tile}.phenotype.csv', zip, well=WELLS_, tile=TILES_),
 	    expand('process/10X_{well}_Tile-{tile}.cells.csv', zip, well=WELLS_, tile=TILES_),
         # expand('process/10X_{well}_Tile-{tile}.SBS_cell_info.csv', zip, well=WELLS_, tile=TILES_)
 
