@@ -437,12 +437,12 @@ class Snake():
     @staticmethod
     def _call_cells(df_barcodes, cycles):
         """Median correction performed independently for each tile.
-		"""
-		return (df_barcodes
-			.pipe(in_situ.clean_up_raw)
-			.pipe(in_situ.do_median_call, cycles)
-			.pipe(in_situ.call_cells)
-			)
+        """
+        return (df_barcodes
+            .pipe(in_situ.clean_up_raw)
+            .pipe(in_situ.do_median_call, cycles)
+            .pipe(in_situ.call_cells)
+            )
 
     @staticmethod
     def _align_phenotype(data_DO, data_phenotype):
@@ -467,16 +467,16 @@ class Snake():
 
     @staticmethod
     def _extract_phenotype_FR(data_phenotype, nuclei, wildcards):
-    	"""Features for frameshift reporter phenotyped in DAPI, HA channels.
-    	"""
-    	from lasagna.features import features_frameshift
+        """Features for frameshift reporter phenotyped in DAPI, HA channels.
+        """
+        from lasagna.features import features_frameshift
         return Snake._extract_features(data_phenotype, nuclei, wildcards, features_frameshift)       
 
     @staticmethod
     def _extract_phenotype_FR_myc(data_phenotype, nuclei, data_sbs_1, wildcards):
-    	"""Features for frameshift reporter phenotyped in DAPI, HA, myc channels.
-    	"""
-    	from lasagna.features import features_frameshift_myc
+        """Features for frameshift reporter phenotyped in DAPI, HA, myc channels.
+        """
+        from lasagna.features import features_frameshift_myc
         return Snake._extract_features(data_phenotype, nuclei, wildcards, features)     
 
     @staticmethod
@@ -493,7 +493,7 @@ class Snake():
 
     @staticmethod
     def _extract_phenotype_translocation(data_phenotype, nuclei, cells, wildcards):
-    	import lasagna.features
+        import lasagna.features
 
         features_n = lasagna.features.features_translocation_nuclear
         features_c = lasagna.features.features_translocation_cell
@@ -514,9 +514,9 @@ class Snake():
 
     @staticmethod
     def _extract_features(data, nuclei, wildcards, features=None):
-    	"""Extracts features in dictionary and combines with generic region
-    	features.
-    	"""
+        """Extracts features in dictionary and combines with generic region
+        features.
+        """
         from lasagna.process import feature_table
         from lasagna.features import features_cell
         features = features.copy() if features else dict()

@@ -319,7 +319,7 @@ class BarcodeSet(object):
             results += tmp
 
         df = pd.DataFrame(results)
-        df['flag'] = [1 in row and -1 in row for row in np.sign(df).as_matrix()]
+        df['flag'] = [1 in row and -1 in row for row in np.sign(df).values()]
         df['sample'] = index
         return df
 

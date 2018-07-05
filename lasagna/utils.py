@@ -340,7 +340,7 @@ def linear_assignment(df):
     """
     from sklearn.utils.linear_assignment_ import linear_assignment
 
-    x = linear_assignment(df.as_matrix())
+    x = linear_assignment(df.values())
     y = zip(df.index[x[:, 0]], df.columns[x[:, 1]])
     df_out = pd.DataFrame(y, columns=[df.index.name, df.columns.name])
     return df_out
@@ -795,7 +795,7 @@ def to_nd_array(x):
                                 name=levels[last].name)
         print 'resetting innermost row index to [%d...%d]' % (levels[last][0], levels[last][-1])
 
-    output = x.as_matrix().reshape(reshaper[::-1])
+    output = x.values().reshape(reshaper[::-1])
     return output, levels[::-1]
 
 

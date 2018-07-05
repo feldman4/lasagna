@@ -25,7 +25,7 @@ tilemap_features = ['gfp_cell_median', 'gfp_nuclear_median',
 
 def filter_good_tiles(df):
     index = (pd.read_csv('well_tiles_filtered_by_cluster.csv')
-        .pipe(lambda x: map(tuple, x.as_matrix())))
+        .pipe(lambda x: map(tuple, x.values())))
     return df.set_index(['well', 'tile']).loc[index].reset_index()
 
 def combine_phenotypes(df_ph_full, df_ph_perimeter):
@@ -153,7 +153,7 @@ def dump_examples(df_cells, df_ph, num_cells=500):
                .groupby(['well', 'tile']).size()
                .pipe(lambda x: list(x[x>tile_min_cell_count].index)))
                    
-    to_tuples = lambda x: map(tuple, x.as_matrix()) 
+    to_tuples = lambda x: map(tuple, x.values()) 
     def select_multi(df, cols, values):
       index = to_tuples(df[cols])
       filt = [ix in values for ix in index]
@@ -203,7 +203,7 @@ def dump_examples(df_cells, df_ph, num_cells=500):
         # retrieve x,y coordinates
         xy = (df_ph
               .set_index(['well', 'tile', 'cell'])
-              .loc[wtc, ['x', 'y']].as_matrix())
+              .loc[wtc, ['x', 'y']].values())
         bounds = map(to_bounds, xy)
 
         # files containing data

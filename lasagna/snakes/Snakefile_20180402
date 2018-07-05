@@ -21,7 +21,7 @@ INDEX_DO = None
 # special pairs of WELLS and TILES
 import pandas as pd
 
-well_tile_list = map(tuple, pd.read_pickle('well_tile_list_process.pkl').as_matrix())
+well_tile_list = map(tuple, pd.read_pickle('well_tile_list_process.pkl').values())
 # well_tile_list = [(w, t) for w,t in well_tile_list if (w,t) not in shit]
 WELLS_, TILES_ = zip(*well_tile_list)
 WELLS_ = list(WELLS_)

@@ -47,7 +47,7 @@ def find_python2():
     
 def load_well_tile_list(filename):
     import pandas as pd
-    well_tile_list = map(tuple, pd.read_pickle(filename).as_matrix())
+    well_tile_list = map(tuple, pd.read_pickle(filename).values)
     WELLS, TILES = zip(*well_tile_list)
     WELLS = list(WELLS)
     TILES= list(TILES)

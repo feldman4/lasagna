@@ -118,7 +118,7 @@ def bc_to_files_bounds(df_reads3, df_ph, get_bc):
     cols = ['well', 'tile', 'cell']
     info = df_reads3.query('cell_barcode_0 == @get_bc')[cols]
     FR_pos = df_reads3.query('cell_barcode_0 == @get_bc')['FR_pos']
-    info = [tuple(x) for x in info.as_matrix()]
+    info = [tuple(x) for x in info.values()]
     
     df_ph_ = (df_ph.set_index(['well', 'tile', 'cell'])
                .loc[info].reset_index())

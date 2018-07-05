@@ -125,10 +125,10 @@ def reads_to_fastq(df, dataset):
               'position_i', 'position_j', 
               BARCODE]
     
-    Q = df.filter(like='Q_').as_matrix()
+    Q = df.filter(like='Q_').values()
     
     reads = []
-    for i, row in enumerate(df[fields].as_matrix()):
+    for i, row in enumerate(df[fields].values()):
         d = dict(zip(fields, row))
         d['phred'] = ''.join(phred(q) for q in Q[i])
         d['well_tile'] = wells.index(d['well']) * tile_spacing + int(d['tile'])

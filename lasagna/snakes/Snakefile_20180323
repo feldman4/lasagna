@@ -23,7 +23,7 @@ INDEX_DO = None
 import pandas as pd
 
 
-well_site_list = map(tuple, pd.read_pickle('well_site_list_process.pkl').as_matrix())
+well_site_list = map(tuple, pd.read_pickle('well_site_list_process.pkl').values())
 WELLS_, TILES_ = zip(*well_site_list)
 WELLS_ = list(WELLS_)
 TILES_ = list(TILES_)

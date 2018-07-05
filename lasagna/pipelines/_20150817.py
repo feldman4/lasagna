@@ -399,7 +399,7 @@ def make_barcode_graphic(X):
 
     tmp = []
     for x, y in X.items():
-        tmp_ = y.as_matrix()
+        tmp_ = y.values()
         tmp += [(x, tmp_.argmax(axis=1) + 0.5 * (tmp_.max(axis=1) > 10))]
     color_codes = np.array([x[1] for x in sorted(tmp)])
 
