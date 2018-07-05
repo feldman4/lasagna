@@ -435,6 +435,16 @@ class Snake():
         return df
 
     @staticmethod
+    def _call_cells(df_barcodes, cycles):
+        """Median correction performed independently for each tile.
+		"""
+		return (df_barcodes
+			.pipe(in_situ.clean_up_raw)
+			.pipe(in_situ.do_median_call, cycles)
+			.pipe(in_situ.call_cells)
+			)
+
+    @staticmethod
     def _align_phenotype(data_DO, data_phenotype):
         """Align using DAPI.
         """
@@ -565,6 +575,8 @@ class Snake():
             df[k] = v
 
         return df
+
+
 
 
 ###

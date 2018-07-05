@@ -120,6 +120,14 @@ rule extract_barcodes:
             cycles=CYCLES, threshold_DO=THRESHOLD_DO, index_DO=INDEX_DO,
             wildcards=dict(wildcards)) 
 
+rule call_cells:
+	input:
+		'process/10X_{well}_Tile-{tile}.barcodes.csv'
+	output:
+		'process/10X_{well}_Tile-{tile}.cells.csv'
+	run:
+		call_firesnake('call_cells', output, df_barcodes=input[0])
+
 rule extract_SBS_locations:
     input:
         'process/10X_{well}_Tile-{tile}.nuclei.tif'
