@@ -438,6 +438,7 @@ class Snake():
     def _call_cells(df_barcodes, cycles):
         """Median correction performed independently for each tile.
         """
+        from lasagna import in_situ
         return (df_barcodes
             .pipe(in_situ.clean_up_raw)
             .pipe(in_situ.do_median_call, cycles)
