@@ -125,7 +125,8 @@ rule call_cells:
 	output:
 		'process/10X_{well}_Tile-{tile}.cells.csv'
 	run:
-		call_firesnake('call_cells', output, df_barcodes=input[0])
+		call_firesnake('call_cells', output, cycles=len(CYCLES),
+			df_barcodes=input[0])
 
 rule extract_SBS_locations:
     input:
