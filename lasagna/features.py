@@ -63,13 +63,11 @@ translocation = {
     'gfp_max'    : lambda r: masked(r, 1).max(),
     }
 
-FISH = {
 viewRNA = {
     'cy3_median': lambda r: np.median(masked(r, 1)),
     'cy5_median': lambda r: np.median(masked(r, 2)),
     'cy3_int': lambda r: masked(r, 1).sum(),
     'cy5_int': lambda r: masked(r, 2).sum(),
-viewRNA = {
 }
 
 all_features = [
