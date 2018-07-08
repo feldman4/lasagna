@@ -340,7 +340,7 @@ def linear_assignment(df):
     """
     from sklearn.utils.linear_assignment_ import linear_assignment
 
-    x = linear_assignment(df.as_matrix())
+    x = linear_assignment(df.values)
     y = zip(df.index[x[:, 0]], df.columns[x[:, 1]])
     df_out = pd.DataFrame(y, columns=[df.index.name, df.columns.name])
     return df_out
@@ -795,7 +795,7 @@ def to_nd_array(x):
                                 name=levels[last].name)
         print 'resetting innermost row index to [%d...%d]' % (levels[last][0], levels[last][-1])
 
-    output = x.as_matrix().reshape(reshaper[::-1])
+    output = x.values.reshape(reshaper[::-1])
     return output, levels[::-1]
 
 
@@ -874,7 +874,11 @@ def regionprops(labeled, intensity_image):
     """
     import skimage.measure
 
+<<<<<<< HEAD
     regions = skimage.measure.regionprops(labeled, intensity_image=intensity_image)
+=======
+    regions = skimage.measure.regionprops(labeled, intensity_image=intensity_image[..., 0, :, :])
+>>>>>>> df3e3b9b3706c9a6929681f9ad899a44aff1d3fc
     for region in regions:
         b = region.bbox
         region.intensity_image_full = intensity_image[..., b[0]:b[2], b[1]:b[3]]
