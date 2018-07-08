@@ -27,7 +27,7 @@ def feature_table(data, labels, features, global_features=None):
     Results are combined in a dataframe with one row per label and
     one column per feature.
     """
-    regions = regionprops_stack(labels, intensity_image=data)
+    regions = lasagna.utils.regionprops(labels, intensity_image=data)
     results = defaultdict(list)
     for region in regions:
         for feature, func in features.items():
@@ -65,19 +65,6 @@ def build_feature_table(stack, labels, features, index):
     return pd.concat(results)
 
 
-def regionprops(*args, **kwargs):
-    """Supplement skimage.measure.regionprops with additional field containing 
-    full intensity image in bounding box, which retains leading dimensions.
-    """
-    regions = skimage.measure.regionprops(*args, **kwargs)
-    if 'intensity_image' in kwargs:
-        intensity_image = kwargs['intensity_image']
-        for region in regions:
-            b = region.bbox
-            region.intensity_image_full = intensity_image[..., b[0]:b[2], b[1]:b[3]]
-    return regions
-
-
 # ALIGN
 def register_images(images, index=None, window=(500, 500), upsample=1.):
     """Register image stacks to pixel accuracy.
@@ -108,7 +95,7 @@ def register_images(images, index=None, window=(500, 500), upsample=1.):
     offsets[0][-2:] += pad_width
     for image in [x[index] for x in images[1:]]:
         padded, pad_width = pad(image)
-        shift, error, _ = skimage.features.register_translation(
+        shift, error, _ = skimage.feature.register_translation(
                         image0, padded, upsample_factor=upsample)
 
         offsets += [origin.copy()]
@@ -303,13 +290,18 @@ def find_peaks(data, n=5):
     return peaks
 
 
-def log_ndi(data, *args, **kwargs):
+def log_ndi(data, sigma=1, *args, **kwargs):
     """Apply laplacian of gaussian to each image in a stack of shape
     (..., I, J). 
     Extra arguments are passed to scipy.ndimage.filters.gaussian_laplace.
+    Inverts output and converts back to uint16.
     """
     f = lasagna.utils.applyIJ(scipy.ndimage.filters.gaussian_laplace)
-    return f(data, *args, **kwargs)
+    arr_ = -1 * f(data.astype(float), sigma, *args, **kwargs)
+    arr_[arr_ < 0] = 0
+    arr_ /= arr_.max()
+    return skimage.img_as_uint(arr_)
+
 
 
 class Align():

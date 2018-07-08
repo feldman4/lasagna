@@ -1,4 +1,4 @@
-from distutils.core import setup
+from setuptools import setup, find_packages
 
 setup(name='Lasagna',
       version='1.0',
@@ -6,5 +6,5 @@ setup(name='Lasagna',
       author='feldman4',
       author_email='feldman4@mit.edu',
       url='https://github.com/feldman4/lasagna',
-      packages=['lasagna'],
+      packages=find_packages(),
      )

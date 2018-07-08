@@ -5,7 +5,7 @@ from scipy.ndimage.filters import gaussian_laplace, maximum_filter
 import networkx as nx
 import skimage.measure
 import scipy.spatial
-from lasagna.utils import applyXY
+from lasagna.utils import applyIJ
 
 def register_and_offset(images, registration_images=None, verbose=False):
     if registration_images is None:
@@ -65,7 +65,7 @@ def laplace_only(data, *args, **kwargs):
         arr += [laplace(frame, *args, **kwargs)]
     return np.array(arr).reshape(data.shape)
 
-laplace_ndi = applyXY(gaussian_laplace)
+laplace_ndi = applyIJ(gaussian_laplace)
     
 def log_ndi(arr, sigma=1, **kwargs):
     arr_ = -1 * laplace_ndi(arr.astype(float), sigma, **kwargs)
@@ -126,7 +126,7 @@ def add_overlay(imp, call, overlay=None, x_offset=0, y_offset=0, alpha=1):
         overlay.add(roi, 'overlay')
     return overlay
 
-@applyXY
+@applyIJ
 def contrast(arr, top=1, q1=75, q2=99.9, ceiling=0.25, verbose=False):
     """Apply skimage.exposure.rescale_intensity based on quantiles.
     """
@@ -139,7 +139,7 @@ def contrast(arr, top=1, q1=75, q2=99.9, ceiling=0.25, verbose=False):
     # scaled in range 0 .. 1 .. (max is greater than 1)
     return apply_contrast(arr, q1_, q2_, ceiling)
 
-@applyXY
+@applyIJ
 def apply_contrast(arr, low, high, ceiling):
     """Pixels values are rescaled such that values at or below q1 are set to 0, 
     and other values are set to ((x - q1_) / (q2_ - q1_)) * ceiling, with

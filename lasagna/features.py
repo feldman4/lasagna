@@ -40,7 +40,7 @@ geometry = {
     'bounds'  : lambda r: r.bbox,
     'contour' : lambda r: lasagna.utils.binary_contours(r.image, fix=True, labeled=False)[0],
     'label'   : lambda r: r.label,
-    # 'mask':     lambda r: lasagna.utils.Mask(r.image),
+    'mask':     lambda r: lasagna.utils.Mask(r.image),
     }
 
 # DAPI, HA, myc
@@ -63,11 +63,19 @@ translocation = {
     'gfp_max'    : lambda r: masked(r, 1).max(),
     }
 
+FISH = {
+    'cy3_median': lambda r: np.median(masked(r, 1)),
+    'cy5_median': lambda r: np.median(masked(r, 2)),
+    'cy3_int': lambda r: masked(r, 1).sum(),
+    'cy5_int': lambda r: masked(r, 2).sum(),
+}
+
 all_features = [
     intensity, 
     geometry,
     translocation,
-    frameshift
+    frameshift,
+    FISH
     ]
 
 def validate_features():
@@ -101,3 +109,8 @@ features_frameshift_myc = make_feature_dict((
     'ha_median', 
     'cell'))
 
+features_FISH = make_feature_dict((
+    'cy3_median', 'cy5_median',
+    'cy3_int', 'cy5_int',
+    'dapi_median', 'dapi_max',
+    'area', 'cell'))

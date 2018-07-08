@@ -865,3 +865,18 @@ def binary_contours(img, fix=True, labeled=False):
     return contours
 
 
+def regionprops(labeled, intensity_image):
+    """Supplement skimage.measure.regionprops with additional field containing full intensity image in
+    bounding box (useful for filtering).
+    :param args:
+    :param kwargs:
+    :return:
+    """
+    import skimage.measure
+
+    regions = skimage.measure.regionprops(labeled, intensity_image=intensity_image)
+    for region in regions:
+        b = region.bbox
+        region.intensity_image_full = intensity_image[..., b[0]:b[2], b[1]:b[3]]
+
+    return regions

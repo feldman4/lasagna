@@ -3,7 +3,7 @@ import json
 
 import snakemake
 # from lasagna.snakes.firesnake3 import call_firesnake
-from firesnake3 import call_firesnake, load_well_tile_list
+from firesnake3 import call_firesnake, load_well_tile_list, load_well_site_list
 
 
 # if true, will run when the data is complete, doing what it can
@@ -18,9 +18,11 @@ INDEX_DO = None
 
 
 # UPDATE: more Tiles will take longer for the DAG to build (especially if ignore_missing is true)
-WELLS_, TILES_ = load_well_tile_list('well_tile_list_process.pkl')
+# WELLS_, TILES_ = load_well_tile_list('well_tile_list_process.pkl')
+WELLS_, SITES_ = load_well_site_list('../well_site_list_ph_25x25_1280.pkl')
 WELLS_ = WELLS_
-TILES_ = TILES_
+# TILES_ = TILES_
+SITES_ = SITES_[1::30][:-65]
 
 DISPLAY_RANGES=((500, 20000), 
                 (100, 20000), 
@@ -34,9 +36,11 @@ CYCLE_PHENOTYPE = 'c0-RELA-mNeon'
 rule all:
     input:
     # can request individual files here
-        expand('process/10X_{well}_Tile-{tile}.barcodes.csv', zip, well=WELLS_, tile=TILES_),
-        expand('process/10X_{well}_Tile-{tile}.phenotype.csv', zip, well=WELLS_, tile=TILES_),
+        # expand('process/10X_{well}_Tile-{tile}.barcodes.csv', zip, well=WELLS_, tile=TILES_),
+        # expand('process/10X_{well}_Tile-{tile}.phenotype.csv', zip, well=WELLS_, tile=TILES_),
         # expand('process/10X_{well}_Tile-{tile}.SBS_cell_info.csv', zip, well=WELLS_, tile=TILES_)
+        expand('process/10X_{well}_Site-{site}.cy3_quality.csv', zip, well=WELLS_, site=SITES_),
+
 
 rule segment_nuclei:
     input:
@@ -74,9 +78,10 @@ rule align:
 
 rule check_cy3_quality:
     input:
-        'process/10X_{cycle}/10X_{cycle}_{{well}}_Tile-{{tile}}.max.tif'.format(cycle=CYCLES[0])
+        # 'process/10X_{cycle}/10X_{cycle}_{{well}}_Tile-{{tile}}.max.tif'.format(cycle=CYCLES[0])
+        '10X_c1-SBS-1_1/10X_c1-SBS-1_1_MMStack_{well}-Site_{site}.ome.tif'
     output:
-        'process/10X_{well}_Tile-{tile}.cy3_quality.csv'
+        'process/10X_{well}_Site-{site}.cy3_quality.csv'
     run:
         call_firesnake('check_cy3_quality', output, data=input[0], wildcards=dict(wildcards))
 
@@ -135,28 +140,6 @@ rule align_phenotype:
         'process/10X_{well}_Tile-{tile}.phenotype_aligned.tif'
     run:
         call_firesnake('align_phenotype', output, data_DO=input[0], data_phenotype=input[1])
-
-# rule segment_nuclei_phenotype:
-#     input:
-#         'process/10X_{well}_Tile-{tile}.phenotype_aligned.tif'
-#     output:
-#         'process/10X_{well}_Tile-{tile}.nuclei_phenotype.tif'
-#     run:
-#         call_firesnake('segment_nuclei', output, data=input[0], 
-#             threshold=0.6, area_min=0.25*150, area_max=0.25*800)
-
-# rule segment_cells_phenotype:
-#     """segment_cells works best when fed data with the most cytoplasmic autofluorescence. SBS data is OK but
-#     not the best if something else is available.
-#     """
-#     input:
-#         'process/10X_{well}_Tile-{tile}.phenotype_aligned.tif',
-#         'process/10X_{well}_Tile-{tile}.nuclei.tif'
-#     output:
-#         'process/10X_{well}_Tile-{tile}.cells_phenotype.tif'
-#     run:
-#         call_firesnake('segment_cells', output, 
-#             data=input[0], nuclei=input[1], threshold=700)
 
 rule extract_phenotype:
     input:

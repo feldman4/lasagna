@@ -13,7 +13,6 @@ if sys.version_info.major == 2:
     import numpy as np
     import pandas as pd
     import skimage
-    import lasagna.bayer
     import lasagna.features
     import lasagna.process
     import lasagna.io
@@ -34,7 +33,7 @@ def load_tif(f):
 
 
 def save_csv(f, df):
-    df.to_csv(f, index=None)
+    df.to_csv(f, index=None, float_format='%.8g')
 
 
 def save_pkl(f, df):
@@ -42,7 +41,7 @@ def save_pkl(f, df):
 
 
 def save_tif(f, data_, **kwargs):
-    kwargs = restrict_kwargs(kwargs, save)
+    kwargs = restrict_kwargs(kwargs, lasagna.io.save_stack)
     # make sure `data` doesn't come from the Snake method since it's an
     # argument name for the save function, too
     kwargs['data'] = data_
@@ -215,7 +214,7 @@ class Snake():
         data = np.array([x[-4:] for x in data])
         aligned = np.array(map(Align.align_within_cycle, data))
         aligned = Align.align_between_cycles(aligned)
-        loged = lasagna.bayer.log_ndi(aligned)
+        loged = lasagna.process.log_ndi(aligned)
         return loged
 
     @staticmethod
@@ -283,7 +282,10 @@ class Snake():
         """Find nuclei from DAPI. Find cell foreground from aligned but unfiltered 
         data. Expects data to have shape C x I x J.
         """
-        dapi = data[0]
+        if isinstance(data, list):
+            dapi = data[0]
+        else:
+            dapi = data
         if dapi.dtype in (np.float32, np.float64):
             dapi[dapi < 0] = 0
             dapi[dapi > 1] = 1
@@ -354,7 +356,7 @@ class Snake():
     def _transform_LoG(data, bsub=False):
         if data.ndim == 3:
             data = data[None]
-        loged = lasagna.bayer.log_ndi(data)
+        loged = lasagna.process.log_ndi(data)
         loged[..., 0, :, :] = data[..., 0, :, :] # DAPI
 
         if bsub:
@@ -486,30 +488,34 @@ class Snake():
     def _extract_phenotype_translocation(data_phenotype, nuclei, cells, wildcards):
     	import lasagna.features
 
-        features_n = lasagna.features.translocation_cell
-        features_c = lasagna.features.translocation_nuclear
+        features_n = lasagna.features.features_translocation_nuclear
+        features_c = lasagna.features.features_translocation_cell
 
-        features_n.update(lasagna.features.cell_features)
-        features_c['cell'] = features_n['cell']
+        features_n = {k + '_nuclear': v for k,v in features_n.items()}
+        features_c = {k + '_cell': v    for k,v in features_c.items()}
 
         df_n =  Snake._extract_features(data_phenotype, nuclei, wildcards, features_n)
         df_c =  Snake._extract_features(data_phenotype, cells, wildcards, features_c) 
-        
+
         # inner join discards nuclei without corresponding cells
         df = (pd.concat([df_n.set_index('cell'), df_c.set_index('cell')], axis=1, join='inner')
                 .reset_index())
+
+        df = df.loc[:, ~df.columns.duplicated()]
         
         return df
 
     @staticmethod
-    def _extract_features(data, nuclei, wildcards, features):
+    def _extract_features(data, nuclei, wildcards, features=None):
     	"""Extracts features in dictionary and combines with generic region
     	features.
     	"""
         from lasagna.process import feature_table
-        from lasagna.features import region_features
+        from lasagna.features import features_cell
+        features = features.copy() if features else dict()
+        features.update(features_cell)
 
-        df = feature_table(data_phenotype, nuclei, features)
+        df = feature_table(data, nuclei, features)
 
         for k,v in wildcards.items():
             df[k] = v
@@ -517,18 +523,16 @@ class Snake():
         return df
 
     @staticmethod
+    def _extract_FISH_phenotype(data, cells, wildcards):
+        from lasagna.features import features_FISH
+        print data.shape, cells.shape
+        return Snake._extract_features(data, cells, wildcards, features_FISH)
+
+
+    @staticmethod
     def _extract_minimal_phenotype(data_phenotype, nuclei, wildcards):
-        from lasagna.pipelines._20170914_endo import feature_table_stack
-        from lasagna.process import feature_table, default_object_features
 
-        features = default_object_features.copy()
-        features['cell'] = features.pop('label')
-        df = feature_table(nuclei, nuclei, features)
-
-        for k,v in wildcards.items():
-            df[k] = v
-        
-        return df
+        return Snake._extract_features(data, nuclei, wildcards, dict())
 
     @staticmethod
     def _extract_phenotype_live_translocation(data_phenotype, nuclei, cells, wildcards):
@@ -565,7 +569,7 @@ class Snake():
             .assign(channel=channel)
             .pipe(arr.append))
 
-        df = pd.concat([df_dapi, df_cy3] + arr)
+        df = pd.concat([df_dapi, df_cy3] + arr, sort=False)
 
         for k,v in wildcards.items():
             df[k] = v

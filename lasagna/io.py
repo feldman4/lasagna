@@ -414,13 +414,11 @@ def read_stack(filename, memmap=False, copy=True):
             data = np.squeeze(data, axis=(0,))
     return data
 
-# @lasagna.utils.Memoized
 def _imread(filename, dummy, copy=True):
     """Call TiffFile imread. Dummy arg to separately memoize calls.
     """
     return imread(filename, multifile=False)
 
-@lasagna.utils.Memoized
 def _get_mapped_tif(filename):
     TF = TiffFile(filename)
     # check the offsets
