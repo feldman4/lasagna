@@ -42,14 +42,6 @@ DIR = {}
 VISITOR_FONT = PIL.ImageFont.truetype(config.visitor_font)
 
 
-@lasagna.utils.Memoized
-def _get_stack(name):
-    data = imread(config.paths.full(name), multifile=False)
-    while data.shape[0] == 1:
-        data = np.squeeze(data, axis=(0,))
-    return data
-
-
 # TODO fix extension of luts and display_ranges when not provided
 def save_stack(name, data, luts=None, display_ranges=None, 
                resolution=1., compress=0):

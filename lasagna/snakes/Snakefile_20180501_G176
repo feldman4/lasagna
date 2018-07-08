@@ -25,7 +25,7 @@ TILES = RANGE((25, 25))
 
 # # special pairs of WELLS and TILES
 import pandas as pd
-well_tile_list = list(map(tuple, pd.read_pickle('well_site_list_ph_25x25_1280.pkl').as_matrix()))
+well_tile_list = list(map(tuple, pd.read_pickle('well_site_list_ph_25x25_1280.pkl').values()))
 WELLS_, TILES_ = zip(*well_tile_list)
 WELLS_, TILES_ = zip(*[(w,t) for w,t in well_tile_list if w in WELLS])
 WELLS_ = list(WELLS_)

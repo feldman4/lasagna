@@ -114,8 +114,8 @@ def get_nontargeting_wang():
     x.loc[x['Symbol'].isnull(), 'Chromosome'] = 'CTRL'
     x['G'] = x['sgRNA sequence'].apply(lambda x: x[0]=='G')
 
-    a = y.filter(regex='initial').as_matrix()
-    b = y.filter(regex='final').as_matrix()
+    a = y.filter(regex='initial').values()
+    b = y.filter(regex='final').values()
     scores = (np.log2(1 + b) - np.log2(1 + a)).mean(axis=1)
 
     filt = scores > -0.6

@@ -144,8 +144,8 @@ def get_edges(df1, df2):
     from scipy.spatial.kdtree import KDTree
     get_label = lambda x: tuple(int(y) for y in x[[2, 3]])
 
-    x1 = df1[['i', 'j', 'frame', 'label']].as_matrix()
-    x2 = df2[['i', 'j', 'frame', 'label']].as_matrix()
+    x1 = df1[['i', 'j', 'frame', 'label']].values()
+    x2 = df2[['i', 'j', 'frame', 'label']].values()
     
     kdt = KDTree(df1[['i', 'j']])
     points = df2[['i', 'j']]
@@ -164,7 +164,7 @@ def get_edges(df1, df2):
 
 def initialize_graph(arr_df):
     df_all = pd.concat(arr_df)
-    nodes = df_all[['frame', 'label']].as_matrix()
+    nodes = df_all[['frame', 'label']].values()
     nodes = [tuple(x) for x in nodes]
 
     G = nx.DiGraph()

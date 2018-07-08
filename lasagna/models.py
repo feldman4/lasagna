@@ -163,7 +163,7 @@ def score_matrices(M, N):
     """Find size of logical intersection, complement, differences of DataFrames with 
     shared columns and return as list of DataFrames.
     """
-    M_, N_ = M.as_matrix(), N.as_matrix()
+    M_, N_ = M.values(), N.values()
     S = np.zeros((M.shape[0], N.shape[0], 4))
     
     not_M = 1 - M_
@@ -208,9 +208,9 @@ class LinearModel(object):
 
         # reshape M and b to match indices, need matrices for np.einsum
         if isinstance(M, pd.DataFrame):
-            M = M.loc[j, l].as_matrix()
+            M = M.loc[j, l].values()
         if isinstance(b, pd.Series):
-            b = b.loc[m].as_matrix()
+            b = b.loc[m].values()
 
         assert(M.shape == (len(j), len(l)))
         assert(b.shape == (len(m),))
@@ -232,9 +232,9 @@ class LinearModel(object):
         :return:
         """
         k, l, m, n = [self.indices[x] for x in 'klmn']
-        self.B = self.tables['B'].loc[l, m].as_matrix()
-        self.C = self.tables['C'].loc[k, n].as_matrix()
-        self.D = self.tables['D'].loc[l, k].as_matrix()
+        self.B = self.tables['B'].loc[l, m].values()
+        self.C = self.tables['C'].loc[k, n].values()
+        self.D = self.tables['D'].loc[l, k].values()
 
         # verify correct dimensions (DataFrame.loc is permissive of missing indices)
         assert(self.B.shape == (len(l), len(m)))

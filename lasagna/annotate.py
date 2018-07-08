@@ -137,7 +137,7 @@ def annotate_cells(df_cells, use_nuclei_phenotype=False):
     
     gb_cluster = df_cells.groupby(['sgRNA_name', 'cluster'])
     labels = gb_cluster['gene'].nth(0)
-    positions = gb_cluster[['i_SBS', 'j_SBS']].mean().as_matrix()
+    positions = gb_cluster[['i_SBS', 'j_SBS']].mean().values()
     positions[:,1] += 10
     colors = gb_cluster['cluster'].nth(0) + 1
     
@@ -166,7 +166,7 @@ def annotate_reads(df_reads, shape=(1024, 1024)):
     barcodes = (np.array([base_to_channel[c] for b in df_reads['barcode'] for c in b])
                 .T.reshape(-1, n))
 
-    ij = df_reads[['i', 'j']].as_matrix()
+    ij = df_reads[['i', 'j']].values()
 
     arr = np.zeros(shape, dtype=int)
     for (i, j), barcode in zip(ij, barcodes):

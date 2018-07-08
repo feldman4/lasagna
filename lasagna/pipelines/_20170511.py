@@ -370,7 +370,7 @@ def make_barcode_subset(data_collection, barcodes, label, color=None):
 
 def call_barcodes_faster(df):
     x = df.pivot_table(index=['cycle', 'label', 'source'], columns='channel', values='rank_norm')
-    signal = x.as_matrix()
+    signal = x.values()
     am = np.argsort(signal, axis=1)[:, ::-1]
     ranked_signal = np.sort(signal, axis=1)[:, ::-1]
     

@@ -315,7 +315,7 @@ def display_target_sgRNAs(target, df, target_info, n=3):
     t = target_info.loc[target, 'FWD_seq']
     s = target_info.loc[target, 'sgRNA_seq']
 
-    sequences, counts = collapsed_sgRNAs.loc[sgRNA].as_matrix().T
+    sequences, counts = collapsed_sgRNAs.loc[sgRNA].values().T
     aligned = msa(t, sequences)
     template, aligned = aligned[0], aligned[1:]
     

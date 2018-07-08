@@ -57,8 +57,8 @@ NFKB_yticks = 0, 20, 40, 60, 80
 TNFa_label = u'TNF\u03b1'
 IL1b_label = u'IL1\u03b2'
 NFKB_regulator_labels = {'both': u'IL1\u03b2 and TNF\u03b1 \nregulators', 
-    'IL1b': u'IL1\u03b2 regulators', 
-    'TNFa': u'TNF\u03b1 regulators'}
+    'IL1b': u'IL1\u03b2-responsive\n regulators', 
+    'TNFa': u'TNF\u03b1-responsive\n regulators'}
 NFKB_phenotype_rename = {'dapi_gfp_nuclear_corr': 
     # 'mNeon:DAPI correlation'
     'translocation score'
@@ -66,7 +66,7 @@ NFKB_phenotype_rename = {'dapi_gfp_nuclear_corr':
 
 GENE_CLASS_COLORS = GREEN, ORANGE, RED, GRAY
 STIMULANT_COLORS = GREEN, ORANGE
-STIMULANTS = u'IL-1\u03b2', u'TNF\u03b1'
+STIMULANTS = u'IL1\u03b2', u'TNF\u03b1'
 
 FR_design_order = 'FR_LG', 'FR_GFP_TM'
 
@@ -74,7 +74,7 @@ custom_rcParams = {
     'legend.handletextpad': 0,
     'legend.columnspacing': 0.6,
     'legend.fontsize': 14,
-    'font.sans-serif': 'Helvetica',
+    'font.sans-serif': 'Arial',
     'xtick.labelsize': 14,
     'ytick.labelsize': 14,
     'axes.labelsize': 16,
@@ -226,16 +226,18 @@ def analyze_barcodes_20180424(ngs_home, fillna=1e-4):
 
 # PLOTTING
 
-def plot_gene_scatter_87(df_gene_stats, size=5):
+def plot_gene_scatter_87(df_gene_stats, size=5, aspect=1, log=False):
     palette = GENE_CLASS_COLORS
     class_names = {'TNFa': TNFa_label, 'IL1b': IL1b_label}
+    hue_order = IL1b_label, TNFa_label, 'both', 'negative'
     fix_class_names = lambda x: class_names.get(x, x)
     fg = (df_gene_stats
      .query('gene_symbol != "RELA"')
-     .assign(TNFa=lambda x: 100 * x['TNFa'])
-     .assign(IL1b=lambda x: 100 * x['IL1b'])
+     .assign(TNFa=lambda x: 100 * (x['TNFa'] + 0.01))
+     .assign(IL1b=lambda x: 100 * (x['IL1b'] + 0.01))
      .assign(gene_class=lambda x: x[GENE_CLASS].apply(fix_class_names))
-     .pipe(sns.FacetGrid, hue=GENE_CLASS, palette=palette, size=size)
+     .pipe(sns.FacetGrid, hue=GENE_CLASS, hue_order=hue_order,
+        palette=palette, size=size, aspect=aspect)
      .map(plt.scatter, 'TNFa', 'IL1b', s=40)
      .add_legend(title=None, ncol=2)
     )
@@ -245,17 +247,29 @@ def plot_gene_scatter_87(df_gene_stats, size=5):
 
     cols = ['TNFa', 'IL1b', GENE_SYMBOL, GENE_CLASS]
     for x,y,s,c in df_gene_stats[cols].values:
-        if c != 'negative':
-            ax.text(x=100*x,y=100*(y + 0.005),s=s, fontdict=dict(fontsize=11))
+        if log:
+            if c != 'negative':
+                ax.text(x=100*(x + 0.01),y=100*1.1*(y + 0.01),s=s, fontdict=dict(fontsize=11))
+        else:
+            if c != 'negative':
+                ax.text(x=100*x,y=100*(y + 0.005),s=s, fontdict=dict(fontsize=11))
     
     fg._legend.set_title('Gene category')
+    # fg._legend.set_loc(loc=(0.5, 0.5))
     plt.setp(fg._legend.get_title(), fontsize=14)
 
  
     ax.set_xlabel(NFKB_TNFa_axis_label)
     ax.set_ylabel(NFKB_IL1b_axis_label)
 
-    fg._legend.set_bbox_to_anchor((0, 0, 0.57, 2))
+    # fg._legend.set_bbox_to_anchor((0, 0, 0.57, 2))
+    fg._legend.set_bbox_to_anchor((0.65, 0.92))
+
+    if log:
+        ax.set_xscale('log')
+        ax.set_yscale('log')
+        ax.set_xlim([0.8, 70])
+        ax.set_ylim([1.1, 70])
 
     return fg
 
@@ -567,31 +581,31 @@ def plot_image_grid(images, x_labels, y_labels, scale=2.5):
 
     return fig
 
-def get_20180325_image_files():
-    files = glob('paper/NFKB_figure/20180325/*.crop.jpg')
-    pat = 'DAPI-mNeon_(.*?)_(.*?)_(.*?).stitched'
-    get_conditions = lambda x: re.findall(pat, x)[0]
-    cols = 'well', 'KO', 'stimulation'
-    df_files = pd.DataFrame(map(get_conditions, files), 
-                 columns=cols).assign(file=files)
+def get_image_grid_files():
+    return [
+    'paper/NFKB_figure/20180325/20X_DAPI-mNeon_A7_wt_no-stimulation.stitched.crop.jpg',
+    'paper/NFKB_figure/20180325/20X_DAPI-mNeon_A10_wt_IL1b-40min.stitched.crop.jpg',
+    'paper/NFKB_figure/20180325/20X_DAPI-mNeon_A4_wt_TNFa-40min.stitched.crop.jpg',
 
-    stimulation = ['no-stimulation', 'IL1b-40min', 'TNFa-40min']
-    KO = ['wt', 'IL1R1']
+    'paper/NFKB_figure/20180325/20X_DAPI-mNeon_B7_IL1R1_no-stimulation.stitched.crop.jpg',
+    'paper/NFKB_figure/20180325/20X_DAPI-mNeon_B10_IL1R1_IL1b-40min.stitched.crop.jpg',
+    'paper/NFKB_figure/20180325/20X_DAPI-mNeon_B4_IL1R1_TNFa-40min.stitched.crop.jpg',
 
-    df_files['stimulation'] = (df_files['stimulation']
-                               .astype('category', categories=stimulation))
-    df_files['KO'] = (df_files['KO']
-                               .astype('category', categories=KO))
-    df_files = df_files.sort_values(['KO', 'stimulation'])
-    
-    return df_files['file'].tolist()
+    'paper/data/day7-stim-batch2/cropped/A.jpg',
+    'paper/data/day7-stim-batch2/cropped/20X_DAPI-mNeon-IL1b_D12_Site-3.TNFRSF1A-1.jpg',
+    'paper/data/day7-stim-batch2/cropped/20X_DAPI-mNeon-TNFa_D12_Site-1.TNFRSF1A-1.jpg',
 
-def load_20180325_images(width):
+    'paper/data/day7-stim-batch2/cropped/B.jpg',
+    'paper/data/day7-stim-batch2/cropped/20X_DAPI-mNeon-IL1b_A3_Site-1.MAP3K7-1.jpg',
+    'paper/data/day7-stim-batch2/cropped/20X_DAPI-mNeon-TNFa_A3_Site-1.MAP3K7-1.jpg',
+    ]
+
+def load_grid_images(width):
 
     images = [img[:width, :width] 
-              for img in map(imageio.imread, get_20180325_image_files())]
+              for img in map(imageio.imread, get_image_grid_files())]
 
-    images = lasagna.utils.pile(images).reshape(2, 3, width, width, 3)
+    images = lasagna.utils.pile(images).reshape(4, 3, width, width, 3)
     return images
 
 def plot_NFKB_image_grid(images):
@@ -1037,6 +1051,72 @@ def plot_base_quality_per_cycle(df_reads, log_y, num_cycles=12,
 
     return fig
 
+def plot_quality_vs_mapping2(df_reads, figsize=(4, 4)):
+    
+    df_reads['Q_bin'] = (df_reads['Q_min']).astype(int)
+    df_stat = (df_reads.groupby('Q_bin')['mapped']
+     .pipe(groupby_reduce_concat, 'mean', 'count'))
+
+    df_stat['count'] = df_stat['count'].cumsum() / df_stat['count'].sum()
+    df_stat['count'] = 100 * (1 - df_stat['count'])
+    df_stat['mean'] *= 100
+
+    for col in 'count', 'mean':
+        df_stat[col] = np.convolve(df_stat[col], np.ones(10)/10, 'same')
+
+    fig, ax = plt.subplots(figsize=figsize)
+
+    mapping_max = df_stat['mean'].max()
+    ax.plot([0, 100], [mapping_max, mapping_max], ls='--', color=DARK_GRAY)
+    label = '{0:.0f}% exact\nmatches'.format(mapping_max)
+    ax.text(23.5, mapping_max - 20, label, fontsize=14, ha='center',
+        bbox=dict(fc=(1, 1, 1, 0.7), pad=0.1, ec='none'))
+
+    label_0 = 'above quality threshold'
+    label_1 = 'exact barcode match'
+    df_stat.plot(x='Q_bin', y='count', ax=ax, label=label_0)
+    df_stat.plot(x='Q_bin', y='mean', ax=ax, label=label_1)
+    ax.set_xlim([0, 30.1])
+    ax.set_xticks([0, 10, 20, 30])
+    ax.set_yticks([0, 25, 50, 75, 100])
+    ax.set_ylabel('Reads (%)', labelpad=0)
+    ax.set_xlabel('Read quality threshold\n(minimum base quality)')
+    ax.grid()
+
+    legend = ax.legend(loc=(0, 1.025), handlelength=1., handletextpad=0.5, frameon=1, 
+              framealpha=0.8, borderpad=0.1)
+    legend.get_frame().set_linewidth(0)
+    for line in legend.get_lines():
+        line.set_linewidth(3)
+
+    return fig
+
+def plot_base_quality_per_cycle2(stat, figsize=(4, 4)):
+    
+    assert stat.shape[1] == 12
+    fig, axs = plt.subplots(nrows=4, ncols=3, 
+                            sharex=True, figsize=figsize)
+
+    axs = axs.T.flatten()
+    palette = sns.husl_palette(int(12 * 1.2), l=.75)
+    for i in range(stat.shape[1]):
+        ax = axs[i]
+        ax.set_title(i + 1, fontsize=16)
+
+        ax.hist(stat[:, i], color=palette[i], normed=True)
+
+        ax.set_yticks([])
+        ax.set_xticks([0, 15, 30])
+        ax.set_xlim([0, 30])
+        for side in 'top', 'right', 'left':
+            ax.spines[side].set_visible(False)
+
+    fig.suptitle('cycle', fontsize=16)
+    plt.tight_layout()
+    plt.subplots_adjust(top=0.82)
+    axs[7].set_xlabel('Base quality')
+    return fig
+
 def plot_read_quality_mapped_histogram(df_reads, size=3.5):
     palette = STRONG_GRAY, RED
     bins = range(0, 33, 3)
@@ -1110,10 +1190,10 @@ def plot_FR_scatter_barcodes(df_cells, count_threshold=10, figsize=(4,3)):
     fg.ax.set_xlabel('in situ, cells per barcode')
 
     targeting = mpl.lines.Line2D([], [], color=palette[0], marker='s', 
-                    linestyle='None', markersize=10, label='targeting')
+                    linestyle='None', markersize=10, label='targeting\nbarcodes')
 
     control = mpl.lines.Line2D([], [], color=palette[1], marker='s', 
-                    linestyle='None', markersize=10, label='control')
+                    linestyle='None', markersize=10, label='control\nbarcodes')
 
     fg.ax.legend(handles=[targeting, control], ncol=2, loc=(0.15, 0.95))
 
@@ -1448,34 +1528,38 @@ class ValidationFigure():
     def plot_gene(df_pos, df_neg, gene, bins, figsize=(3, 2.5)):
 
         hist_kwargs = dict(bins=bins, cumulative=True, 
-                           density=True, histtype='step', lw=2)
+                           normed=True, histtype='step', lw=2)
 
         fig, axs = plt.subplots(nrows=2, ncols=2, figsize=figsize)
 
-        colors = {'TNFa': STIMULANT_COLORS[1], 'IL1b': STIMULANT_COLORS[0], 'negative': STRONG_GRAY}
-        for stimulant, ax in zip(STIMULANTS, axs[1, :]):
+        rename = {u'TNF\u03b1': 'TNFa', u'IL1\u03b2': 'IL1b'}
+        for stimulant, ax, color in zip(STIMULANTS, axs[1, :], STIMULANT_COLORS):
+            stimulant = rename[stimulant]
             positive = (df_pos.query('stimulant == @stimulant')
                        ['dapi_gfp_nuclear_corr'])
 
             negative = (df_neg.query('stimulant == @stimulant')
                         ['dapi_gfp_nuclear_corr'])
 
-            ax.hist(negative, color=colors['negative'], **hist_kwargs)
-            ax.hist(positive, color=colors[stimulant], **hist_kwargs)
+            ax.hist(negative, color=STRONG_GRAY, **hist_kwargs)
+            ax.hist(positive, color=color, **hist_kwargs)
             
             ax.spines['top'].set_visible(False)
             ax.spines['right'].set_visible(False)
             ax.set_yticks([])
+            ax.set_xticks([-1, 0, 1])
 
-        axs[0, 0].set_title(stimulants[0], fontsize=14)
-        axs[0, 1].set_title(stimulants[1], fontsize=14)
+        # 
+        axs[0, 0].set_title(STIMULANTS[0], fontsize=14)
+        axs[0, 1].set_title(STIMULANTS[1], fontsize=14)
 
         fig.subplots_adjust(hspace=0.7, wspace=0.25)
         return fig, axs
     
     @staticmethod
     def add_snapshots(axs, gene):
-        snapshots = glob('paper/snapshots/*{0}*.tif'.format(gene))
+        snapshots = glob('paper/validation_figure/snapshots/*{0}*.tif'.format(gene))
+        
         for stimulant, ax in zip(['IL1b', 'TNFa'], axs[0, :]):
             dapi, mNeon = lasagna.io.read_stack([f for f in snapshots if stimulant in f][0])
             n = 75
@@ -1515,7 +1599,7 @@ class ValidationFigure():
          .sort_values('display_group')
          .groupby('display')['gene'])
         panels = []
-        width, height = 100, 110
+        width, height = 100, 105
         offsets = {'IL-1b': (0, 0), 
                    'TNFa': (width*3, 0), 
                    'both': (0, height)}
@@ -1530,10 +1614,10 @@ class ValidationFigure():
             for i, gene in enumerate(genes):
                 f_svg = [f for f in files if gene in f][0]
 
-                x_offset = 60 - 3*len(gene)
+                x_offset = 50 - 2.5*len(gene)
                 title = Text(gene, x_offset, 10, size=10, weight='light',
                             color=colors[label])
-                elements = [SVG(f_svg).scale(0.5).move(0, 10), title]
+                elements = [SVG(f_svg).scale(0.5).move(0, 20), title]
                 if label == 'both':
                     elements += [Text('translocation score', 20, 110) ]
 
@@ -1550,15 +1634,18 @@ class ValidationFigure():
         pat = 'svgs/(.*?)_distributions.svg'
         label_to_file = {re.findall(pat, f)[0]: f for f in files}
 
-        height = 130
-        labels = ['IL1b', 'TNFa', 'both', None, 'partial', 'essential_partial', 'NTC', 'negative']
-        for i, label in enumerate(labels):
-            if label is None:
-                continue
-            y_offset = height * i + 25
-            title = Text(label, 10, y_offset + 10, size=12)
+        h = 130
+        groups = [('IL1b', (0, 0)), 
+                  ('TNFa', (0, h)),
+                  ('both', (0, h*2)), 
+                  ('partial', (0, h*4)), 
+                  ('essential_partial', (h*2, h*4)),
+                  ('negative', (0, h*5))]
 
-            axis = SVG(label_to_file[label]).scale(0.5).move(0, y_offset + 15)
+        for label, (x0, y0) in groups:
+            title = Text(label, x0 + 10, y0 + 10, size=12)
+
+            axis = SVG(label_to_file[label]).scale(0.5).move(x0, y0 + 15)
             panels += [Panel(axis, title)]
 
         return Figure('17.4cm', '40cm', *panels)
@@ -1604,7 +1691,8 @@ class ValidationFigure():
         ax.plot([x0, x1], [0.5, 0.5], color='black', lw=1)
         ax.plot([x0, x0], [0.5, 0.95], color='black', lw=1)
         ax.plot([x0, x0], [0, 0.45], color='black', lw=1)
-        ax.set_title(ax.get_title().replace('gene = ', ''))
+        ax.text(0, 0.95, ax.get_title().replace('gene = ', ''), ha='center')
+        ax.set_title('')
         ax.spines['left'].set_visible(False)
         ax.set_yticks([])
 
@@ -1622,7 +1710,7 @@ class ValidationFigure():
              .query('gene == @genes')
              .sort_values('gene')
              .pipe(sns.FacetGrid, hue='stimulant', col='gene', col_wrap=6, aspect=0.6,
-                  palette=lasagna.paper.STIMULANT_COLORS)
+                  palette=STIMULANT_COLORS)
              .map_dataframe(ValidationFigure.plot_hist, bins=np.linspace(-1, 1.04, 21), 
                             df_NTC=df_ph.query('gene == "NTC"'),
                             vertical=True)
@@ -1631,9 +1719,10 @@ class ValidationFigure():
             for ax in fg.axes.flat[:]:
                 ValidationFigure.fix_ax(ax=ax, x0=-1, x1=1.04)
             
-            f = 'paper/{label}_distributions.svg'
+            f = 'paper/validation_figure/svgs/{label}_distributions.svg'
             fg.fig.tight_layout()
             fg.savefig(f.format(label=label))
+            plt.close(fg.fig)
 
     @staticmethod
     def load_df_manual():
@@ -1641,7 +1730,6 @@ class ValidationFigure():
         df_manual = (pd.read_csv(f, sep='\t')
          .assign(display=lambda x: x['display_group'].str.extract('(.*)_\\d')))
         return df_manual
-
 
 def compose_figure_in_situ(x='17.4cm', y='11cm'):
     from svgutils.compose import Figure, Panel, SVG, Text, Image, Line
@@ -1686,28 +1774,28 @@ def compose_figure_in_situ(x='17.4cm', y='11cm'):
         )
 
     panel_C = Panel(
-            SVG('paper/in_situ_figure/base_quality_per_cycle.svg').scale(0.5).move(5, -5),
+            SVG('paper/in_situ_figure/base_quality_per_cycle2.svg').scale(0.5).move(5, -5),
             Text(letter_case('C'), 0, 10, size=12, weight='bold'),
             )
 
     panel_D = Panel(
-            SVG('paper/in_situ_figure/mapping_rate.svg').scale(0.5).move(10, -5),
+            SVG('paper/in_situ_figure/quality_vs_mapping2.svg').scale(0.5).move(7, -7),
             Text(letter_case('D'), 0, 10, size=12, weight='bold'),
         )
 
     panel_E = Panel(
-            SVG('paper/in_situ_figure/reads_per_cell.svg').scale(0.5).move(15, -7),
+            SVG('paper/in_situ_figure/reads_per_cell.svg').scale(0.5).move(15, 4),
             Text(letter_case('E'), 0, 10, size=12, weight='bold'),
             )
 
     panel_F = Panel(
-            SVG('paper/in_situ_figure/barcode_scaling.svg').scale(0.5).move(0, 0),
+            SVG('paper/in_situ_figure/barcode_scaling.svg').scale(0.5).move(0, 8),
             Text(letter_case('F'), 0, 10, size=12, weight='bold'),
         )
 
 
     return Figure(x, y, panel_A, panel_B.move(25, 0), Panel(), Panel(),
-                        panel_C, panel_D.move(-30, 0), panel_E.move(-30, 0), panel_F.move(-80, 0))
+                        panel_C, panel_D.move(-25, 0), panel_E.move(-35, 0), panel_F.move(-80, 0))
 
 def compose_figure_FR(x='17.4cm', y='8.5cm'):
     from svgutils.compose import Figure, Panel, SVG, Text, Image
@@ -1756,7 +1844,7 @@ def compose_figure_NFKB(x='17.4cm', y='6.5cm'):
         )
 
     panel_B = Panel(
-            SVG('paper/individual_KO_grid.svg').scale(0.5).move(-15, -15),
+            SVG('paper/NFKB_figure/individual_KO_grid_1.8.svg').scale(0.5).move(-15, -15),
             Text(letter_case('B'), 0, 10, size=12, weight='bold'),
         )
 
@@ -1786,18 +1874,17 @@ def compose_figure_NFKB_2(x='17.4cm', y='6.5cm'):
         )
 
     panel_B = Panel(
-            SVG('paper/NFKB_figure/individual_KO_grid_1.8.svg').scale(0.5).move(-20, -5),
+            SVG('paper/NFKB_figure/individual_KO_grid_1.8.svg').scale(0.5).move(-20, 0),
             Text(letter_case('B'), 0, 10, size=12, weight='bold'),
-            Text('p65-mNeon', 24, 75, size=7, weight='bold', color=GREEN)
         )
 
     panel_C = Panel(
-            SVG('paper/NFKB_figure/correlation_distribution_horizontal.svg').scale(0.5).move(0, 10),
+            SVG('paper/NFKB_figure/correlation_distribution_horizontal.svg').scale(0.5).move(0, 3),
             Text(letter_case('C'), 0, 10, size=12, weight='bold'),
         )
 
     panel_D = Panel(
-            SVG('paper/NFKB_figure/87_gene_scatter_4.9.svg').scale(0.5).move(-15, -10),
+            SVG('paper/NFKB_figure/1K_gene_scatter_5.2.svg').scale(0.5).move(-10, -5),
             Text(letter_case('D'), 0, 10, size=12, weight='bold'),
             )
 
@@ -1807,9 +1894,9 @@ def compose_figure_NFKB_2(x='17.4cm', y='6.5cm'):
             )
 
     return Figure(x, y, 
-        panel_A, panel_B.move(-35, 0), panel_C.move(-45, 0),
-        Panel(), Panel(), panel_D.move(-40, -50),
-        Panel(), panel_E.move(-30, -20))
+        panel_A, panel_B.move(-35, 0), panel_C.move(-50, 0),
+        Panel(), Panel(), panel_D.move(-50, -50),
+        Panel(), panel_E.move(-30, -20)).tile(3,3)
 
 def compose_figure_validation(x='17.4cm', y='8cm'):
     from svgutils.compose import Figure, Panel, SVG, Text, Image
@@ -1832,7 +1919,7 @@ def compose_figure_validation(x='17.4cm', y='8cm'):
             SVG('paper/NFKB_figure/IL1b_pathway_graph.svg').scale(0.5).move(15, 0),
             SVG('paper/NFKB_figure/pathway_node_legend.svg').scale(0.45).move(-100, 120),
             SVG('paper/NFKB_figure/pathway_edge_legend.svg').scale(0.45).move(20, 120),
-            Text('IL1b stimulation', 0, 10, size=10).move(60, -15),
+            Text(u'IL1\u03b2 stimulation', 0, 10, size=10).move(60, -15),
             Text(letter_case('B'), 0, 10, size=12, weight='bold'),
         )
 
@@ -1840,7 +1927,7 @@ def compose_figure_validation(x='17.4cm', y='8cm'):
         SVG('paper/NFKB_figure/TNFa_pathway_graph.svg').scale(0.5).move(15, 0),
         SVG('paper/NFKB_figure/pathway_node_legend.svg').scale(0.45).move(-100, 120),
         SVG('paper/NFKB_figure/pathway_edge_legend.svg').scale(0.45).move(20, 120),
-        Text('TNFa stimulation', 0, 10, size=10).move(60, -15),
+        Text(u'TNF\u03b1 stimulation', 0, 10, size=10).move(60, -15),
         Text(letter_case('C'), 0, 10, size=12, weight='bold'),
     )
 

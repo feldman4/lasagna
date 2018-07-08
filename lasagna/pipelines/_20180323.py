@@ -2,7 +2,7 @@ from lasagna.imports import *
 from lasagna.in_situ import load_NGS_hist
 
 def load_well_site_list():
-    well_site_list = map(tuple, pd.read_pickle('well_site_list_MM.pkl').as_matrix())       
+    well_site_list = map(tuple, pd.read_pickle('well_site_list_MM.pkl').values())       
     return well_site_list
 
 def filter_well_site_filename(f, well_site_list):
