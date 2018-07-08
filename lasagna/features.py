@@ -68,6 +68,9 @@ FISH = {
     'cy5_median': lambda r: np.median(masked(r, 2)),
     'cy3_int': lambda r: masked(r, 1).sum(),
     'cy5_int': lambda r: masked(r, 2).sum(),
+viewRNA = {
+	'cy3_mean': lambda r: masked(r, 1).mean(),
+	'cy5_mean': lambda r: masked(r, 2).mean(),
 }
 
 all_features = [
@@ -76,6 +79,7 @@ all_features = [
     translocation,
     frameshift,
     FISH
+    viewRNA
     ]
 
 def validate_features():
@@ -114,3 +118,8 @@ features_FISH = make_feature_dict((
     'cy3_int', 'cy5_int',
     'dapi_median', 'dapi_max',
     'area', 'cell'))
+features_viewRNA = make_feature_dict((
+	'dapi_median', 'dapi_max', 
+	'cy3_mean', 'cy5_mean', 
+	'cell', 'area'
+	))
