@@ -115,8 +115,3 @@ features_FISH = make_feature_dict((
     'dapi_median', 'dapi_max',
     'area', 'cell'))
 
-features_viewRNA = make_feature_dict((
-	'dapi_median', 'dapi_max', 
-	'cy3_mean', 'cy5_mean', 
-	'cell', 'area'
-	))

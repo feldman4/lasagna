@@ -59,7 +59,7 @@ def load_file(f):
     if not isinstance(f, (str, unicode)):
         raise TypeError
     if not os.path.isfile(f):
-        raise ValueError
+        raise IOError(2, 'Not a file: {0}'.format(f))
     if f.endswith('.tif'):
         return load_tif(f)
     elif f.endswith('.pkl'):
@@ -67,17 +67,25 @@ def load_file(f):
     elif f.endswith('.csv'):
         return load_csv(f)
     else:
-        raise ValueError(f)
+        raise IOError(f)
 
 
 def load_arg(x):
+    """What to do if load_file finds a file but raises an error?
+    """
     one_file = load_file
     many_files = lambda x: map(load_file, x)
     
     for f in one_file, many_files:
         try:
             return f(x)
-        except (ValueError, TypeError) as e:
+        except (pd.errors.EmptyDataError, TypeError, IOError) as e:
+            if isinstance(e, (TypeError, IOError)):
+                # wasn't a file, probably a string arg
+                pass
+            elif isinstance(e, pd.errors.EmptyDataError):
+                # failed to load file
+                return None
             pass
     else:
         return x
@@ -87,6 +95,12 @@ def save_output(f, x, inputs):
     """Saves a single output file. Can extend to list if needed.
     Saving .tif might use kwargs (luts, ...) from input.
     """
+    if x is None:
+        # need to save dummy output to satisfy Snakemake
+        with open(f, 'w') as fh:
+            pass
+        return
+        
     if f.endswith('.tif'):
         return save_tif(f, x, **inputs)
     elif f.endswith('.pkl'):
@@ -282,10 +296,12 @@ class Snake():
         """Find nuclei from DAPI. Find cell foreground from aligned but unfiltered 
         data. Expects data to have shape C x I x J.
         """
+
         if isinstance(data, list):
             dapi = data[0]
-        else:
-            dapi = data
+        elif data.ndim == 3:
+            dapi = data[0]
+
         if dapi.dtype in (np.float32, np.float64):
             dapi[dapi < 0] = 0
             dapi[dapi > 1] = 1
@@ -441,6 +457,8 @@ class Snake():
     def _call_cells(df_barcodes, cycles):
         """Median correction performed independently for each tile.
         """
+        if df_barcodes is None:
+            return
         from lasagna import in_situ
         return (df_barcodes
             .pipe(in_situ.clean_up_raw)

@@ -874,11 +874,8 @@ def regionprops(labeled, intensity_image):
     """
     import skimage.measure
 
-<<<<<<< HEAD
-    regions = skimage.measure.regionprops(labeled, intensity_image=intensity_image)
-=======
     regions = skimage.measure.regionprops(labeled, intensity_image=intensity_image[..., 0, :, :])
->>>>>>> df3e3b9b3706c9a6929681f9ad899a44aff1d3fc
+
     for region in regions:
         b = region.bbox
         region.intensity_image_full = intensity_image[..., b[0]:b[2], b[1]:b[3]]
