@@ -34,7 +34,7 @@ DARK_GRAY   = '#555555'
 DARK_GREEN  = '#66A763'
 STRONG_GRAY = '#919191'
 ORANGE      = '#F7941D'
-BLUE        = '#4F74AC'
+BLUE        = '#5175AA'
 RED         = '#EF3F5A'
 GRAY        = '#D6D6D6'
 GREEN       = '#1EBB13'
@@ -65,7 +65,7 @@ NFKB_phenotype_rename = {'dapi_gfp_nuclear_corr':
     }
 
 GENE_CLASS_COLORS = GREEN, ORANGE, RED, GRAY
-STIMULANT_COLORS = GREEN, ORANGE
+STIMULANT_COLORS = BLUE, ORANGE
 STIMULANTS = u'IL1\u03b2', u'TNF\u03b1'
 
 FR_design_order = 'FR_LG', 'FR_GFP_TM'
@@ -1541,13 +1541,30 @@ class ValidationFigure():
             negative = (df_neg.query('stimulant == @stimulant')
                         ['dapi_gfp_nuclear_corr'])
 
-            ax.hist(negative, color=STRONG_GRAY, **hist_kwargs)
-            ax.hist(positive, color=color, **hist_kwargs)
+            def fix_xs_ys(xs, ys):
+                xs_, ys_ = [], []
+                for i in range(len(xs) - 1):
+                    xs_.append(xs[i])
+                    ys_.append(ys[i])
+                    xs_.append(xs[i + 1])
+                    ys_.append(ys[i])
+                return xs_, ys_
+
+            ys_0, xs_0, _ = ax.hist(negative, color=STRONG_GRAY, **hist_kwargs)
+            ys_1, xs_1, _ = ax.hist(positive, color=color, **hist_kwargs)
+
+            xs_0, ys_0 = fix_xs_ys(xs_0, ys_0)
+            xs_1, ys_1 = fix_xs_ys(xs_1, ys_1)
+
+            bkgd = {'IL1b': '#D1E3F2',
+                    'TNFa': '#FCEBD9'}
+            ax.fill_between(xs_0, ys_1, ys_0, color=bkgd[stimulant])
             
             ax.spines['top'].set_visible(False)
             ax.spines['right'].set_visible(False)
             ax.set_yticks([])
             ax.set_xticks([-1, 0, 1])
+            ax.set_xlim([-1, 0.9])
 
         # 
         axs[0, 0].set_title(STIMULANTS[0], fontsize=14)
@@ -1557,16 +1574,17 @@ class ValidationFigure():
         return fig, axs
     
     @staticmethod
-    def add_snapshots(axs, gene):
+    def add_snapshots(axs, gene, vmin, vmax, width):
         snapshots = glob('paper/validation_figure/snapshots/*{0}*.tif'.format(gene))
         
         for stimulant, ax in zip(['IL1b', 'TNFa'], axs[0, :]):
             dapi, mNeon = lasagna.io.read_stack([f for f in snapshots if stimulant in f][0])
-            n = 75
-            vmin, vmax = 700, 7000
+            n = width
+            vmax = np.percentile(mNeon[:n, :n], 98)
+            vmin = np.percentile(mNeon[:n, :n], 2)
             rgb = np.zeros((n, n, 3), dtype=float)
             rgb[:, :, 1] =((mNeon[:n, :n].astype(float) - vmin) / (vmax - vmin))
-            ax.imshow(rgb)
+            ax.imshow(rgb.clip(min=0, max=1))
             ax.axis('off')
 
             box = ax.get_position()
@@ -1580,12 +1598,12 @@ class ValidationFigure():
             ax.set_position([box.x0, box.y0 + y_offset, box.width, box.height])
 
     @staticmethod
-    def plot_validation(df_ph, gene):
+    def plot_validation(df_ph, gene, vmin=700, vmax=7000, width=75):
         df_pos = df_ph.query('gene == @gene')
         df_neg = df_ph.query('gene == "NTC"')
         bins = np.linspace(-1, 1.04, 21)
         fig, axs = ValidationFigure.plot_gene(df_pos, df_neg, gene, bins=bins)
-        ValidationFigure.add_snapshots(axs, gene)
+        ValidationFigure.add_snapshots(axs, gene, vmin, vmax, width)
         return fig
 
     @staticmethod
@@ -1601,9 +1619,9 @@ class ValidationFigure():
         panels = []
         width, height = 100, 105
         offsets = {'IL-1b': (0, 0), 
-                   'TNFa': (width*3, 0), 
+                   'TNFa': (width*4, 0), 
                    'both': (0, height)}
-        colors = {'IL-1b': GREEN,
+        colors = {'IL-1b': BLUE,
                   'TNFa': ORANGE,
                   'both': RED}
 
