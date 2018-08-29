@@ -499,6 +499,7 @@ def parse_filename(filename):
         match = re.match(pattern, filename)
         try:
             result = {k:v for k,v in match.groupdict().items() if v is not None}
+            result['file'] = filename
             return result
         except AttributeError:
             continue

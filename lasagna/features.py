@@ -90,20 +90,20 @@ def make_feature_dict(feature_names):
     return {n: features[n] for n in feature_names}
 
 features_translocation_nuclear = make_feature_dict(('dapi_gfp_corr', 'dapi_median', 'gfp_median', 
-    'gfp_mean', 'dapi_int', 'gfp_int', 'dapi_max', 'gfp_max', 'area'))
+    'gfp_mean', 'dapi_int', 'gfp_int', 'dapi_max', 'gfp_max'))
 
 features_translocation_cell = make_feature_dict(('dapi_gfp_corr', 'gfp_median', 
-    'gfp_mean', 'dapi_int', 'gfp_int', 'dapi_max', 'gfp_max', 'area'))
+    'gfp_mean', 'dapi_int', 'gfp_int', 'dapi_max', 'gfp_max'))
 
 features_cell = make_feature_dict(('area', 'i', 'j', 'bounds', 'cell'))
 
-features_frameshift = make_feature_dict((
+features_frameshift_HA_myc = make_feature_dict((
     'dapi_ha_corr', 'dapi_myc_corr', 
     'dapi_median', 'dapi_max', 
     'ha_median', 'myc_median',
     'cell'))
 
-features_frameshift_myc = make_feature_dict((
+features_frameshift_HA = make_feature_dict((
     'dapi_ha_corr', 
     'dapi_median', 'dapi_max', 
     'ha_median', 

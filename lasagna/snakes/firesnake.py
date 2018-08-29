@@ -488,18 +488,18 @@ class Snake():
         return get_nuclear_perimeter(data_nuclei, width=width)
 
     @staticmethod
-    def _extract_phenotype_FR(data_phenotype, nuclei, wildcards):
-        """Features for frameshift reporter phenotyped in DAPI, HA channels.
+    def _extract_phenotype_FR_HA(data_phenotype, nuclei, wildcards):
+        """Features for frameshift reporter phenotyped in DAPI, myc channels.
         """
-        from lasagna.features import features_frameshift
-        return Snake._extract_features(data_phenotype, nuclei, wildcards, features_frameshift)       
+        from lasagna.features import features_frameshift_HA
+        return Snake._extract_features(data_phenotype, nuclei, wildcards, features_frameshift_HA)       
 
     @staticmethod
-    def _extract_phenotype_FR_myc(data_phenotype, nuclei, data_sbs_1, wildcards):
-        """Features for frameshift reporter phenotyped in DAPI, HA, myc channels.
+    def _extract_phenotype_FR_HA_myc(data_phenotype, nuclei, data_sbs_1, wildcards):
+        """Features for frameshift reporter phenotyped in DAPI, myc, HA channels.
         """
-        from lasagna.features import features_frameshift_myc
-        return Snake._extract_features(data_phenotype, nuclei, wildcards, features)     
+        from lasagna.features import features_frameshift_HA_myc
+        return Snake._extract_features(data_phenotype, nuclei, wildcards, features_frameshift_HA_myc)     
 
     @staticmethod
     def _extract_phenotype_translocation_ring(data_phenotype, nuclei, wildcards, width=3):
@@ -519,23 +519,23 @@ class Snake():
 
         features_n = lasagna.features.features_translocation_nuclear
         features_c = lasagna.features.features_translocation_cell
+        
+        cols = ['well', 'tile', 'cell']
+        df_n = (Snake._extract_features(data_phenotype, nuclei, wildcards, features_n)
+            .set_index(cols).rename(columns=lambda x: x + '_nucleus'))
+        df_c = (Snake._extract_features(data_phenotype, nuclei, wildcards, features_c)
+            .set_index(cols).rename(columns=lambda x: x + '_cell'))
 
-        features_n = {k + '_nuclear': v for k,v in features_n.items()}
-        features_c = {k + '_cell': v    for k,v in features_c.items()}
-
-        df_n =  Snake._extract_features(data_phenotype, nuclei, wildcards, features_n)
-        df_c =  Snake._extract_features(data_phenotype, cells, wildcards, features_c) 
-
+        if len(df_n) == 0 or len(df_c) == 0:
+            return
         # inner join discards nuclei without corresponding cells
-        df = (pd.concat([df_n.set_index('cell'), df_c.set_index('cell')], axis=1, join='inner')
-                .reset_index())
-
-        df = df.loc[:, ~df.columns.duplicated()]
+        
+        df = pd.merge(df_n, df_c, how='inner', left_index=True, right_index=True)
         
         return df
 
     @staticmethod
-    def _extract_features(data, nuclei, wildcards, features=None):
+    def _extract_features(data, labels, wildcards, features=None):
     	"""Extracts features in dictionary and combines with generic region
     	features.
     	"""
@@ -544,7 +544,7 @@ class Snake():
         features = features.copy() if features else dict()
         features.update(features_cell)
 
-        df = feature_table(data, nuclei, features)
+        df = feature_table(data, labels, features)
 
         for k,v in wildcards.items():
             df[k] = v
@@ -554,7 +554,6 @@ class Snake():
     @staticmethod
     def _extract_FISH_phenotype(data, cells, wildcards):
         from lasagna.features import features_FISH
-        print data.shape, cells.shape
         return Snake._extract_features(data, cells, wildcards, features_FISH)
 
 

@@ -11,7 +11,7 @@ from firesnake3 import call_firesnake, load_well_tile_list
 
 # UPDATE: set to number of cycles used
 CYCLES = ['c{cycle}-SBS-{cycle}'.format(cycle=c) for c in range(1, 13)]
-CYCLES = CYCLES[:12]
+CYCLES = CYCLES[:4]
 
 THRESHOLD_DO = 1000
 INDEX_DO = None
@@ -29,13 +29,13 @@ DISPLAY_RANGES=((500, 20000),
                 (100, 20000))
 
 
-CYCLE_PHENOTYPE = 'c0-RELA-mNeon'
+CYCLE_PHENOTYPE = 'c0-DAPI-HA'
 
 rule all:
     input:
     # can request individual files here
         expand('process/10X_{well}_Tile-{tile}.barcodes.csv', zip, well=WELLS_, tile=TILES_),
-	    # expand('process/10X_{well}_Tile-{tile}.phenotype.csv', zip, well=WELLS_, tile=TILES_),
+	    expand('process/10X_{well}_Tile-{tile}.phenotype.csv', zip, well=WELLS_, tile=TILES_),
 	    expand('process/10X_{well}_Tile-{tile}.cells.csv', zip, well=WELLS_, tile=TILES_),
         # expand('process/10X_{well}_Tile-{tile}.SBS_cell_info.csv', zip, well=WELLS_, tile=TILES_)
 
@@ -154,5 +154,5 @@ rule extract_phenotype:
     output:
         'process/10X_{well}_Tile-{tile}.phenotype.csv'
     run:
-        call_firesnake('extract_phenotype_translocation', output, 
+        call_firesnake('extract_phenotype_FR_HA', output, 
             data_phenotype=input[0], nuclei=input[1], cells=input[2], wildcards=dict(wildcards))

@@ -5,11 +5,12 @@ def relabel_array(arr, new_label_dict):
     """
     n = arr.max()
     arr_ = np.zeros(n+1)
-    for k, v in new_label_dict.items():
-        if k <= n:
-            arr_[k] = v
+    for old_val, new_val in new_label_dict.items():
+        if old_val <= n:
+            arr_[old_val] = new_val
     
     return arr_[arr]
+
 
 def outline_mask(arr, direction='outer'):
     from skimage.morphology import erosion, dilation
@@ -45,12 +46,14 @@ def bitmap_label(labels, positions, colors=None):
     arr[i_all, j_all] = c_all
     return arr
 
+
 def index_singleton_clusters(clusters):
     clusters = clusters.copy()
     filt = clusters == -1
     n = clusters.max()
     clusters[filt] = range(n, n + len(filt))
     return clusters
+
 
 def build_GRMC():
     import seaborn as sns
@@ -64,6 +67,7 @@ def build_GRMC():
     RGCM[:len(lut)] = (lut * 255).astype(int)
     return tuple(RGCM.T.flatten())
 
+
 def build_glasbey2():
     glasbey = lasagna.io.read_lut('glasbey_inverted')
     glasbey = np.array(glasbey).T.reshape((256, 3))
@@ -71,6 +75,7 @@ def build_glasbey2():
     glasbey[glasbey < 100] = 100
     glasbey[0] = 0
     return glasbey.T.astype(int).flatten()
+
 
 def combine_annotated(data_ph, data_sbs, labels_reads, labels_cells, labels_phenotype):
     """Assign phenotype and SBS independent color channels. 
@@ -102,6 +107,7 @@ def combine_annotated(data_ph, data_sbs, labels_reads, labels_cells, labels_phen
     # arr = np.concatenate([arr, labels_reads], axis=1)
 
     return arr
+
 
 def annotate_cells(df_cells, use_nuclei_phenotype=False):
     from skimage.morphology import dilation
@@ -154,6 +160,7 @@ def annotate_cells(df_cells, use_nuclei_phenotype=False):
     
     return data_ph, data_sbs, labels_cells
 
+
 def annotate_reads(df_reads, shape=(1024, 1024)):
     """Filter to a single (well, tile) before calling.
     """
@@ -175,21 +182,49 @@ def annotate_reads(df_reads, shape=(1024, 1024)):
     labels_reads = np.array([dilation(x, selem=np.ones((3, 3))) for x in arr])
     return labels_reads
 
-def annotate_phenotype(df_cells, value):
-    assert len(df_cells.drop_duplicates(['well', 'tile'])) == 1
 
-    well = df_cells['well'].iloc[0]
-    tile = df_cells['tile'].iloc[0]
-    description = {'subdir': 'process', 'well': well, 'tile': tile,
-         'mag': '10X', 'ext': 'tif'}
+def guess_filename(row, tag, mag='10X'):
+    known_tags = 'cells', 'nuclei'
+    if tag not in known_tags:
+        error_msg = 'Tag {0} not recognized, should be one of {1}'
+        raise ValueError(error_msg.format(ext, ', '.join(known_tags)))
 
-    cells = read(name(description, tag='cells'))
-    cells = outline_mask(cells, 'inner')
+    well = row['well']
+    tile = row['tile']
+    if 'dataset' in row:
+        dataset = row['dataset']
+    else:
+        dataset = None
+
+    description = {'subdir': 'process', 'dataset': dataset,
+        'mag': mag, 'well': well, 'tile': tile,
+        'tag': tag, 'ext': 'tif'}
+
+    return name(description)
+
+
+def has_duplicate_tiles(df):
+    cols = list({'dataset', 'well', 'tile'} & set(df.columns))
+    if df.drop_duplicates(cols).shape[0] > 1:
+        return True
+    else:
+        return False
+
+
+def annotate_phenotype(df_cells, value, outline=True):
+    if has_duplicate_tiles(df_cells):
+        raise ValueError('Multiple well,tile entries in dataframe')
+
+    top_row = df_cells.iloc[0]
+    cells = read(guess_filename(top_row, 'cells'))
+    if outline:
+        cells = outline_mask(cells, 'inner')
     
     cells_to_phenotype = df_cells.set_index('cell')[value]
     phenotype = relabel_array(cells, cells_to_phenotype)
     
     return phenotype
+
 
 def save_annotated(*args, **kwargs):
     index = kwargs.pop('index', None) # default

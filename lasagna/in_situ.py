@@ -15,16 +15,12 @@ def do_median_call(df_raw, cycles=12, channels=4):
   return df_reads.drop([CHANNEL, INTENSITY], axis=1)
 
 def clean_up_raw(df_raw):
-    """Categorize, sort. Pre-processing for `dataframe_to_values`.
+    """Sort. Pre-processing for `dataframe_to_values`.
+    CYCLE must be numeric to sort correctly.
     """
     # exclude_subset = ['well', 'tile', 'cell', 'intensity', 'blob'] # causes issues with later joins, maybe a pandas bug
     import lasagna.utils
-    df_raw = lasagna.utils.categorize(df_raw, subset=[CYCLE])
-    order = natsorted(df_raw[CYCLE].cat.categories)
-    df_raw[CYCLE] = (df_raw[CYCLE]
-                   .cat.as_ordered()
-                   .cat.reorder_categories(order))
-
+    df_raw[CYCLE] = df_raw[CYCLE].astype(int)
     df_raw = df_raw.sort_values([WELL, TILE, CELL, BLOB, CYCLE, CHANNEL])
     return df_raw
 
@@ -49,7 +45,7 @@ def call_cells(df_reads):
       .join(s.nth(1)['count'].rename(BARCODE_COUNT_1).fillna(0), on=cols)
       .join(s['count'].sum() .rename(BARCODE_COUNT),             on=cols)
       .drop_duplicates(cols)
-      .drop([BARCODE], axis=1) # drop the read barcode
+      [[WELL, TILE, CELL, BARCODE_0, BARCODE_COUNT_0, BARCODE_1, BARCODE_COUNT_1]]
     )
 
 def dataframe_to_values(df, value='intensity', channels=4):

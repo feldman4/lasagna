@@ -1,5 +1,3 @@
-# common imports for interactive work
-
 import os
 import re
 from natsort import natsorted

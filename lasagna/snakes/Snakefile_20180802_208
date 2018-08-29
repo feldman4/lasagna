@@ -1,0 +1,55 @@
+from glob import glob
+import json
+
+import snakemake
+from firesnake3 import call_firesnake, load_well_tile_list
+
+
+# UPDATE: more Tiles will take longer for the DAG to build (especially if ignore_missing is true)
+# WELLS_, TILES_ = load_well_tile_list('well_tile_list_process.pkl')
+WELLS = ['{0}{1}'.format(r,c) for r in 'ABCD' for c in range(1, 12)]
+TILES = list('678')
+TILES = ['16', '17', '18']
+
+CYCLE_PHENOTYPE = 'c0-SiR-p65'
+THRESHOLD_CELLS = 1300
+
+rule all:
+    input:
+    # can request individual files here
+        # 'process/10X_A1_Tile-6.phenotype.csv'
+	    expand('process/10X_{well}_Tile-{tile}.phenotype.csv', well=WELLS, tile=TILES),
+        # expand('process/10X_{well}_Tile-{tile}.phenotype.csv', zip, well=WELLS_, tile=TILES_),
+
+rule segment_nuclei:
+    input:
+        'process/10X_{cycle}/10X_{cycle}_{{well}}_Tile-{{tile}}.max.tif'.format(cycle=CYCLE_PHENOTYPE)
+    output:
+        'process/10X_{well}_Tile-{tile}.nuclei.tif'
+    run:
+        call_firesnake('segment_nuclei', output, data=input[0], 
+            threshold=1200, area_min=0.25*150, area_max=0.25*800)
+
+rule segment_cells:
+    """segment_cells works best when fed data with the most cytoplasmic autofluorescence. SBS data is OK but
+    not the best if something else is available.
+    """
+    input:
+        'process/10X_{cycle}/10X_{cycle}_{{well}}_Tile-{{tile}}.max.tif'.format(cycle=CYCLE_PHENOTYPE),
+        'process/10X_{well}_Tile-{tile}.nuclei.tif'
+    output:
+        'process/10X_{well}_Tile-{tile}.cells.tif'
+    run:
+        call_firesnake('segment_cells', output, 
+            data=input[0], nuclei=input[1], threshold=THRESHOLD_CELLS)
+
+rule extract_phenotype:
+    input:
+        'process/10X_{cycle}/10X_{cycle}_{{well}}_Tile-{{tile}}.max.tif'.format(cycle=CYCLE_PHENOTYPE),
+        'process/10X_{well}_Tile-{tile}.nuclei.tif',
+        'process/10X_{well}_Tile-{tile}.cells.tif'
+    output:
+        'process/10X_{well}_Tile-{tile}.phenotype.csv'
+    run:
+        call_firesnake('extract_phenotype_translocation', output, 
+            data_phenotype=input[0], nuclei=input[1], cells=input[2], wildcards=dict(wildcards))
